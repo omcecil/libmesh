@@ -49,6 +49,7 @@
 #  define LibMeshEPSDestroy(x)         EPSDestroy(*(x))
 #else
 #  define LibMeshEPSDestroy(x)         EPSDestroy(x)
+#  define LibMeshPEPDestroy(x)         PEPDestroy(x)
 #endif
 
 #endif // #if LIBMESH_HAVE_SLEPC

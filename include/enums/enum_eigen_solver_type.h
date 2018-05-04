@@ -33,6 +33,11 @@ enum EigenSolverType {POWER=0,
                       ARNOLDI,
                       LANCZOS,
                       KRYLOVSCHUR,
+                      TOAR,
+                      STOAR,
+                      QARNOLDI,
+                      LINEAR,
+                      PJD,
                       // SLEPc optional packages
                       // EPSARPACK,
                       // EPSLAPACK,
@@ -53,6 +58,7 @@ enum EigenProblemType {NHEP=0,
                        GNHEP,
                        GHEP,
                        GHIEP,
+                       PEPGEN,
 
                        INVALID_EIGENPROBLEMTYPE};
 
