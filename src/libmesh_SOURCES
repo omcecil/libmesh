@@ -373,8 +373,10 @@ libmesh_SOURCES =  \
         src/solvers/petsc_nonlinear_solver.C \
         src/solvers/petscdmlibmesh.C \
         src/solvers/petscdmlibmeshimpl.C \
+        src/solvers/quad_eigen_solver.C \
         src/solvers/second_order_unsteady_solver.C \
         src/solvers/slepc_eigen_solver.C \
+        src/solvers/slepc_quad_eigen_solver.C \
         src/solvers/steady_solver.C \
         src/solvers/tao_optimization_solver.C \
         src/solvers/time_solver.C \
@@ -401,6 +403,7 @@ libmesh_SOURCES =  \
         src/systems/optimization_system.C \
         src/systems/parameter_vector.C \
         src/systems/qoi_set.C \
+        src/systems/quad_eigen_system.C \
         src/systems/steady_system.C \
         src/systems/system.C \
         src/systems/system_io.C \

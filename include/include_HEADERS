@@ -374,9 +374,11 @@ include_HEADERS =  \
         solvers/petsc_linear_solver.h \
         solvers/petsc_nonlinear_solver.h \
         solvers/petscdmlibmesh.h \
+        solvers/quad_eigen_solver.h \
         solvers/second_order_unsteady_solver.h \
         solvers/slepc_eigen_solver.h \
         solvers/slepc_macro.h \
+        solvers/slepc_quad_eigen_solver.h \
         solvers/solution_history.h \
         solvers/solver_configuration.h \
         solvers/steady_solver.h \
@@ -410,6 +412,7 @@ include_HEADERS =  \
         systems/parameter_pointer.h \
         systems/parameter_vector.h \
         systems/qoi_set.h \
+        systems/quad_eigen_system.h \
         systems/sensitivity_data.h \
         systems/steady_system.h \
         systems/system.h \

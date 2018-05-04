@@ -370,9 +370,11 @@ BUILT_SOURCES = \
         petsc_linear_solver.h \
         petsc_nonlinear_solver.h \
         petscdmlibmesh.h \
+        quad_eigen_solver.h \
         second_order_unsteady_solver.h \
         slepc_eigen_solver.h \
         slepc_macro.h \
+        slepc_quad_eigen_solver.h \
         solution_history.h \
         solver_configuration.h \
         steady_solver.h \
@@ -406,6 +408,7 @@ BUILT_SOURCES = \
         parameter_pointer.h \
         parameter_vector.h \
         qoi_set.h \
+        quad_eigen_system.h \
         sensitivity_data.h \
         steady_system.h \
         system.h \
@@ -1632,6 +1635,9 @@ petsc_nonlinear_solver.h: $(top_srcdir)/include/solvers/petsc_nonlinear_solver.h
 petscdmlibmesh.h: $(top_srcdir)/include/solvers/petscdmlibmesh.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
+quad_eigen_solver.h: $(top_srcdir)/include/solvers/quad_eigen_solver.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
 second_order_unsteady_solver.h: $(top_srcdir)/include/solvers/second_order_unsteady_solver.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
@@ -1639,6 +1645,9 @@ slepc_eigen_solver.h: $(top_srcdir)/include/solvers/slepc_eigen_solver.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 slepc_macro.h: $(top_srcdir)/include/solvers/slepc_macro.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
+slepc_quad_eigen_solver.h: $(top_srcdir)/include/solvers/slepc_quad_eigen_solver.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 solution_history.h: $(top_srcdir)/include/solvers/solution_history.h
@@ -1738,6 +1747,9 @@ parameter_vector.h: $(top_srcdir)/include/systems/parameter_vector.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 qoi_set.h: $(top_srcdir)/include/systems/qoi_set.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
+quad_eigen_system.h: $(top_srcdir)/include/systems/quad_eigen_system.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 sensitivity_data.h: $(top_srcdir)/include/systems/sensitivity_data.h
