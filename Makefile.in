@@ -458,8 +458,11 @@ am__libmesh_dbg_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/solvers/petsc_linear_solver.C \
 	src/solvers/petsc_nonlinear_solver.C \
 	src/solvers/petscdmlibmesh.C src/solvers/petscdmlibmeshimpl.C \
+	src/solvers/quad_eigen_solver.C \
 	src/solvers/second_order_unsteady_solver.C \
-	src/solvers/slepc_eigen_solver.C src/solvers/steady_solver.C \
+	src/solvers/slepc_eigen_solver.C \
+	src/solvers/slepc_quad_eigen_solver.C \
+	src/solvers/steady_solver.C \
 	src/solvers/tao_optimization_solver.C \
 	src/solvers/time_solver.C \
 	src/solvers/trilinos_aztec_linear_solver.C \
@@ -479,9 +482,9 @@ am__libmesh_dbg_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/systems/nonlinear_implicit_system.C \
 	src/systems/optimization_system.C \
 	src/systems/parameter_vector.C src/systems/qoi_set.C \
-	src/systems/steady_system.C src/systems/system.C \
-	src/systems/system_io.C src/systems/system_projection.C \
-	src/systems/system_subset.C \
+	src/systems/quad_eigen_system.C src/systems/steady_system.C \
+	src/systems/system.C src/systems/system_io.C \
+	src/systems/system_projection.C src/systems/system_subset.C \
 	src/systems/system_subset_by_subdomain.C \
 	src/systems/transient_system.C src/utils/error_vector.C \
 	src/utils/hashword.C src/utils/location_maps.C \
@@ -865,8 +868,10 @@ am__objects_1 = src/base/libmesh_dbg_la-default_coupling.lo \
 	src/solvers/libmesh_dbg_la-petsc_nonlinear_solver.lo \
 	src/solvers/libmesh_dbg_la-petscdmlibmesh.lo \
 	src/solvers/libmesh_dbg_la-petscdmlibmeshimpl.lo \
+	src/solvers/libmesh_dbg_la-quad_eigen_solver.lo \
 	src/solvers/libmesh_dbg_la-second_order_unsteady_solver.lo \
 	src/solvers/libmesh_dbg_la-slepc_eigen_solver.lo \
+	src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo \
 	src/solvers/libmesh_dbg_la-steady_solver.lo \
 	src/solvers/libmesh_dbg_la-tao_optimization_solver.lo \
 	src/solvers/libmesh_dbg_la-time_solver.lo \
@@ -893,6 +898,7 @@ am__objects_1 = src/base/libmesh_dbg_la-default_coupling.lo \
 	src/systems/libmesh_dbg_la-optimization_system.lo \
 	src/systems/libmesh_dbg_la-parameter_vector.lo \
 	src/systems/libmesh_dbg_la-qoi_set.lo \
+	src/systems/libmesh_dbg_la-quad_eigen_system.lo \
 	src/systems/libmesh_dbg_la-steady_system.lo \
 	src/systems/libmesh_dbg_la-system.lo \
 	src/systems/libmesh_dbg_la-system_io.lo \
@@ -1185,8 +1191,11 @@ am__libmesh_devel_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/solvers/petsc_linear_solver.C \
 	src/solvers/petsc_nonlinear_solver.C \
 	src/solvers/petscdmlibmesh.C src/solvers/petscdmlibmeshimpl.C \
+	src/solvers/quad_eigen_solver.C \
 	src/solvers/second_order_unsteady_solver.C \
-	src/solvers/slepc_eigen_solver.C src/solvers/steady_solver.C \
+	src/solvers/slepc_eigen_solver.C \
+	src/solvers/slepc_quad_eigen_solver.C \
+	src/solvers/steady_solver.C \
 	src/solvers/tao_optimization_solver.C \
 	src/solvers/time_solver.C \
 	src/solvers/trilinos_aztec_linear_solver.C \
@@ -1206,9 +1215,9 @@ am__libmesh_devel_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/systems/nonlinear_implicit_system.C \
 	src/systems/optimization_system.C \
 	src/systems/parameter_vector.C src/systems/qoi_set.C \
-	src/systems/steady_system.C src/systems/system.C \
-	src/systems/system_io.C src/systems/system_projection.C \
-	src/systems/system_subset.C \
+	src/systems/quad_eigen_system.C src/systems/steady_system.C \
+	src/systems/system.C src/systems/system_io.C \
+	src/systems/system_projection.C src/systems/system_subset.C \
 	src/systems/system_subset_by_subdomain.C \
 	src/systems/transient_system.C src/utils/error_vector.C \
 	src/utils/hashword.C src/utils/location_maps.C \
@@ -1591,8 +1600,10 @@ am__objects_2 = src/base/libmesh_devel_la-default_coupling.lo \
 	src/solvers/libmesh_devel_la-petsc_nonlinear_solver.lo \
 	src/solvers/libmesh_devel_la-petscdmlibmesh.lo \
 	src/solvers/libmesh_devel_la-petscdmlibmeshimpl.lo \
+	src/solvers/libmesh_devel_la-quad_eigen_solver.lo \
 	src/solvers/libmesh_devel_la-second_order_unsteady_solver.lo \
 	src/solvers/libmesh_devel_la-slepc_eigen_solver.lo \
+	src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo \
 	src/solvers/libmesh_devel_la-steady_solver.lo \
 	src/solvers/libmesh_devel_la-tao_optimization_solver.lo \
 	src/solvers/libmesh_devel_la-time_solver.lo \
@@ -1619,6 +1630,7 @@ am__objects_2 = src/base/libmesh_devel_la-default_coupling.lo \
 	src/systems/libmesh_devel_la-optimization_system.lo \
 	src/systems/libmesh_devel_la-parameter_vector.lo \
 	src/systems/libmesh_devel_la-qoi_set.lo \
+	src/systems/libmesh_devel_la-quad_eigen_system.lo \
 	src/systems/libmesh_devel_la-steady_system.lo \
 	src/systems/libmesh_devel_la-system.lo \
 	src/systems/libmesh_devel_la-system_io.lo \
@@ -1908,8 +1920,11 @@ am__libmesh_oprof_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/solvers/petsc_linear_solver.C \
 	src/solvers/petsc_nonlinear_solver.C \
 	src/solvers/petscdmlibmesh.C src/solvers/petscdmlibmeshimpl.C \
+	src/solvers/quad_eigen_solver.C \
 	src/solvers/second_order_unsteady_solver.C \
-	src/solvers/slepc_eigen_solver.C src/solvers/steady_solver.C \
+	src/solvers/slepc_eigen_solver.C \
+	src/solvers/slepc_quad_eigen_solver.C \
+	src/solvers/steady_solver.C \
 	src/solvers/tao_optimization_solver.C \
 	src/solvers/time_solver.C \
 	src/solvers/trilinos_aztec_linear_solver.C \
@@ -1929,9 +1944,9 @@ am__libmesh_oprof_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/systems/nonlinear_implicit_system.C \
 	src/systems/optimization_system.C \
 	src/systems/parameter_vector.C src/systems/qoi_set.C \
-	src/systems/steady_system.C src/systems/system.C \
-	src/systems/system_io.C src/systems/system_projection.C \
-	src/systems/system_subset.C \
+	src/systems/quad_eigen_system.C src/systems/steady_system.C \
+	src/systems/system.C src/systems/system_io.C \
+	src/systems/system_projection.C src/systems/system_subset.C \
 	src/systems/system_subset_by_subdomain.C \
 	src/systems/transient_system.C src/utils/error_vector.C \
 	src/utils/hashword.C src/utils/location_maps.C \
@@ -2314,8 +2329,10 @@ am__objects_3 = src/base/libmesh_oprof_la-default_coupling.lo \
 	src/solvers/libmesh_oprof_la-petsc_nonlinear_solver.lo \
 	src/solvers/libmesh_oprof_la-petscdmlibmesh.lo \
 	src/solvers/libmesh_oprof_la-petscdmlibmeshimpl.lo \
+	src/solvers/libmesh_oprof_la-quad_eigen_solver.lo \
 	src/solvers/libmesh_oprof_la-second_order_unsteady_solver.lo \
 	src/solvers/libmesh_oprof_la-slepc_eigen_solver.lo \
+	src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo \
 	src/solvers/libmesh_oprof_la-steady_solver.lo \
 	src/solvers/libmesh_oprof_la-tao_optimization_solver.lo \
 	src/solvers/libmesh_oprof_la-time_solver.lo \
@@ -2342,6 +2359,7 @@ am__objects_3 = src/base/libmesh_oprof_la-default_coupling.lo \
 	src/systems/libmesh_oprof_la-optimization_system.lo \
 	src/systems/libmesh_oprof_la-parameter_vector.lo \
 	src/systems/libmesh_oprof_la-qoi_set.lo \
+	src/systems/libmesh_oprof_la-quad_eigen_system.lo \
 	src/systems/libmesh_oprof_la-steady_system.lo \
 	src/systems/libmesh_oprof_la-system.lo \
 	src/systems/libmesh_oprof_la-system_io.lo \
@@ -2631,8 +2649,11 @@ am__libmesh_opt_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/solvers/petsc_linear_solver.C \
 	src/solvers/petsc_nonlinear_solver.C \
 	src/solvers/petscdmlibmesh.C src/solvers/petscdmlibmeshimpl.C \
+	src/solvers/quad_eigen_solver.C \
 	src/solvers/second_order_unsteady_solver.C \
-	src/solvers/slepc_eigen_solver.C src/solvers/steady_solver.C \
+	src/solvers/slepc_eigen_solver.C \
+	src/solvers/slepc_quad_eigen_solver.C \
+	src/solvers/steady_solver.C \
 	src/solvers/tao_optimization_solver.C \
 	src/solvers/time_solver.C \
 	src/solvers/trilinos_aztec_linear_solver.C \
@@ -2652,9 +2673,9 @@ am__libmesh_opt_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/systems/nonlinear_implicit_system.C \
 	src/systems/optimization_system.C \
 	src/systems/parameter_vector.C src/systems/qoi_set.C \
-	src/systems/steady_system.C src/systems/system.C \
-	src/systems/system_io.C src/systems/system_projection.C \
-	src/systems/system_subset.C \
+	src/systems/quad_eigen_system.C src/systems/steady_system.C \
+	src/systems/system.C src/systems/system_io.C \
+	src/systems/system_projection.C src/systems/system_subset.C \
 	src/systems/system_subset_by_subdomain.C \
 	src/systems/transient_system.C src/utils/error_vector.C \
 	src/utils/hashword.C src/utils/location_maps.C \
@@ -3037,8 +3058,10 @@ am__objects_4 = src/base/libmesh_opt_la-default_coupling.lo \
 	src/solvers/libmesh_opt_la-petsc_nonlinear_solver.lo \
 	src/solvers/libmesh_opt_la-petscdmlibmesh.lo \
 	src/solvers/libmesh_opt_la-petscdmlibmeshimpl.lo \
+	src/solvers/libmesh_opt_la-quad_eigen_solver.lo \
 	src/solvers/libmesh_opt_la-second_order_unsteady_solver.lo \
 	src/solvers/libmesh_opt_la-slepc_eigen_solver.lo \
+	src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo \
 	src/solvers/libmesh_opt_la-steady_solver.lo \
 	src/solvers/libmesh_opt_la-tao_optimization_solver.lo \
 	src/solvers/libmesh_opt_la-time_solver.lo \
@@ -3065,6 +3088,7 @@ am__objects_4 = src/base/libmesh_opt_la-default_coupling.lo \
 	src/systems/libmesh_opt_la-optimization_system.lo \
 	src/systems/libmesh_opt_la-parameter_vector.lo \
 	src/systems/libmesh_opt_la-qoi_set.lo \
+	src/systems/libmesh_opt_la-quad_eigen_system.lo \
 	src/systems/libmesh_opt_la-steady_system.lo \
 	src/systems/libmesh_opt_la-system.lo \
 	src/systems/libmesh_opt_la-system_io.lo \
@@ -3353,8 +3377,11 @@ am__libmesh_prof_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/solvers/petsc_linear_solver.C \
 	src/solvers/petsc_nonlinear_solver.C \
 	src/solvers/petscdmlibmesh.C src/solvers/petscdmlibmeshimpl.C \
+	src/solvers/quad_eigen_solver.C \
 	src/solvers/second_order_unsteady_solver.C \
-	src/solvers/slepc_eigen_solver.C src/solvers/steady_solver.C \
+	src/solvers/slepc_eigen_solver.C \
+	src/solvers/slepc_quad_eigen_solver.C \
+	src/solvers/steady_solver.C \
 	src/solvers/tao_optimization_solver.C \
 	src/solvers/time_solver.C \
 	src/solvers/trilinos_aztec_linear_solver.C \
@@ -3374,9 +3401,9 @@ am__libmesh_prof_la_SOURCES_DIST = src/base/default_coupling.C \
 	src/systems/nonlinear_implicit_system.C \
 	src/systems/optimization_system.C \
 	src/systems/parameter_vector.C src/systems/qoi_set.C \
-	src/systems/steady_system.C src/systems/system.C \
-	src/systems/system_io.C src/systems/system_projection.C \
-	src/systems/system_subset.C \
+	src/systems/quad_eigen_system.C src/systems/steady_system.C \
+	src/systems/system.C src/systems/system_io.C \
+	src/systems/system_projection.C src/systems/system_subset.C \
 	src/systems/system_subset_by_subdomain.C \
 	src/systems/transient_system.C src/utils/error_vector.C \
 	src/utils/hashword.C src/utils/location_maps.C \
@@ -3759,8 +3786,10 @@ am__objects_5 = src/base/libmesh_prof_la-default_coupling.lo \
 	src/solvers/libmesh_prof_la-petsc_nonlinear_solver.lo \
 	src/solvers/libmesh_prof_la-petscdmlibmesh.lo \
 	src/solvers/libmesh_prof_la-petscdmlibmeshimpl.lo \
+	src/solvers/libmesh_prof_la-quad_eigen_solver.lo \
 	src/solvers/libmesh_prof_la-second_order_unsteady_solver.lo \
 	src/solvers/libmesh_prof_la-slepc_eigen_solver.lo \
+	src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo \
 	src/solvers/libmesh_prof_la-steady_solver.lo \
 	src/solvers/libmesh_prof_la-tao_optimization_solver.lo \
 	src/solvers/libmesh_prof_la-time_solver.lo \
@@ -3787,6 +3816,7 @@ am__objects_5 = src/base/libmesh_prof_la-default_coupling.lo \
 	src/systems/libmesh_prof_la-optimization_system.lo \
 	src/systems/libmesh_prof_la-parameter_vector.lo \
 	src/systems/libmesh_prof_la-qoi_set.lo \
+	src/systems/libmesh_prof_la-quad_eigen_system.lo \
 	src/systems/libmesh_prof_la-steady_system.lo \
 	src/systems/libmesh_prof_la-system.lo \
 	src/systems/libmesh_prof_la-system_io.lo \
@@ -5192,8 +5222,10 @@ libmesh_SOURCES = \
         src/solvers/petsc_nonlinear_solver.C \
         src/solvers/petscdmlibmesh.C \
         src/solvers/petscdmlibmeshimpl.C \
+        src/solvers/quad_eigen_solver.C \
         src/solvers/second_order_unsteady_solver.C \
         src/solvers/slepc_eigen_solver.C \
+        src/solvers/slepc_quad_eigen_solver.C \
         src/solvers/steady_solver.C \
         src/solvers/tao_optimization_solver.C \
         src/solvers/time_solver.C \
@@ -5220,6 +5252,7 @@ libmesh_SOURCES = \
         src/systems/optimization_system.C \
         src/systems/parameter_vector.C \
         src/systems/qoi_set.C \
+        src/systems/quad_eigen_system.C \
         src/systems/steady_system.C \
         src/systems/system.C \
         src/systems/system_io.C \
@@ -6603,10 +6636,16 @@ src/solvers/libmesh_dbg_la-petscdmlibmesh.lo:  \
 src/solvers/libmesh_dbg_la-petscdmlibmeshimpl.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_dbg_la-quad_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_dbg_la-second_order_unsteady_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_dbg_la-slepc_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_dbg_la-steady_solver.lo:  \
@@ -6690,6 +6729,9 @@ src/systems/libmesh_dbg_la-parameter_vector.lo:  \
 	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_dbg_la-qoi_set.lo: src/systems/$(am__dirstamp) \
+	src/systems/$(DEPDIR)/$(am__dirstamp)
+src/systems/libmesh_dbg_la-quad_eigen_system.lo:  \
+	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_dbg_la-steady_system.lo:  \
 	src/systems/$(am__dirstamp) \
@@ -7657,10 +7699,16 @@ src/solvers/libmesh_devel_la-petscdmlibmesh.lo:  \
 src/solvers/libmesh_devel_la-petscdmlibmeshimpl.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_devel_la-quad_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_devel_la-second_order_unsteady_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_devel_la-slepc_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_devel_la-steady_solver.lo:  \
@@ -7739,6 +7787,9 @@ src/systems/libmesh_devel_la-parameter_vector.lo:  \
 	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_devel_la-qoi_set.lo: src/systems/$(am__dirstamp) \
+	src/systems/$(DEPDIR)/$(am__dirstamp)
+src/systems/libmesh_devel_la-quad_eigen_system.lo:  \
+	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_devel_la-steady_system.lo:  \
 	src/systems/$(am__dirstamp) \
@@ -8701,10 +8752,16 @@ src/solvers/libmesh_oprof_la-petscdmlibmesh.lo:  \
 src/solvers/libmesh_oprof_la-petscdmlibmeshimpl.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_oprof_la-quad_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_oprof_la-second_order_unsteady_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_oprof_la-slepc_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_oprof_la-steady_solver.lo:  \
@@ -8783,6 +8840,9 @@ src/systems/libmesh_oprof_la-parameter_vector.lo:  \
 	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_oprof_la-qoi_set.lo: src/systems/$(am__dirstamp) \
+	src/systems/$(DEPDIR)/$(am__dirstamp)
+src/systems/libmesh_oprof_la-quad_eigen_system.lo:  \
+	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_oprof_la-steady_system.lo:  \
 	src/systems/$(am__dirstamp) \
@@ -9743,10 +9803,16 @@ src/solvers/libmesh_opt_la-petscdmlibmesh.lo:  \
 src/solvers/libmesh_opt_la-petscdmlibmeshimpl.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_opt_la-quad_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_opt_la-second_order_unsteady_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_opt_la-slepc_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_opt_la-steady_solver.lo:  \
@@ -9824,6 +9890,9 @@ src/systems/libmesh_opt_la-parameter_vector.lo:  \
 	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_opt_la-qoi_set.lo: src/systems/$(am__dirstamp) \
+	src/systems/$(DEPDIR)/$(am__dirstamp)
+src/systems/libmesh_opt_la-quad_eigen_system.lo:  \
+	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_opt_la-steady_system.lo:  \
 	src/systems/$(am__dirstamp) \
@@ -10783,10 +10852,16 @@ src/solvers/libmesh_prof_la-petscdmlibmesh.lo:  \
 src/solvers/libmesh_prof_la-petscdmlibmeshimpl.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_prof_la-quad_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_prof_la-second_order_unsteady_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_prof_la-slepc_eigen_solver.lo:  \
+	src/solvers/$(am__dirstamp) \
+	src/solvers/$(DEPDIR)/$(am__dirstamp)
+src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo:  \
 	src/solvers/$(am__dirstamp) \
 	src/solvers/$(DEPDIR)/$(am__dirstamp)
 src/solvers/libmesh_prof_la-steady_solver.lo:  \
@@ -10865,6 +10940,9 @@ src/systems/libmesh_prof_la-parameter_vector.lo:  \
 	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_prof_la-qoi_set.lo: src/systems/$(am__dirstamp) \
+	src/systems/$(DEPDIR)/$(am__dirstamp)
+src/systems/libmesh_prof_la-quad_eigen_system.lo:  \
+	src/systems/$(am__dirstamp) \
 	src/systems/$(DEPDIR)/$(am__dirstamp)
 src/systems/libmesh_prof_la-steady_system.lo:  \
 	src/systems/$(am__dirstamp) \
@@ -13235,8 +13313,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-petsc_nonlinear_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-petscdmlibmesh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-petscdmlibmeshimpl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-second_order_unsteady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-slepc_eigen_solver.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-slepc_quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-steady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-tao_optimization_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_dbg_la-time_solver.Plo@am__quote@
@@ -13267,8 +13347,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-petsc_nonlinear_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-petscdmlibmesh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-petscdmlibmeshimpl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-second_order_unsteady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-slepc_eigen_solver.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-slepc_quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-steady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-tao_optimization_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_devel_la-time_solver.Plo@am__quote@
@@ -13299,8 +13381,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-petsc_nonlinear_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-petscdmlibmesh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-petscdmlibmeshimpl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-second_order_unsteady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-slepc_eigen_solver.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-slepc_quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-steady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-tao_optimization_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_oprof_la-time_solver.Plo@am__quote@
@@ -13331,8 +13415,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-petsc_nonlinear_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-petscdmlibmesh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-petscdmlibmeshimpl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-second_order_unsteady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-slepc_eigen_solver.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-slepc_quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-steady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-tao_optimization_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_opt_la-time_solver.Plo@am__quote@
@@ -13363,8 +13449,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-petsc_nonlinear_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-petscdmlibmesh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-petscdmlibmeshimpl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-second_order_unsteady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-slepc_eigen_solver.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-slepc_quad_eigen_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-steady_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-tao_optimization_solver.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/solvers/$(DEPDIR)/libmesh_prof_la-time_solver.Plo@am__quote@
@@ -13391,6 +13479,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-optimization_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-parameter_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-qoi_set.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-quad_eigen_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-steady_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_dbg_la-system_io.Plo@am__quote@
@@ -13417,6 +13506,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-optimization_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-parameter_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-qoi_set.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-quad_eigen_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-steady_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_devel_la-system_io.Plo@am__quote@
@@ -13443,6 +13533,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-optimization_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-parameter_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-qoi_set.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-quad_eigen_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-steady_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_oprof_la-system_io.Plo@am__quote@
@@ -13469,6 +13560,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-optimization_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-parameter_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-qoi_set.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-quad_eigen_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-steady_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_opt_la-system_io.Plo@am__quote@
@@ -13495,6 +13587,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-optimization_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-parameter_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-qoi_set.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-quad_eigen_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-steady_system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-system.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/systems/$(DEPDIR)/libmesh_prof_la-system_io.Plo@am__quote@
@@ -16214,6 +16307,13 @@ src/solvers/libmesh_dbg_la-petscdmlibmeshimpl.lo: src/solvers/petscdmlibmeshimpl
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_dbg_la-petscdmlibmeshimpl.lo `test -f 'src/solvers/petscdmlibmeshimpl.C' || echo '$(srcdir)/'`src/solvers/petscdmlibmeshimpl.C
 
+src/solvers/libmesh_dbg_la-quad_eigen_solver.lo: src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_dbg_la-quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_dbg_la-quad_eigen_solver.Tpo -c -o src/solvers/libmesh_dbg_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_dbg_la-quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_dbg_la-quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/quad_eigen_solver.C' object='src/solvers/libmesh_dbg_la-quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_dbg_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+
 src/solvers/libmesh_dbg_la-second_order_unsteady_solver.lo: src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_dbg_la-second_order_unsteady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_dbg_la-second_order_unsteady_solver.Tpo -c -o src/solvers/libmesh_dbg_la-second_order_unsteady_solver.lo `test -f 'src/solvers/second_order_unsteady_solver.C' || echo '$(srcdir)/'`src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_dbg_la-second_order_unsteady_solver.Tpo src/solvers/$(DEPDIR)/libmesh_dbg_la-second_order_unsteady_solver.Plo
@@ -16227,6 +16327,13 @@ src/solvers/libmesh_dbg_la-slepc_eigen_solver.lo: src/solvers/slepc_eigen_solver
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_eigen_solver.C' object='src/solvers/libmesh_dbg_la-slepc_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_dbg_la-slepc_eigen_solver.lo `test -f 'src/solvers/slepc_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_eigen_solver.C
+
+src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo: src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_dbg_la-slepc_quad_eigen_solver.Tpo -c -o src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_dbg_la-slepc_quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_dbg_la-slepc_quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_quad_eigen_solver.C' object='src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_dbg_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
 
 src/solvers/libmesh_dbg_la-steady_solver.lo: src/solvers/steady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_dbg_la-steady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_dbg_la-steady_solver.Tpo -c -o src/solvers/libmesh_dbg_la-steady_solver.lo `test -f 'src/solvers/steady_solver.C' || echo '$(srcdir)/'`src/solvers/steady_solver.C
@@ -16409,6 +16516,13 @@ src/systems/libmesh_dbg_la-qoi_set.lo: src/systems/qoi_set.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/qoi_set.C' object='src/systems/libmesh_dbg_la-qoi_set.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_dbg_la-qoi_set.lo `test -f 'src/systems/qoi_set.C' || echo '$(srcdir)/'`src/systems/qoi_set.C
+
+src/systems/libmesh_dbg_la-quad_eigen_system.lo: src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_dbg_la-quad_eigen_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_dbg_la-quad_eigen_system.Tpo -c -o src/systems/libmesh_dbg_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/systems/$(DEPDIR)/libmesh_dbg_la-quad_eigen_system.Tpo src/systems/$(DEPDIR)/libmesh_dbg_la-quad_eigen_system.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/quad_eigen_system.C' object='src/systems/libmesh_dbg_la-quad_eigen_system.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_dbg_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
 
 src/systems/libmesh_dbg_la-steady_system.lo: src/systems/steady_system.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_dbg_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_dbg_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_dbg_la-steady_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_dbg_la-steady_system.Tpo -c -o src/systems/libmesh_dbg_la-steady_system.lo `test -f 'src/systems/steady_system.C' || echo '$(srcdir)/'`src/systems/steady_system.C
@@ -19182,6 +19296,13 @@ src/solvers/libmesh_devel_la-petscdmlibmeshimpl.lo: src/solvers/petscdmlibmeshim
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_devel_la-petscdmlibmeshimpl.lo `test -f 'src/solvers/petscdmlibmeshimpl.C' || echo '$(srcdir)/'`src/solvers/petscdmlibmeshimpl.C
 
+src/solvers/libmesh_devel_la-quad_eigen_solver.lo: src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_devel_la-quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_devel_la-quad_eigen_solver.Tpo -c -o src/solvers/libmesh_devel_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_devel_la-quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_devel_la-quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/quad_eigen_solver.C' object='src/solvers/libmesh_devel_la-quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_devel_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+
 src/solvers/libmesh_devel_la-second_order_unsteady_solver.lo: src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_devel_la-second_order_unsteady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_devel_la-second_order_unsteady_solver.Tpo -c -o src/solvers/libmesh_devel_la-second_order_unsteady_solver.lo `test -f 'src/solvers/second_order_unsteady_solver.C' || echo '$(srcdir)/'`src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_devel_la-second_order_unsteady_solver.Tpo src/solvers/$(DEPDIR)/libmesh_devel_la-second_order_unsteady_solver.Plo
@@ -19195,6 +19316,13 @@ src/solvers/libmesh_devel_la-slepc_eigen_solver.lo: src/solvers/slepc_eigen_solv
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_eigen_solver.C' object='src/solvers/libmesh_devel_la-slepc_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_devel_la-slepc_eigen_solver.lo `test -f 'src/solvers/slepc_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_eigen_solver.C
+
+src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo: src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_devel_la-slepc_quad_eigen_solver.Tpo -c -o src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_devel_la-slepc_quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_devel_la-slepc_quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_quad_eigen_solver.C' object='src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_devel_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
 
 src/solvers/libmesh_devel_la-steady_solver.lo: src/solvers/steady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_devel_la-steady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_devel_la-steady_solver.Tpo -c -o src/solvers/libmesh_devel_la-steady_solver.lo `test -f 'src/solvers/steady_solver.C' || echo '$(srcdir)/'`src/solvers/steady_solver.C
@@ -19377,6 +19505,13 @@ src/systems/libmesh_devel_la-qoi_set.lo: src/systems/qoi_set.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/qoi_set.C' object='src/systems/libmesh_devel_la-qoi_set.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_devel_la-qoi_set.lo `test -f 'src/systems/qoi_set.C' || echo '$(srcdir)/'`src/systems/qoi_set.C
+
+src/systems/libmesh_devel_la-quad_eigen_system.lo: src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_devel_la-quad_eigen_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_devel_la-quad_eigen_system.Tpo -c -o src/systems/libmesh_devel_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/systems/$(DEPDIR)/libmesh_devel_la-quad_eigen_system.Tpo src/systems/$(DEPDIR)/libmesh_devel_la-quad_eigen_system.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/quad_eigen_system.C' object='src/systems/libmesh_devel_la-quad_eigen_system.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_devel_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
 
 src/systems/libmesh_devel_la-steady_system.lo: src/systems/steady_system.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_devel_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_devel_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_devel_la-steady_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_devel_la-steady_system.Tpo -c -o src/systems/libmesh_devel_la-steady_system.lo `test -f 'src/systems/steady_system.C' || echo '$(srcdir)/'`src/systems/steady_system.C
@@ -22150,6 +22285,13 @@ src/solvers/libmesh_oprof_la-petscdmlibmeshimpl.lo: src/solvers/petscdmlibmeshim
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_oprof_la-petscdmlibmeshimpl.lo `test -f 'src/solvers/petscdmlibmeshimpl.C' || echo '$(srcdir)/'`src/solvers/petscdmlibmeshimpl.C
 
+src/solvers/libmesh_oprof_la-quad_eigen_solver.lo: src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_oprof_la-quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_oprof_la-quad_eigen_solver.Tpo -c -o src/solvers/libmesh_oprof_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_oprof_la-quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_oprof_la-quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/quad_eigen_solver.C' object='src/solvers/libmesh_oprof_la-quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_oprof_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+
 src/solvers/libmesh_oprof_la-second_order_unsteady_solver.lo: src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_oprof_la-second_order_unsteady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_oprof_la-second_order_unsteady_solver.Tpo -c -o src/solvers/libmesh_oprof_la-second_order_unsteady_solver.lo `test -f 'src/solvers/second_order_unsteady_solver.C' || echo '$(srcdir)/'`src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_oprof_la-second_order_unsteady_solver.Tpo src/solvers/$(DEPDIR)/libmesh_oprof_la-second_order_unsteady_solver.Plo
@@ -22163,6 +22305,13 @@ src/solvers/libmesh_oprof_la-slepc_eigen_solver.lo: src/solvers/slepc_eigen_solv
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_eigen_solver.C' object='src/solvers/libmesh_oprof_la-slepc_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_oprof_la-slepc_eigen_solver.lo `test -f 'src/solvers/slepc_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_eigen_solver.C
+
+src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo: src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_oprof_la-slepc_quad_eigen_solver.Tpo -c -o src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_oprof_la-slepc_quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_oprof_la-slepc_quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_quad_eigen_solver.C' object='src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_oprof_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
 
 src/solvers/libmesh_oprof_la-steady_solver.lo: src/solvers/steady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_oprof_la-steady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_oprof_la-steady_solver.Tpo -c -o src/solvers/libmesh_oprof_la-steady_solver.lo `test -f 'src/solvers/steady_solver.C' || echo '$(srcdir)/'`src/solvers/steady_solver.C
@@ -22345,6 +22494,13 @@ src/systems/libmesh_oprof_la-qoi_set.lo: src/systems/qoi_set.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/qoi_set.C' object='src/systems/libmesh_oprof_la-qoi_set.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_oprof_la-qoi_set.lo `test -f 'src/systems/qoi_set.C' || echo '$(srcdir)/'`src/systems/qoi_set.C
+
+src/systems/libmesh_oprof_la-quad_eigen_system.lo: src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_oprof_la-quad_eigen_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_oprof_la-quad_eigen_system.Tpo -c -o src/systems/libmesh_oprof_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/systems/$(DEPDIR)/libmesh_oprof_la-quad_eigen_system.Tpo src/systems/$(DEPDIR)/libmesh_oprof_la-quad_eigen_system.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/quad_eigen_system.C' object='src/systems/libmesh_oprof_la-quad_eigen_system.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_oprof_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
 
 src/systems/libmesh_oprof_la-steady_system.lo: src/systems/steady_system.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_oprof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_oprof_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_oprof_la-steady_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_oprof_la-steady_system.Tpo -c -o src/systems/libmesh_oprof_la-steady_system.lo `test -f 'src/systems/steady_system.C' || echo '$(srcdir)/'`src/systems/steady_system.C
@@ -25118,6 +25274,13 @@ src/solvers/libmesh_opt_la-petscdmlibmeshimpl.lo: src/solvers/petscdmlibmeshimpl
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_opt_la-petscdmlibmeshimpl.lo `test -f 'src/solvers/petscdmlibmeshimpl.C' || echo '$(srcdir)/'`src/solvers/petscdmlibmeshimpl.C
 
+src/solvers/libmesh_opt_la-quad_eigen_solver.lo: src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_opt_la-quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_opt_la-quad_eigen_solver.Tpo -c -o src/solvers/libmesh_opt_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_opt_la-quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_opt_la-quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/quad_eigen_solver.C' object='src/solvers/libmesh_opt_la-quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_opt_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+
 src/solvers/libmesh_opt_la-second_order_unsteady_solver.lo: src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_opt_la-second_order_unsteady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_opt_la-second_order_unsteady_solver.Tpo -c -o src/solvers/libmesh_opt_la-second_order_unsteady_solver.lo `test -f 'src/solvers/second_order_unsteady_solver.C' || echo '$(srcdir)/'`src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_opt_la-second_order_unsteady_solver.Tpo src/solvers/$(DEPDIR)/libmesh_opt_la-second_order_unsteady_solver.Plo
@@ -25131,6 +25294,13 @@ src/solvers/libmesh_opt_la-slepc_eigen_solver.lo: src/solvers/slepc_eigen_solver
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_eigen_solver.C' object='src/solvers/libmesh_opt_la-slepc_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_opt_la-slepc_eigen_solver.lo `test -f 'src/solvers/slepc_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_eigen_solver.C
+
+src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo: src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_opt_la-slepc_quad_eigen_solver.Tpo -c -o src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_opt_la-slepc_quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_opt_la-slepc_quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_quad_eigen_solver.C' object='src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_opt_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
 
 src/solvers/libmesh_opt_la-steady_solver.lo: src/solvers/steady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_opt_la-steady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_opt_la-steady_solver.Tpo -c -o src/solvers/libmesh_opt_la-steady_solver.lo `test -f 'src/solvers/steady_solver.C' || echo '$(srcdir)/'`src/solvers/steady_solver.C
@@ -25313,6 +25483,13 @@ src/systems/libmesh_opt_la-qoi_set.lo: src/systems/qoi_set.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/qoi_set.C' object='src/systems/libmesh_opt_la-qoi_set.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_opt_la-qoi_set.lo `test -f 'src/systems/qoi_set.C' || echo '$(srcdir)/'`src/systems/qoi_set.C
+
+src/systems/libmesh_opt_la-quad_eigen_system.lo: src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_opt_la-quad_eigen_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_opt_la-quad_eigen_system.Tpo -c -o src/systems/libmesh_opt_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/systems/$(DEPDIR)/libmesh_opt_la-quad_eigen_system.Tpo src/systems/$(DEPDIR)/libmesh_opt_la-quad_eigen_system.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/quad_eigen_system.C' object='src/systems/libmesh_opt_la-quad_eigen_system.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_opt_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
 
 src/systems/libmesh_opt_la-steady_system.lo: src/systems/steady_system.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_opt_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_opt_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_opt_la-steady_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_opt_la-steady_system.Tpo -c -o src/systems/libmesh_opt_la-steady_system.lo `test -f 'src/systems/steady_system.C' || echo '$(srcdir)/'`src/systems/steady_system.C
@@ -28086,6 +28263,13 @@ src/solvers/libmesh_prof_la-petscdmlibmeshimpl.lo: src/solvers/petscdmlibmeshimp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_prof_la-petscdmlibmeshimpl.lo `test -f 'src/solvers/petscdmlibmeshimpl.C' || echo '$(srcdir)/'`src/solvers/petscdmlibmeshimpl.C
 
+src/solvers/libmesh_prof_la-quad_eigen_solver.lo: src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_prof_la-quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_prof_la-quad_eigen_solver.Tpo -c -o src/solvers/libmesh_prof_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_prof_la-quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_prof_la-quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/quad_eigen_solver.C' object='src/solvers/libmesh_prof_la-quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_prof_la-quad_eigen_solver.lo `test -f 'src/solvers/quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/quad_eigen_solver.C
+
 src/solvers/libmesh_prof_la-second_order_unsteady_solver.lo: src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_prof_la-second_order_unsteady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_prof_la-second_order_unsteady_solver.Tpo -c -o src/solvers/libmesh_prof_la-second_order_unsteady_solver.lo `test -f 'src/solvers/second_order_unsteady_solver.C' || echo '$(srcdir)/'`src/solvers/second_order_unsteady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_prof_la-second_order_unsteady_solver.Tpo src/solvers/$(DEPDIR)/libmesh_prof_la-second_order_unsteady_solver.Plo
@@ -28099,6 +28283,13 @@ src/solvers/libmesh_prof_la-slepc_eigen_solver.lo: src/solvers/slepc_eigen_solve
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_eigen_solver.C' object='src/solvers/libmesh_prof_la-slepc_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_prof_la-slepc_eigen_solver.lo `test -f 'src/solvers/slepc_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_eigen_solver.C
+
+src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo: src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_prof_la-slepc_quad_eigen_solver.Tpo -c -o src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/solvers/$(DEPDIR)/libmesh_prof_la-slepc_quad_eigen_solver.Tpo src/solvers/$(DEPDIR)/libmesh_prof_la-slepc_quad_eigen_solver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/solvers/slepc_quad_eigen_solver.C' object='src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/solvers/libmesh_prof_la-slepc_quad_eigen_solver.lo `test -f 'src/solvers/slepc_quad_eigen_solver.C' || echo '$(srcdir)/'`src/solvers/slepc_quad_eigen_solver.C
 
 src/solvers/libmesh_prof_la-steady_solver.lo: src/solvers/steady_solver.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -MT src/solvers/libmesh_prof_la-steady_solver.lo -MD -MP -MF src/solvers/$(DEPDIR)/libmesh_prof_la-steady_solver.Tpo -c -o src/solvers/libmesh_prof_la-steady_solver.lo `test -f 'src/solvers/steady_solver.C' || echo '$(srcdir)/'`src/solvers/steady_solver.C
@@ -28281,6 +28472,13 @@ src/systems/libmesh_prof_la-qoi_set.lo: src/systems/qoi_set.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/qoi_set.C' object='src/systems/libmesh_prof_la-qoi_set.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_prof_la-qoi_set.lo `test -f 'src/systems/qoi_set.C' || echo '$(srcdir)/'`src/systems/qoi_set.C
+
+src/systems/libmesh_prof_la-quad_eigen_system.lo: src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_prof_la-quad_eigen_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_prof_la-quad_eigen_system.Tpo -c -o src/systems/libmesh_prof_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/systems/$(DEPDIR)/libmesh_prof_la-quad_eigen_system.Tpo src/systems/$(DEPDIR)/libmesh_prof_la-quad_eigen_system.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/systems/quad_eigen_system.C' object='src/systems/libmesh_prof_la-quad_eigen_system.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -c -o src/systems/libmesh_prof_la-quad_eigen_system.lo `test -f 'src/systems/quad_eigen_system.C' || echo '$(srcdir)/'`src/systems/quad_eigen_system.C
 
 src/systems/libmesh_prof_la-steady_system.lo: src/systems/steady_system.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesh_prof_la_CPPFLAGS) $(CPPFLAGS) $(libmesh_prof_la_CXXFLAGS) $(CXXFLAGS) -MT src/systems/libmesh_prof_la-steady_system.lo -MD -MP -MF src/systems/$(DEPDIR)/libmesh_prof_la-steady_system.Tpo -c -o src/systems/libmesh_prof_la-steady_system.lo `test -f 'src/systems/steady_system.C' || echo '$(srcdir)/'`src/systems/steady_system.C

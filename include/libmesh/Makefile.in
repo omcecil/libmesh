@@ -609,8 +609,9 @@ BUILT_SOURCES = auto_ptr.h default_coupling.h dirichlet_boundaries.h \
 	nonlinear_solver.h optimization_solver.h \
 	petsc_auto_fieldsplit.h petsc_diff_solver.h \
 	petsc_linear_solver.h petsc_nonlinear_solver.h \
-	petscdmlibmesh.h second_order_unsteady_solver.h \
-	slepc_eigen_solver.h slepc_macro.h solution_history.h \
+	petscdmlibmesh.h quad_eigen_solver.h \
+	second_order_unsteady_solver.h slepc_eigen_solver.h \
+	slepc_macro.h slepc_quad_eigen_solver.h solution_history.h \
 	solver_configuration.h steady_solver.h \
 	tao_optimization_solver.h time_solver.h \
 	trilinos_aztec_linear_solver.h trilinos_nox_nonlinear_solver.h \
@@ -624,21 +625,21 @@ BUILT_SOURCES = auto_ptr.h default_coupling.h dirichlet_boundaries.h \
 	optimization_system.h parameter_accessor.h \
 	parameter_multiaccessor.h parameter_multipointer.h \
 	parameter_pointer.h parameter_vector.h qoi_set.h \
-	sensitivity_data.h steady_system.h system.h system_norm.h \
-	system_subset.h system_subset_by_subdomain.h \
-	transient_system.h compare_types.h error_vector.h hashword.h \
-	ignore_warnings.h int_range.h libmesh_nullptr.h \
-	location_maps.h mapvector.h null_output_iterator.h \
-	number_lookups.h ostream_proxy.h parameters.h perf_log.h \
-	perfmon.h plt_loader.h point_locator_base.h \
-	point_locator_tree.h pointer_to_pointer_iter.h \
-	pool_allocator.h restore_warnings.h simple_range.h \
-	statistics.h string_to_enum.h timestamp.h topology_map.h \
-	tree.h tree_base.h tree_node.h utility.h vectormap.h xdr_cxx.h \
-	parallel_communicator_specializations $(am__append_1) \
-	$(am__append_3) $(am__append_5) $(am__append_7) \
-	$(am__append_9) $(am__append_11) $(am__append_13) \
-	libmesh_config.h
+	quad_eigen_system.h sensitivity_data.h steady_system.h \
+	system.h system_norm.h system_subset.h \
+	system_subset_by_subdomain.h transient_system.h \
+	compare_types.h error_vector.h hashword.h ignore_warnings.h \
+	int_range.h libmesh_nullptr.h location_maps.h mapvector.h \
+	null_output_iterator.h number_lookups.h ostream_proxy.h \
+	parameters.h perf_log.h perfmon.h plt_loader.h \
+	point_locator_base.h point_locator_tree.h \
+	pointer_to_pointer_iter.h pool_allocator.h restore_warnings.h \
+	simple_range.h statistics.h string_to_enum.h timestamp.h \
+	topology_map.h tree.h tree_base.h tree_node.h utility.h \
+	vectormap.h xdr_cxx.h parallel_communicator_specializations \
+	$(am__append_1) $(am__append_3) $(am__append_5) \
+	$(am__append_7) $(am__append_9) $(am__append_11) \
+	$(am__append_13) libmesh_config.h
 DISTCLEANFILES = $(BUILT_SOURCES) $(am__append_2) $(am__append_4) \
 	$(am__append_6) $(am__append_8) $(am__append_10) \
 	$(am__append_12) $(am__append_14) libmesh_config.h
@@ -1969,6 +1970,9 @@ petsc_nonlinear_solver.h: $(top_srcdir)/include/solvers/petsc_nonlinear_solver.h
 petscdmlibmesh.h: $(top_srcdir)/include/solvers/petscdmlibmesh.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
+quad_eigen_solver.h: $(top_srcdir)/include/solvers/quad_eigen_solver.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
 second_order_unsteady_solver.h: $(top_srcdir)/include/solvers/second_order_unsteady_solver.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
@@ -1976,6 +1980,9 @@ slepc_eigen_solver.h: $(top_srcdir)/include/solvers/slepc_eigen_solver.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 slepc_macro.h: $(top_srcdir)/include/solvers/slepc_macro.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
+slepc_quad_eigen_solver.h: $(top_srcdir)/include/solvers/slepc_quad_eigen_solver.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 solution_history.h: $(top_srcdir)/include/solvers/solution_history.h
@@ -2075,6 +2082,9 @@ parameter_vector.h: $(top_srcdir)/include/systems/parameter_vector.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 qoi_set.h: $(top_srcdir)/include/systems/qoi_set.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
+quad_eigen_system.h: $(top_srcdir)/include/systems/quad_eigen_system.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 sensitivity_data.h: $(top_srcdir)/include/systems/sensitivity_data.h
