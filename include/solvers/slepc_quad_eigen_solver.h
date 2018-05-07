@@ -17,8 +17,8 @@
 
 
 
-#ifndef LIBMESH_SLEPC_EIGEN_SOLVER_H
-#define LIBMESH_SLEPC_EIGEN_SOLVER_H
+#ifndef LIBMESH_SLEPC_QUAD_EIGEN_SOLVER_H
+#define LIBMESH_SLEPC_QUAD_EIGEN_SOLVER_H
 
 #include "libmesh/libmesh_config.h"
 

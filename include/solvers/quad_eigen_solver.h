@@ -17,8 +17,8 @@
 
 
 
-#ifndef LIBMESH_EIGEN_SOLVER_H
-#define LIBMESH_EIGEN_SOLVER_H
+#ifndef LIBMESH_QUAD_EIGEN_SOLVER_H
+#define LIBMESH_QUAD_EIGEN_SOLVER_H
 
 
 #include "libmesh/libmesh_config.h"

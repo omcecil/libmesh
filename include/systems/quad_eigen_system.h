@@ -16,8 +16,8 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-#ifndef LIBMESH_EIGEN_SYSTEM_H
-#define LIBMESH_EIGEN_SYSTEM_H
+#ifndef LIBMESH_QUAD_EIGEN_SYSTEM_H
+#define LIBMESH_QUAD_EIGEN_SYSTEM_H
 
 #include "libmesh/libmesh_config.h"
 
