@@ -24,10 +24,17 @@
 
 // libMesh Includes
 #include "libmesh/libmesh_common.h"
+#include "libmesh/auto_ptr.h"
 
 // C++ includes
+#include <array>
+#include <complex>
+#include <memory>
 #include <numeric>
+#include <tuple>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace libMesh
 {
@@ -67,7 +74,7 @@ class StandardType : public DataType
    * form.
    */
 private:
-  StandardType(const T * example = libmesh_nullptr);
+  StandardType(const T * example = nullptr);
 };
 
 
@@ -83,7 +90,7 @@ private:
   {                                                                     \
   public:                                                               \
     explicit                                                            \
-      StandardType(const cxxtype * = libmesh_nullptr) : DataType(mpitype) {} \
+      StandardType(const cxxtype * = nullptr) : DataType(mpitype) {} \
   }
 
 #else
@@ -94,7 +101,7 @@ private:
   {                                                                     \
   public:                                                               \
     explicit                                                            \
-      StandardType(const cxxtype * = libmesh_nullptr) : DataType() {}   \
+      StandardType(const cxxtype * = nullptr) : DataType() {}   \
   }
 
 #endif
@@ -119,7 +126,7 @@ class StandardType<std::pair<T1, T2>> : public DataType
 {
 public:
   explicit
-  StandardType(const std::pair<T1, T2> * example = libmesh_nullptr) {
+  StandardType(const std::pair<T1, T2> * example = nullptr) {
     // We need an example for MPI_Address to use
     static const std::pair<T1, T2> p;
     if (!example)
@@ -172,22 +179,158 @@ public:
 
   StandardType(const StandardType<std::pair<T1, T2>> & t)
   {
-#ifdef LIBMESH_HAVE_MPI
     libmesh_call_mpi
       (MPI_Type_dup (t._datatype, &_datatype));
-#endif
   }
 
   ~StandardType() { this->free(); }
 };
+
+
+// Helper functions for creating type/displacement arrays for tuples
+//
+// These are classes since we can't partially specialize functions
+template<std::size_t n_minus_i>
+struct BuildStandardTypeVector
+{
+  template<typename... Types>
+  static void build(std::vector<std::unique_ptr<DataType>> & out_vec,
+                    const std::tuple<Types...> & example);
+};
+
+template <>
+struct BuildStandardTypeVector<0>
+{
+  template<typename... Types>
+  static void build(std::vector<std::unique_ptr<DataType>> & /*out_vec*/,
+                    const std::tuple<Types...> & /*example*/) {}
+};
+
+template<std::size_t n_minus_i>
+template<typename... Types>
+void BuildStandardTypeVector<n_minus_i>::build
+  (std::vector<std::unique_ptr<DataType>> & out_vec,
+   const std::tuple<Types...> & example)
+{
+  typedef typename
+    std::tuple_element<sizeof...(Types)-n_minus_i, std::tuple<Types...>>::type
+    ith_type;
+
+  out_vec.push_back
+    (libmesh_make_unique<
+       StandardType<ith_type>
+     >(&std::get<sizeof...(Types)-n_minus_i>(example)));
+
+  BuildStandardTypeVector<n_minus_i-1>::build(out_vec, example);
+}
+
+
+template<std::size_t n_minus_i>
+struct FillDisplacementArray
+{
+  template <typename OutArray, class... Types>
+  static void fill(OutArray & out,
+                   const std::tuple<Types...> & example);
+};
+
+template<>
+struct FillDisplacementArray<0>
+{
+  template <typename OutArray, typename... Types>
+  static void fill(OutArray & /*out*/,
+                   const std::tuple<Types...> & /*example*/) {}
+};
+
+
+template<std::size_t n_minus_i>
+template<typename OutArray, typename... Types>
+void FillDisplacementArray<n_minus_i>::fill
+  (OutArray & out_vec,
+   const std::tuple<Types...> & example)
+{
+  libmesh_call_mpi
+    (MPI_Get_address
+      (&std::get<sizeof...(Types)-n_minus_i>(example),
+       &out_vec[sizeof...(Types)-n_minus_i]));
+
+  FillDisplacementArray<n_minus_i-1>::fill(out_vec, example);
+}
+
+
+template<typename... Types>
+class StandardType<std::tuple<Types...>> : public DataType
+{
+public:
+  explicit
+  StandardType(const std::tuple<Types...> * example = nullptr) {
+    // We need an example for MPI_Address to use
+    static const std::tuple<Types...> t;
+    if (!example)
+      example = &t;
+
+#ifdef LIBMESH_HAVE_MPI
+    MPI_Aint start;
+
+    libmesh_call_mpi
+      (MPI_Get_address (example, &start));
+
+    const std::size_t tuplesize = sizeof...(Types);
+
+    std::vector<std::unique_ptr<DataType>> subtypes;
+    BuildStandardTypeVector<sizeof...(Types)>::build(subtypes, *example);
+
+    std::array<MPI_Aint, sizeof...(Types)> displs;
+    FillDisplacementArray<sizeof...(Types)>::fill(displs, *example);
+
+    std::array<MPI_Datatype, sizeof...(Types)> types;
+    std::array<int, sizeof...(Types)> blocklengths;
+
+    for (std::size_t i = 0; i != tuplesize; ++i)
+    {
+      displs[i] -= start;
+      types[i] = (data_type)(*subtypes[i]);
+      blocklengths[i] = 1;
+    }
+
+    // create a prototype structure
+    MPI_Datatype tmptype;
+    libmesh_call_mpi
+      (MPI_Type_create_struct (tuplesize, blocklengths.data(), displs.data(), types.data(),
+                               &tmptype));
+    libmesh_call_mpi
+      (MPI_Type_commit (&tmptype));
+
+    // resize the structure type to account for padding, if any
+    libmesh_call_mpi
+      (MPI_Type_create_resized (tmptype, 0,
+                                sizeof(std::tuple<Types...>),
+                                &_datatype));
+    libmesh_call_mpi
+      (MPI_Type_free (&tmptype));
+
+    this->commit();
+
+#endif // LIBMESH_HAVE_MPI
+
+  }
+
+  StandardType(const StandardType<std::tuple<Types...>> & t)
+  {
+    libmesh_call_mpi
+      (MPI_Type_dup (t._datatype, &_datatype));
+  }
+
+  ~StandardType() { this->free(); }
+};
+
 
 template<typename T>
 class StandardType<std::complex<T>> : public DataType
 {
 public:
   explicit
-  StandardType(const std::complex<T> * /*example*/ = libmesh_nullptr) :
-    DataType(StandardType<T>(libmesh_nullptr), 2) {}
+  StandardType(const std::complex<T> * /*example*/ = nullptr) :
+    DataType(StandardType<T>(nullptr), 2) {}
 
   ~StandardType() { this->free(); }
 };

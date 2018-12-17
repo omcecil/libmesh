@@ -23,7 +23,7 @@
 #include "libmesh/cell_hex.h"
 #include "libmesh/cell_hex8.h"
 #include "libmesh/face_quad4.h"
-
+#include "libmesh/enum_elem_quality.h"
 
 
 namespace libMesh
@@ -104,6 +104,14 @@ std::unique_ptr<Elem> Hex::side_ptr (const unsigned int i)
     face->set_node(n) = this->node_ptr(Hex8::side_nodes_map[i][n]);
 
   return face;
+}
+
+
+
+void Hex::side_ptr (std::unique_ptr<Elem> & side,
+                    const unsigned int i)
+{
+  this->simple_side_ptr<Hex,Hex8>(side, i, QUAD4);
 }
 
 

@@ -48,84 +48,90 @@ public:
    * Constructor.  By default this element has no parent.
    */
   explicit
-  Edge3 (Elem * p=libmesh_nullptr) :
+  Edge3 (Elem * p=nullptr) :
     Edge(Edge3::n_nodes(), p, _nodelinks_data) {}
+
+  Edge3 (Edge3 &&) = delete;
+  Edge3 (const Edge3 &) = delete;
+  Edge3 & operator= (const Edge3 &) = delete;
+  Edge3 & operator= (Edge3 &&) = delete;
+  virtual ~Edge3() = default;
 
   /**
    * \returns The \p Point associated with local \p Node \p i,
    * in master element rather than physical coordinates.
    */
-  virtual Point master_point (const unsigned int i) const libmesh_override
+  virtual Point master_point (const unsigned int i) const override
   {
     libmesh_assert_less(i, this->n_nodes());
     if (i < 2)
-      return Point(2.0f*i-1,0,0);
+      return Point(2.0f*Real(i)-1.0f,0,0);
     return Point(0,0,0);
   }
 
   /**
    * \returns 3.
    */
-  virtual unsigned int n_nodes() const libmesh_override { return 3; }
+  virtual unsigned int n_nodes() const override { return num_nodes; }
 
   /**
    * \returns 2.
    */
-  virtual unsigned int n_sub_elem() const libmesh_override { return 2; }
+  virtual unsigned int n_sub_elem() const override { return 2; }
 
   /**
    * \returns \p true if the specified (local) node number is a vertex.
    */
-  virtual bool is_vertex(const unsigned int i) const libmesh_override;
+  virtual bool is_vertex(const unsigned int i) const override;
 
   /**
    * \returns \p true if the specified (local) node number is an edge.
    */
-  virtual bool is_edge(const unsigned int i) const libmesh_override;
+  virtual bool is_edge(const unsigned int i) const override;
 
   /**
    * \returns \p true if the specified (local) node number is a face.
    */
-  virtual bool is_face(const unsigned int i) const libmesh_override;
+  virtual bool is_face(const unsigned int i) const override;
 
   /**
    * \returns \p true if the specified (local) node number is on the
    * specified side.
    */
   virtual bool is_node_on_side(const unsigned int n,
-                               const unsigned int s) const libmesh_override;
+                               const unsigned int s) const override;
 
   /**
    * \returns \p true if the specified (local) node number is on the
    * specified edge (always true in 1D).
    */
   virtual bool is_node_on_edge(const unsigned int n,
-                               const unsigned int e) const libmesh_override;
+                               const unsigned int e) const override;
 
   /**
    * \returns \p true if the element map is definitely affine within
    * numerical tolerances.
    */
-  virtual bool has_affine_map () const libmesh_override;
+  virtual bool has_affine_map () const override;
 
   /**
    * \returns \p EDGE3.
    */
-  virtual ElemType type() const libmesh_override { return EDGE3; }
+  virtual ElemType type() const override { return EDGE3; }
 
   /**
    * \returns SECOND.
    */
-  virtual Order default_order() const libmesh_override { return SECOND; }
+  virtual Order default_order() const override;
 
   virtual void connectivity(const unsigned int sc,
                             const IOPackage iop,
-                            std::vector<dof_id_type> & conn) const libmesh_override;
+                            std::vector<dof_id_type> & conn) const override;
 
   /**
    * \returns 2 for all \p n.
    */
-  virtual unsigned int n_second_order_adjacent_vertices (const unsigned int) const libmesh_override
+  virtual unsigned int n_second_order_adjacent_vertices (const unsigned int) const override
   { return 2; }
 
   /**
@@ -133,7 +139,7 @@ public:
    * that defines the \f$ n^{th} \f$ second-order node.
    */
   virtual unsigned short int second_order_adjacent_vertex (const unsigned int,
-                                                           const unsigned int v) const libmesh_override
+                                                           const unsigned int v) const override
   { return static_cast<unsigned short int>(v); }
 
   /**
@@ -142,25 +148,25 @@ public:
    * elem.h for further details.
    */
   virtual std::pair<unsigned short int, unsigned short int>
-  second_order_child_vertex (const unsigned int n) const libmesh_override;
+  second_order_child_vertex (const unsigned int n) const override;
 
   /**
    * An optimized method for computing the length of a 3-node edge.
    */
-  virtual Real volume () const libmesh_override;
+  virtual Real volume () const override;
 
   /**
    * \returns A bounding box (not necessarily the minimal bounding box)
    * containing the edge.
    */
-  virtual BoundingBox loose_bounding_box () const libmesh_override;
+  virtual BoundingBox loose_bounding_box () const override;
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 
   /**
    * \returns \p false.  This is a finite element.
    */
-  virtual bool infinite () const libmesh_override { return false; }
+  virtual bool infinite () const override { return false; }
 
 #endif
 
@@ -175,15 +181,20 @@ public:
    * solely on the mid-edge node's global id, to be consistent with 2D
    * elements that have Edge3 sides (Quad9, Quad8, etc.).
    */
-  virtual dof_id_type key () const libmesh_override;
+  virtual dof_id_type key () const override;
 
+  /**
+   * Geometric constants for Edge3.
+   */
+  static const int num_nodes = 3;
+  static const int num_children = 2;
 
 protected:
 
   /**
    * Data for links to nodes.
    */
-  Node * _nodelinks_data[3];
+  Node * _nodelinks_data[num_nodes];
 
 
 
@@ -194,14 +205,14 @@ protected:
    */
   virtual float embedding_matrix (const unsigned int i,
                                   const unsigned int j,
-                                  const unsigned int k) const libmesh_override
+                                  const unsigned int k) const override
   { return _embedding_matrix[i][j][k]; }
 
   /**
    * Matrix that computes new nodal locations/solution values
    * from current nodes/solution.
    */
-  static const float _embedding_matrix[2][3][3];
+  static const float _embedding_matrix[num_children][num_nodes][num_nodes];
 
   LIBMESH_ENABLE_TOPOLOGY_CACHES;
 

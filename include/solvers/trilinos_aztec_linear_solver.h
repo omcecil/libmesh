@@ -30,8 +30,10 @@
 
 // Trilinos include files.  AztecOO requires Epetra, so there's no
 // need to check for both.
+#include "libmesh/ignore_warnings.h"
 #include <Epetra_LinearProblem.h>
 #include <AztecOO.h>
+#include "libmesh/restore_warnings.h"
 
 // C++ includes
 #include <vector>
@@ -64,12 +66,12 @@ public:
   /**
    * Release all memory and clear data structures.
    */
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
   /**
    * Initialize data structures if not done so already.
    */
-  virtual void init (const char * name=libmesh_nullptr) libmesh_override;
+  virtual void init (const char * name=nullptr) override;
 
   /**
    * Call the Aztec solver.  It calls the method below, using the
@@ -80,7 +82,7 @@ public:
          NumericVector<T> & solution_in,
          NumericVector<T> & rhs_in,
          const double tol,
-         const unsigned int m_its) libmesh_override
+         const unsigned int m_its) override
   {
     return this->solve(matrix_in, matrix_in, solution_in, rhs_in, tol, m_its);
   }
@@ -98,7 +100,7 @@ public:
          NumericVector<T> & solution,
          NumericVector<T> & rhs,
          const double tol,
-         const unsigned int m_its) libmesh_override;
+         const unsigned int m_its) override;
 
   /**
    * This function solves a system whose matrix is a shell matrix.
@@ -108,7 +110,7 @@ public:
          NumericVector<T> & solution_in,
          NumericVector<T> & rhs_in,
          const double tol,
-         const unsigned int m_its) libmesh_override;
+         const unsigned int m_its) override;
 
   /**
    * This function solves a system whose matrix is a shell matrix, but
@@ -121,7 +123,7 @@ public:
          NumericVector<T> & solution_in,
          NumericVector<T> & rhs_in,
          const double tol,
-         const unsigned int m_its) libmesh_override;
+         const unsigned int m_its) override;
 
   /**
    * Fills the input vector with the sequence of residual norms
@@ -142,12 +144,12 @@ public:
    * Prints a useful message about why the latest linear solve
    * con(di)verged.
    */
-  virtual void print_converged_reason() const libmesh_override;
+  virtual void print_converged_reason() const override;
 
   /**
    * \returns The solver's convergence flag
    */
-  virtual LinearConvergenceReason get_converged_reason() const libmesh_override;
+  virtual LinearConvergenceReason get_converged_reason() const override;
 
 private:
 
@@ -170,19 +172,6 @@ private:
 
 
 /*----------------------- functions ----------------------------------*/
-template <typename T>
-inline
-AztecLinearSolver<T>::AztecLinearSolver (const libMesh::Parallel::Communicator & comm) :
-  LinearSolver<T>(comm)
-{
-  if (this->n_processors() == 1)
-    this->_preconditioner_type = ILU_PRECOND;
-  else
-    this->_preconditioner_type = BLOCK_JACOBI_PRECOND;
-}
-
-
-
 template <typename T>
 inline
 AztecLinearSolver<T>::~AztecLinearSolver ()

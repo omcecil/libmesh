@@ -80,19 +80,24 @@ public:
   DenseVector (const std::vector<T2> & other_vector);
 
   /**
-   * Destructor.  Does nothing.
+   * The 5 special functions can be defaulted for this class, as it
+   * does not manage any memory itself.
    */
-  ~DenseVector() {}
+  DenseVector (DenseVector &&) = default;
+  DenseVector (const DenseVector &) = default;
+  DenseVector & operator= (const DenseVector &) = default;
+  DenseVector & operator= (DenseVector &&) = default;
+  virtual ~DenseVector() = default;
 
-  virtual unsigned int size() const libmesh_override
+  virtual unsigned int size() const override
   {
     return cast_int<unsigned int>(_val.size());
   }
 
-  virtual bool empty() const libmesh_override
+  virtual bool empty() const override
   { return _val.empty(); }
 
-  virtual void zero() libmesh_override;
+  virtual void zero() override;
 
   /**
    * \returns Entry \p i of the vector as a const reference.
@@ -104,10 +109,10 @@ public:
    */
   T & operator() (const unsigned int i);
 
-  virtual T el(const unsigned int i) const libmesh_override
+  virtual T el(const unsigned int i) const override
   { return (*this)(i); }
 
-  virtual T & el(const unsigned int i) libmesh_override
+  virtual T & el(const unsigned int i) override
   { return (*this)(i); }
 
   /**
@@ -455,8 +460,8 @@ typename CompareTypes<T, T2>::supertype DenseVector<T>::dot (const DenseVector<T
   // the convention in Eigen is to take the complex conjugate of the
   // *first* argument, while ours is to take the complex conjugate of
   // the second.
-  return Eigen::Map<const typename Eigen::Matrix<T2, Eigen::Dynamic, 1>>(&(vec.get_values()[0]), vec.size())
-    .dot(Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(&_val[0], _val.size()));
+  return Eigen::Map<const typename Eigen::Matrix<T2, Eigen::Dynamic, 1>>(vec.get_values().data(), vec.size())
+    .dot(Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(_val.data(), _val.size()));
 #else
   typename CompareTypes<T, T2>::supertype val = 0.;
 
@@ -599,7 +604,7 @@ Real DenseVector<T>::l1_norm () const
     return 0.;
 
 #ifdef LIBMESH_HAVE_EIGEN
-  return Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(&_val[0], _val.size()).template lpNorm<1>();
+  return Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(_val.data(), _val.size()).template lpNorm<1>();
 #else
   Real my_norm = 0.;
   const int N = cast_int<int>(_val.size());
@@ -620,7 +625,7 @@ Real DenseVector<T>::l2_norm () const
     return 0.;
 
 #ifdef LIBMESH_HAVE_EIGEN
-  return Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(&_val[0], _val.size()).norm();
+  return Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(_val.data(), _val.size()).norm();
 #else
   Real my_norm = 0.;
   const int N = cast_int<int>(_val.size());
@@ -646,7 +651,7 @@ Real DenseVector<T>::linfty_norm () const
     return 0.;
 
 #ifdef LIBMESH_HAVE_EIGEN
-  return Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(&_val[0], _val.size()).template lpNorm<Eigen::Infinity>();
+  return Eigen::Map<const typename Eigen::Matrix<T, Eigen::Dynamic, 1>>(_val.data(), _val.size()).template lpNorm<Eigen::Infinity>();
 #else
   Real my_norm = TensorTools::norm_sq((*this)(0));
 

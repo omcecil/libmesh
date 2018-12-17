@@ -145,7 +145,7 @@ const Point InfElemBuilder::build_inf_elem (const InfElemOriginValue & origin_x,
   // inner_boundary_nodes.  If so, we pass a std::set to the actual
   // implementation of the build_inf_elem(), so that we can convert
   // this to the Node * vector
-  if (inner_boundary_nodes != libmesh_nullptr)
+  if (inner_boundary_nodes != nullptr)
     {
       // note that the std::set that we will get
       // from build_inf_elem() uses the index of
@@ -230,7 +230,7 @@ const Point InfElemBuilder::build_inf_elem (const InfElemOriginValue & origin_x,
 
       // Finally, create const Node * in the inner_boundary_nodes
       // vector.  Reserve, not resize (otherwise, the push_back
-      // would append the interesting nodes, while NULL-nodes
+      // would append the interesting nodes, while nullptr-nodes
       // live in the resize'd area...
       inner_boundary_nodes->reserve (unique_size);
       inner_boundary_nodes->clear();
@@ -329,7 +329,7 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
   // Later, sides of the inner boundary will be sorted out.
   for (const auto & elem : _mesh.active_element_ptr_range())
     for (auto s : elem->side_index_range())
-      if (elem->neighbor_ptr(s) == libmesh_nullptr)
+      if (elem->neighbor_ptr(s) == nullptr)
         {
           // note that it is safe to use the Elem::side() method,
           // which gives a non-full-ordered element
@@ -389,7 +389,7 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
           if (!sym_side)
             faces.insert( std::make_pair(elem->id(), s) );
 
-        } // neighbor(s) == libmesh_nullptr
+        } // neighbor(s) == nullptr
 
 
 
@@ -411,12 +411,11 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
 
 
   {
-    std::set<std::pair<dof_id_type,unsigned int>>::iterator face_it = faces.begin();
+    auto face_it = faces.begin();
+    auto face_end = faces.end();
     unsigned int facesfound=0;
-    while (face_it != faces.end()) {
-
-      std::pair<dof_id_type, unsigned int> p;
-      p = *face_it;
+    while (face_it != face_end) {
+      std::pair<dof_id_type, unsigned int> p = *face_it;
 
       // This has to be a full-ordered side element,
       // since we need the correct n_nodes,
@@ -430,7 +429,6 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
             break;
           }
 
-
       // If a new oface is found, include its nodes in onodes
       if (found)
         {
@@ -438,14 +436,13 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
             onodes.insert(side->node_id(sn));
 
           ofaces.insert(p);
-          ++face_it; // iteration is done here
-          faces.erase(p);
+          face_it = faces.erase(face_it); // increment is done here
 
           facesfound++;
         }
 
       else
-        ++face_it; // iteration is done here
+        ++face_it; // increment is done here
 
       // If at least one new oface was found in this cycle,
       // do another search cycle.
@@ -454,7 +451,6 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
           facesfound = 0;
           face_it    = faces.begin();
         }
-
     }
   }
 
@@ -472,7 +468,7 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
   // When the user provided a non-null pointer to
   // inner_faces, that implies he wants to have
   // this std::set.  For now, simply copy the data.
-  if (inner_faces != libmesh_nullptr)
+  if (inner_faces != nullptr)
     *inner_faces = faces;
 
   // free memory, clear our local variable, no need
@@ -489,7 +485,7 @@ void InfElemBuilder::build_inf_elem(const Point & origin,
 
   // Likewise with our unique_ids
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-  dof_id_type old_max_unique_id = _mesh.parallel_max_unique_id();
+  unique_id_type old_max_unique_id = _mesh.parallel_max_unique_id();
 #endif
 
   // for each boundary node, add an outer_node with

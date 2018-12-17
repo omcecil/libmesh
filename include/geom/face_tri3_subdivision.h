@@ -37,7 +37,7 @@ namespace libMesh
  * \date 2014
  * \brief A surface shell element used in mechanics calculations.
  */
-class Tri3Subdivision libmesh_final : public Tri3
+class Tri3Subdivision final : public Tri3
 {
 public:
 
@@ -52,27 +52,33 @@ public:
    */
   Tri3Subdivision(Elem * p);
 
+  Tri3Subdivision (Tri3Subdivision &&) = delete;
+  Tri3Subdivision (const Tri3Subdivision &) = delete;
+  Tri3Subdivision & operator= (const Tri3Subdivision &) = delete;
+  Tri3Subdivision & operator= (Tri3Subdivision &&) = delete;
+  virtual ~Tri3Subdivision() = default;
+
   /**
    * \returns \p TRI3SUBDIVISION.
    */
-  virtual ElemType type () const libmesh_override { return TRI3SUBDIVISION; }
+  virtual ElemType type () const override { return TRI3SUBDIVISION; }
 
   /**
    * \returns \p true if the element map is definitely affine within
    * numerical tolerances.
    */
-  virtual bool has_affine_map () const libmesh_override { return false; }
+  virtual bool has_affine_map () const override { return false; }
 
   /**
    * \returns \p true if the Lagrange shape functions on this element
    * are linear.
    */
-  virtual bool is_linear () const libmesh_override { return false; }
+  virtual bool is_linear () const override { return false; }
 
   /**
    * \returns FOURTH.
    */
-  virtual Order default_order() const libmesh_override { return FOURTH; }
+  virtual Order default_order() const override;
 
   /**
    * Prepares the element for use by reordering the nodes such that

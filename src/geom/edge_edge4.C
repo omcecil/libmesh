@@ -19,13 +19,19 @@
 
 // Local includes
 #include "libmesh/edge_edge4.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
 
+// Edge4 class static member initializations
+const int Edge4::num_nodes;
+const int Edge4::num_children;
+
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Edge4::_embedding_matrix[2][4][4] =
+const float Edge4::_embedding_matrix[Edge4::num_children][Edge4::num_nodes][Edge4::num_nodes] =
   {
     // embedding matrix for child 0
 
@@ -68,7 +74,7 @@ bool Edge4::is_node_on_side(const unsigned int n,
                             const unsigned int s) const
 {
   libmesh_assert_less (s, 2);
-  libmesh_assert_less (n, 4);
+  libmesh_assert_less (n, Edge4::num_nodes);
   return (s == n);
 }
 
@@ -90,6 +96,13 @@ bool Edge4::has_affine_map() const
       ((this->point(0) + this->point(1)*2.)/3.))
     return false;
   return true;
+}
+
+
+
+Order Edge4::default_order() const
+{
+  return THIRD;
 }
 
 

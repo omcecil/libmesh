@@ -53,31 +53,26 @@ public:
 
   void test_bounding_box()
   {
-    MeshBase::const_element_iterator
-      elem_it  = _mesh->active_local_elements_begin(),
-      elem_end = _mesh->active_local_elements_end();
-    for (; elem_it != elem_end; ++elem_it)
+    for (const auto & elem : _mesh->active_local_element_ptr_range())
       {
-        const Elem & elem = **elem_it;
+        const BoundingBox bbox = elem->loose_bounding_box();
 
-        const BoundingBox bbox = elem.loose_bounding_box();
-
-        const Point centroid = elem.centroid();
+        const Point centroid = elem->centroid();
 
         // The "loose" bounding box should actually be pretty tight
         // in most of these cases, but for weirdly aligned triangles
         // (such as occur in pyramid elements) it won't be, so we'll
         // just test against a widened bounding box.
-        BoundingBox wide_bbox(elem.point(0), elem.point(0));
+        BoundingBox wide_bbox(elem->point(0), elem->point(0));
 
-        for (unsigned int n = 0; n != elem.n_nodes(); ++n)
+        for (unsigned int n = 0; n != elem->n_nodes(); ++n)
           {
-            const Point & p = elem.point(n);
+            const Point & p = elem->point(n);
 
             CPPUNIT_ASSERT(bbox.contains_point(p));
 
             wide_bbox.union_with
-              (BoundingBox(elem.point(n), elem.point(n)));
+              (BoundingBox(elem->point(n), elem->point(n)));
           }
 
         for (unsigned int d=0; d != LIBMESH_DIM; ++d)
@@ -111,13 +106,16 @@ INSTANTIATE_ELEMTEST(EDGE2);
 INSTANTIATE_ELEMTEST(EDGE3);
 INSTANTIATE_ELEMTEST(EDGE4);
 
+#if LIBMESH_DIM > 1
 INSTANTIATE_ELEMTEST(TRI3);
 INSTANTIATE_ELEMTEST(TRI6);
 
 INSTANTIATE_ELEMTEST(QUAD4);
 INSTANTIATE_ELEMTEST(QUAD8);
 INSTANTIATE_ELEMTEST(QUAD9);
+#endif
 
+#if LIBMESH_DIM > 2
 INSTANTIATE_ELEMTEST(TET4);
 INSTANTIATE_ELEMTEST(TET10);
 
@@ -132,3 +130,4 @@ INSTANTIATE_ELEMTEST(PRISM18);
 INSTANTIATE_ELEMTEST(PYRAMID5);
 INSTANTIATE_ELEMTEST(PYRAMID13);
 INSTANTIATE_ELEMTEST(PYRAMID14);
+#endif

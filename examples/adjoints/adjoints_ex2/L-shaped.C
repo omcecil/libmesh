@@ -37,12 +37,12 @@ void LaplaceSystem::init_context(DiffContext & context)
 
   // Now make sure we have requested all the data
   // we need to build the linear system.
-  FEBase * elem_fe = libmesh_nullptr;
+  FEBase * elem_fe = nullptr;
   c.get_element_fe(0, elem_fe);
   elem_fe->get_JxW();
   elem_fe->get_dphi();
 
-  FEBase * side_fe = libmesh_nullptr;
+  FEBase * side_fe = nullptr;
   c.get_side_fe(0, side_fe);
   side_fe->get_JxW();
   side_fe->get_phi();
@@ -62,7 +62,7 @@ bool LaplaceSystem::element_time_derivative (bool request_jacobian,
 
   // First we get some references to cell-specific data that
   // will be used to assemble the linear system.
-  FEBase * elem_fe = libmesh_nullptr;
+  FEBase * elem_fe = nullptr;
   c.get_element_fe(0, elem_fe);
 
   // Element Jacobian * quadrature weights for interior integration
@@ -72,7 +72,7 @@ bool LaplaceSystem::element_time_derivative (bool request_jacobian,
   const std::vector<std::vector<RealGradient>> & dphi = elem_fe->get_dphi();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_T_dofs = c.get_dof_indices(0).size();
+  const unsigned int n_T_dofs = c.n_dof_indices(0);
 
   // The subvectors and submatrices we need to fill:
   DenseSubMatrix<Number> & K = c.get_elem_jacobian(0, 0);
@@ -115,7 +115,7 @@ bool LaplaceSystem::side_constraint (bool request_jacobian,
 
   // First we get some references to cell-specific data that
   // will be used to assemble the linear system.
-  FEBase * side_fe = libmesh_nullptr;
+  FEBase * side_fe = nullptr;
   c.get_side_fe(0, side_fe);
 
   // Element Jacobian * quadrature weights for interior integration
@@ -128,7 +128,7 @@ bool LaplaceSystem::side_constraint (bool request_jacobian,
   const std::vector<Point > & qside_point = side_fe->get_xyz();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_T_dofs = c.get_dof_indices(0).size();
+  const unsigned int n_T_dofs = c.n_dof_indices(0);
 
   // The subvectors and submatrices we need to fill:
   DenseSubMatrix<Number> & K = c.get_elem_jacobian(0, 0);

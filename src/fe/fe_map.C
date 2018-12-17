@@ -34,16 +34,19 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/tensor_value.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/enum_elem_type.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
 
 // Constructor
-FEMap::FEMap() :
+FEMap::FEMap(Real jtol) :
   calculations_started(false),
   calculate_xyz(false),
   calculate_dxyz(false),
-  calculate_d2xyz(false)
+  calculate_d2xyz(false),
+  jacobian_tolerance(jtol)
 {}
 
 
@@ -71,6 +74,15 @@ void FEMap::init_reference_to_physical_map(const std::vector<Point> & qp,
 
   // We're calculating now!
   this->determine_calculations();
+
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+  if (elem->infinite())
+    {
+      //This mainly requires to change the FE<>-calls
+      // to FEInterface in this function.
+      libmesh_not_implemented();
+    }
+#endif
 
   // The number of quadrature points.
   const std::size_t n_qp = qp.size();
@@ -447,7 +459,7 @@ void FEMap::compute_single_point_map(const unsigned int dim,
 #endif
 
         // compute x, dx, d2x at the quadrature point
-        for (std::size_t i=0; i<elem_nodes.size(); i++) // sum over the nodes
+        for (auto i : index_range(elem_nodes)) // sum over the nodes
           {
             // Reference to the point, helps eliminate
             // excessive temporaries in the inner loop
@@ -486,7 +498,7 @@ void FEMap::compute_single_point_map(const unsigned int dim,
           {
             jac[p] = dxyzdxi_map[p].norm();
 
-            if (jac[p] <= 0.)
+            if (jac[p] <= jacobian_tolerance)
               {
                 // Don't call print_info() recursively if we're already
                 // failing.  print_info() calls Elem::volume() which may
@@ -686,7 +698,7 @@ void FEMap::compute_single_point_map(const unsigned int dim,
 
 
         // compute (x,y) at the quadrature points, derivatives once
-        for (std::size_t i=0; i<elem_nodes.size(); i++) // sum over the nodes
+        for (auto i : index_range(elem_nodes)) // sum over the nodes
           {
             // Reference to the point, helps eliminate
             // excessive temporaries in the inner loop
@@ -731,7 +743,7 @@ void FEMap::compute_single_point_map(const unsigned int dim,
             // jac = dx/dxi*dy/deta - dx/deta*dy/dxi
             jac[p] = (dx_dxi*dy_deta - dx_deta*dy_dxi);
 
-            if (jac[p] <= 0.)
+            if (jac[p] <= jacobian_tolerance)
               {
                 // Don't call print_info() recursively if we're already
                 // failing.  print_info() calls Elem::volume() which may
@@ -1008,7 +1020,7 @@ void FEMap::compute_single_point_map(const unsigned int dim,
         // dxdxi,   dydxi,   dzdxi,
         // dxdeta,  dydeta,  dzdeta,
         // dxdzeta, dydzeta, dzdzeta  all once
-        for (std::size_t i=0; i<elem_nodes.size(); i++) // sum over the nodes
+        for (auto i : index_range(elem_nodes)) // sum over the nodes
           {
             // Reference to the point, helps eliminate
             // excessive temporaries in the inner loop
@@ -1064,7 +1076,7 @@ void FEMap::compute_single_point_map(const unsigned int dim,
                       dy_dxi*(dz_deta*dx_dzeta - dx_deta*dz_dzeta)  +
                       dz_dxi*(dx_deta*dy_dzeta - dy_deta*dx_dzeta));
 
-            if (jac[p] <= 0.)
+            if (jac[p] <= jacobian_tolerance)
               {
                 // Don't call print_info() recursively if we're already
                 // failing.  print_info() calls Elem::volume() which may
@@ -1159,7 +1171,7 @@ void FEMap::resize_quadrature_map_vectors(const unsigned int dim, unsigned int n
 
       // Inverse map second derivatives
       d2xidxyz2_map.resize(n_qp);
-      for (std::size_t i=0; i<d2xidxyz2_map.size(); ++i)
+      for (auto i : index_range(d2xidxyz2_map))
         d2xidxyz2_map[i].assign(6, 0.);
     }
 #endif
@@ -1180,7 +1192,7 @@ void FEMap::resize_quadrature_map_vectors(const unsigned int dim, unsigned int n
 
           // Inverse map second derivatives
           d2etadxyz2_map.resize(n_qp);
-          for (std::size_t i=0; i<d2etadxyz2_map.size(); ++i)
+          for (auto i : index_range(d2etadxyz2_map))
             d2etadxyz2_map[i].assign(6, 0.);
         }
 #endif
@@ -1202,7 +1214,7 @@ void FEMap::resize_quadrature_map_vectors(const unsigned int dim, unsigned int n
 
               // Inverse map second derivatives
               d2zetadxyz2_map.resize(n_qp);
-              for (std::size_t i=0; i<d2zetadxyz2_map.size(); ++i)
+              for (auto i : index_range(d2zetadxyz2_map))
                 d2zetadxyz2_map[i].assign(6, 0.);
             }
 #endif
@@ -1234,20 +1246,20 @@ void FEMap::compute_affine_map(const unsigned int dim,
 
   // Determine the nodes contributing to element elem
   unsigned int n_nodes = elem->n_nodes();
-  elem_nodes.resize(elem->n_nodes());
+  _elem_nodes.resize(elem->n_nodes());
   for (unsigned int i=0; i<n_nodes; i++)
-    elem_nodes[i] = elem->node_ptr(i);
+    _elem_nodes[i] = elem->node_ptr(i);
 
   // Compute map at quadrature point 0
-  this->compute_single_point_map(dim, qw, elem, 0, elem_nodes, /*compute_second_derivatives=*/false);
+  this->compute_single_point_map(dim, qw, elem, 0, _elem_nodes, /*compute_second_derivatives=*/false);
 
   // Compute xyz at all other quadrature points
   if (calculate_xyz)
     for (unsigned int p=1; p<n_qp; p++)
       {
         xyz[p].zero();
-        for (std::size_t i=0; i<phi_map.size(); i++) // sum over the nodes
-          xyz[p].add_scaled        (*elem_nodes[i], phi_map[i][p]    );
+        for (auto i : index_range(phi_map)) // sum over the nodes
+          xyz[p].add_scaled (*_elem_nodes[i], phi_map[i][p]);
       }
 
   // Copy other map data from quadrature point 0
@@ -1402,40 +1414,39 @@ void FEMap::compute_map(const unsigned int dim,
   this->resize_quadrature_map_vectors(dim, n_qp);
 
   // Determine the nodes contributing to element elem
-  std::vector<const Node *> elem_nodes;
   if (elem->type() == TRI3SUBDIVISION)
     {
       // Subdivision surface FE require the 1-ring around elem
       libmesh_assert_equal_to (dim, 2);
       const Tri3Subdivision * sd_elem = static_cast<const Tri3Subdivision *>(elem);
-      MeshTools::Subdivision::find_one_ring(sd_elem, elem_nodes);
+      MeshTools::Subdivision::find_one_ring(sd_elem, _elem_nodes);
     }
   else
     {
       // All other FE use only the nodes of elem itself
-      elem_nodes.resize(elem->n_nodes(), libmesh_nullptr);
+      _elem_nodes.resize(elem->n_nodes(), nullptr);
       for (unsigned int i=0; i<elem->n_nodes(); i++)
-        elem_nodes[i] = elem->node_ptr(i);
+        _elem_nodes[i] = elem->node_ptr(i);
     }
 
   // Compute map at all quadrature points
   for (unsigned int p=0; p!=n_qp; p++)
-    this->compute_single_point_map(dim, qw, elem, p, elem_nodes, calculate_d2phi);
+    this->compute_single_point_map(dim, qw, elem, p, _elem_nodes, calculate_d2phi);
 }
 
 
 
 void FEMap::print_JxW(std::ostream & os) const
 {
-  for (std::size_t i=0; i<JxW.size(); ++i)
-    os << " [" << i << "]: " <<  JxW[i] << std::endl;
+  for (auto i : index_range(JxW))
+    os << " [" << i << "]: " << JxW[i] << std::endl;
 }
 
 
 
 void FEMap::print_xyz(std::ostream & os) const
 {
-  for (std::size_t i=0; i<xyz.size(); ++i)
+  for (auto i : index_range(xyz))
     os << " [" << i << "]: " << xyz[i];
 }
 

@@ -17,13 +17,12 @@
 
 
 
-// C++ includes
-
 // Local Includes
 #include "libmesh/optimization_solver.h"
 #include "libmesh/tao_optimization_solver.h"
 #include "libmesh/nlopt_optimization_solver.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/enum_solver_package.h"
 
 namespace libMesh
 {
@@ -32,14 +31,14 @@ template <typename T>
 inline
 OptimizationSolver<T>::OptimizationSolver (sys_type & s) :
   ParallelObject(s),
-  objective_object(libmesh_nullptr),
-  gradient_object(libmesh_nullptr),
-  hessian_object(libmesh_nullptr),
-  equality_constraints_object(libmesh_nullptr),
-  equality_constraints_jacobian_object(libmesh_nullptr),
-  inequality_constraints_object(libmesh_nullptr),
-  inequality_constraints_jacobian_object(libmesh_nullptr),
-  lower_and_upper_bounds_object(libmesh_nullptr),
+  objective_object(nullptr),
+  gradient_object(nullptr),
+  hessian_object(nullptr),
+  equality_constraints_object(nullptr),
+  equality_constraints_jacobian_object(nullptr),
+  inequality_constraints_object(nullptr),
+  inequality_constraints_jacobian_object(nullptr),
+  lower_and_upper_bounds_object(nullptr),
   max_objective_function_evaluations(500),
   objective_function_relative_tolerance(1.e-4),
   verbose(false),

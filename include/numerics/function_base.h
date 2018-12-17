@@ -36,16 +36,17 @@ namespace libMesh
 class Point;
 
 /**
- * This is the base class for functor-like classes.  These entities
- * are functions (in the mathematical sense) of time and space, \f$
- * f(\mathbf{x},t) = \mbox{\texttt{v}} \f$, where \p v may be either a
- * \p Number or a \p DenseVector<Number>.  Children of this base class
- * implement different styles of data retrieval for these functions.
- * Use the constructors of the derived classes for creating new
- * objects. The required input of each derived class thwarts the
- * effective use of the commonly used \p build() member.  But
- * afterward the virtual members allow the convenient and
- * libMesh-common usage through a \p FunctionBase *.
+ * \brief Base class for functors that can be evaluated at a point and
+ * (optionally) time.
+ *
+ * Instances of FunctionBase represent functions (in the mathematical sense)
+ * of time and space, \f$ f(\mathbf{x},t) = \mbox{\texttt{v}} \f$, where \p v
+ * may be either a \p Number or a \p DenseVector<Number>.  Children of this
+ * base class implement different styles of data retrieval for these
+ * functions. Use the constructors of the derived classes for creating new
+ * objects. The required input of each derived class thwarts the effective use
+ * of the commonly used \p build() member.  But afterward the virtual members
+ * allow the convenient and libMesh-common usage through a \p FunctionBase *.
  *
  * \note For functor objects for vector-valued variables, it is
  * assumed each component is indexed contiguously; i.e. if u_var is
@@ -67,14 +68,18 @@ protected:
    * Constructor.  Optionally takes a master.
    */
   explicit
-  FunctionBase (const FunctionBase * master = libmesh_nullptr);
+  FunctionBase (const FunctionBase * master = nullptr);
 
 public:
 
   /**
-   * Destructor.
+   * The 5 special functions can be defaulted for this class.
    */
-  virtual ~FunctionBase ();
+  FunctionBase (FunctionBase &&) = default;
+  FunctionBase (const FunctionBase &) = default;
+  FunctionBase & operator= (const FunctionBase &) = default;
+  FunctionBase & operator= (FunctionBase &&) = default;
+  virtual ~FunctionBase () = default;
 
   /**
    * The actual initialization process.
@@ -161,7 +166,7 @@ public:
 protected:
 
   /**
-   * Const pointer to our master, initialized to \p NULL.
+   * Const pointer to our master, initialized to \p nullptr.
    * There may be cases where multiple functions are required,
    * but to save memory, one master handles some centralized
    * data.
@@ -191,14 +196,6 @@ FunctionBase<Output>::FunctionBase (const FunctionBase * master) :
   _master             (master),
   _initialized        (false),
   _is_time_dependent  (true) // Assume we are time-dependent until the user says otherwise
-{
-}
-
-
-
-template<typename Output>
-inline
-FunctionBase<Output>::~FunctionBase ()
 {
 }
 

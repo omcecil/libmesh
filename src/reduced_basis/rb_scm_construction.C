@@ -35,6 +35,8 @@
 #include "libmesh/getpot.h"
 #include "libmesh/parallel.h"
 #include "libmesh/dof_map.h"
+#include "libmesh/enum_eigen_solver_type.h"
+
 // For creating a directory
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -49,7 +51,7 @@ RBSCMConstruction::RBSCMConstruction (EquationSystems & es,
   : Parent(es, name_in, number_in),
     SCM_training_tolerance(0.5),
     RB_system_name(""),
-    rb_scm_eval(libmesh_nullptr)
+    rb_scm_eval(nullptr)
 {
 
   // set assemble_before_solve flag to false
@@ -138,7 +140,7 @@ void RBSCMConstruction::process_parameters_file(const std::string & parameters_f
 
       unsigned int n_vals_for_param = infile.vector_variable_size(param_name);
       std::vector<Real> vals_for_param(n_vals_for_param);
-      for (std::size_t j=0; j<vals_for_param.size(); j++)
+      for (unsigned int j=0; j != n_vals_for_param; j++)
         vals_for_param[j] = infile(param_name, 0., j);
 
       discrete_parameter_values_in[param_name] = vals_for_param;
@@ -148,14 +150,11 @@ void RBSCMConstruction::process_parameters_file(const std::string & parameters_f
 
   std::map<std::string,bool> log_scaling;
   const RBParameters & mu = get_parameters();
-  RBParameters::const_iterator it     = mu.begin();
-  RBParameters::const_iterator it_end = mu.end();
   unsigned int i=0;
-  for ( ; it != it_end; ++it)
+  for (const auto & pr : mu)
     {
-      std::string param_name = it->first;
-      log_scaling[param_name] = static_cast<bool>(infile("log_scaling", 0, i));
-      i++;
+      const std::string & param_name = pr.first;
+      log_scaling[param_name] = static_cast<bool>(infile("log_scaling", 0, i++));
     }
 
   initialize_training_parameters(this->get_parameters_min(),
@@ -180,11 +179,9 @@ void RBSCMConstruction::print_info()
       libMesh::out << "RBThetaExpansion member is not set yet" << std::endl;
     }
   libMesh::out << "Number of parameters: " << get_n_params() << std::endl;
-  RBParameters::const_iterator it     = get_parameters().begin();
-  RBParameters::const_iterator it_end = get_parameters().end();
-  for ( ; it != it_end; ++it)
+  for (const auto & pr : get_parameters())
     {
-      std::string param_name = it->first;
+      const std::string & param_name = pr.first;
       libMesh::out <<   "Parameter " << param_name
                    << ": Min = " << get_parameter_min(param_name)
                    << ", Max = " << get_parameter_max(param_name) << std::endl;
@@ -353,7 +350,7 @@ void RBSCMConstruction::evaluate_stability_constant()
   LOG_SCOPE("evaluate_stability_constant()", "RBSCMConstruction");
 
   // Get current index of C_J
-  const unsigned int j = rb_scm_eval->C_J.size()-1;
+  const unsigned int j = cast_int<unsigned int>(rb_scm_eval->C_J.size()-1);
 
   eigen_solver->set_position_of_spectrum(SMALLEST_REAL);
 
@@ -465,15 +462,15 @@ void RBSCMConstruction::enrich_C_J(unsigned int new_C_J_index)
 
   libMesh::out << std::endl << "SCM: Added mu = (";
 
-  RBParameters::const_iterator it     = get_parameters().begin();
-  RBParameters::const_iterator it_end = get_parameters().end();
-  for ( ; it != it_end; ++it)
+  bool first = true;
+  for (const auto & pr : get_parameters())
     {
-      if (it != get_parameters().begin())
+      if (!first)
         libMesh::out << ",";
-      std::string param_name = it->first;
+      const std::string & param_name = pr.first;
       RBParameters C_J_params = rb_scm_eval->C_J[rb_scm_eval->C_J.size()-1];
       libMesh::out << C_J_params.get_value(param_name);
+      first = false;
     }
   libMesh::out << ")" << std::endl;
 

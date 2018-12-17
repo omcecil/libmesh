@@ -62,11 +62,13 @@ class MeshfunctionDFEM : public CppUnit::TestCase
 public:
   CPPUNIT_TEST_SUITE( MeshfunctionDFEM );
 
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( test_point_locator_dfem );
 
   CPPUNIT_TEST( test_mesh_function_dfem );
 
   CPPUNIT_TEST( test_mesh_function_dfem_grad );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -129,12 +131,16 @@ protected:
 public:
   void setUp()
   {
+#if LIBMESH_DIM > 1
     this->build_mesh();
+#endif
   }
 
   void tearDown()
   {
+#if LIBMESH_DIM > 1
     delete _mesh;
+#endif
   }
 
   // test that point locator works correctly
@@ -148,14 +154,14 @@ public:
 
     // test interior point
     std::set<const Elem *> int_cand;
-    (*_point_locator)(interior, int_cand, libmesh_nullptr);
+    (*_point_locator)(interior, int_cand, nullptr);
     CPPUNIT_ASSERT (int_cand.size() == 1);
     for (std::set<const Elem *>::iterator it = int_cand.begin(); it != int_cand.end(); ++it)
       CPPUNIT_ASSERT ((*it)->id() == 1);
 
     // test interior point
     std::set<const Elem *> face_cand;
-    (*_point_locator)(face, face_cand, libmesh_nullptr);
+    (*_point_locator)(face, face_cand, nullptr);
     CPPUNIT_ASSERT (face_cand.size() == 2);
     int array[2] = {0, 0};
     for (std::set<const Elem *>::iterator it = face_cand.begin(); it != face_cand.end(); ++it)
@@ -186,7 +192,7 @@ public:
     sys.add_variable("u", CONSTANT, MONOMIAL);
 
     es.init();
-    sys.project_solution(position_function, NULL, es.parameters);
+    sys.project_solution(position_function, nullptr, es.parameters);
 
     std::vector<unsigned int> variables;
     sys.get_all_variable_numbers(variables);
@@ -254,7 +260,7 @@ public:
     sys.add_variable("u", FIRST, LAGRANGE);
 
     es.init();
-    sys.project_solution(position_function2, NULL, es.parameters);
+    sys.project_solution(position_function2, nullptr, es.parameters);
 
     std::vector<unsigned int> variables;
     sys.get_all_variable_numbers(variables);

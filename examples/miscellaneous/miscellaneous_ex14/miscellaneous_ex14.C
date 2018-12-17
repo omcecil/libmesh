@@ -25,7 +25,7 @@
 // To speed up the calculation, the SlepcSolver is configured to use the shift-and-invert-transform for solving
 // the resulting generalised eigensystem.
 //
-// The result is printed in exodus-format and along the x-axis in a free format. 
+// The result is printed in exodus-format and along the x-axis in a free format.
 
 #include <iostream>
 #include <fstream>
@@ -45,19 +45,21 @@
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/dof_map.h"
-#include "libmesh/fe_interface.h" 
+#include "libmesh/fe_interface.h"
 #include "libmesh/explicit_system.h"
 // for infinite elements:
 #include "libmesh/inf_fe.h"
 #include "libmesh/inf_elem_builder.h"
-#include "libmesh/fe_interface.h" 
+#include "libmesh/fe_interface.h"
 #include "libmesh/fe_compute_data.h"
 // for finding element for point
 #include "libmesh/point_locator_tree.h"
 
 // for the SlepcSolverConfiguration
+#include "libmesh/petsc_solver_exception.h"
 #include "libmesh/solver_configuration.h"
 #include "libmesh/slepc_eigen_solver.h"
+#include "libmesh/enum_eigen_solver_type.h"
 
 #ifdef LIBMESH_HAVE_SLEPC
 EXTERN_C_FOR_SLEPC_BEGIN
@@ -81,14 +83,14 @@ enum SpectralTransform {SHIFT=0,
 };
 
 /**
- * A class that interfaces the \p SolverConfiguration to add the SLEPC option SetST. 
+ * A class that interfaces the \p SolverConfiguration to add the SLEPC option SetST.
  * In case of dense eigenvalues, the application of SINVERT or CAYLEY is highly benefitial
  * see <a href='http://slepc.upv.es/documentation/'>the SLEPC-manual</a> for details.
  */
 class SlepcSolverConfiguration : public libMesh::SolverConfiguration
 {
 public:
-  
+
   /**
    * Constructur: get a reference to the \p SlepcEigenSolver variable to be able to manipulate it
    */
@@ -96,7 +98,7 @@ public:
     _slepc_solver(slepc_eigen_solver),
     _st(INVALID_ST)
   {}
-   
+
   /**
    * empty destructor
    */
@@ -109,7 +111,7 @@ public:
    */
   void SetST(SpectralTransform st)
   { _st=st;}
-   
+
 private:
 
   /**
@@ -133,7 +135,7 @@ int main (int argc, char** argv)
 {
   // Initialize libMesh and the dependent libraries.
   LibMeshInit init (argc, argv);
-   
+
   // Check for proper usage first.
   if (argc < 2)
     libmesh_error_msg("\nUsage: " << argv[0] << " <input-filename>");
@@ -156,7 +158,7 @@ int main (int argc, char** argv)
   libmesh_example_requires(false, "--enable-ifem");
 #else
 
-#ifndef LIBMESH_USE_COMPLEX_NUMBERS 
+#ifndef LIBMESH_USE_COMPLEX_NUMBERS
   libmesh_example_requires(false, "--enable-complex");
 #endif
 
@@ -171,43 +173,37 @@ int main (int argc, char** argv)
   // Skip this example if libMesh was compiled with <3 dimensions.
   // INFINITE ELEMENTS ARE IMPLEMENTED ONLY FOR 3 DIMENSIONS AT THE MOMENT.
   libmesh_example_requires(3 <= LIBMESH_DIM, "3D support");
-  
+
   // read the options from the input-file.
   const unsigned int nev = cl("nev",1);
   Real E = cl("Energy", -.5);
   Real r=cl("radius", 4.);
   unsigned int maxiter=cl("maxiter", 700);
-     
+
   int dim = 3;
 
   // creation of an empty mesh-object
   Mesh mesh(init.comm(), dim);
 
-  // fill the meshes with a spherical grid of type HEX27 with radius r 
+  // fill the meshes with a spherical grid of type HEX27 with radius r
   MeshTools::Generation::build_sphere (mesh, r, 2, HEX27, 2, true);
 
   // The infinite elements are attached to all elements that build the outer surface of the FEM-region.
   InfElemBuilder builder(mesh);
   builder.build_inf_elem(true);
-   
+
   // Reassign subdomain_id() of all infinite elements.
   // Otherwise, the Exodus-API will fail.
-  MeshBase::element_iterator       elem_it  = mesh.elements_begin();
-  const MeshBase::element_iterator elem_end = mesh.elements_end();
-  for (; elem_it != elem_end; ++elem_it)
-    {
-      Elem * elem = *elem_it;
-      if(elem->infinite()){
-        elem->subdomain_id() = 1;
-      }
-    }
+  for (auto & elem : mesh.element_ptr_range())
+    if (elem->infinite())
+      elem->subdomain_id() = 1;
 
   // find the neighbours; for correct linking the two areas
   mesh.find_neighbors();
 
   // Create an equation systems object
   EquationSystems eq_sys (mesh);
-  
+
   // This is the only system added here.
   EigenSystem & eig_sys = eq_sys.add_system<EigenSystem> ("EigenSE");
 
@@ -225,43 +221,43 @@ int main (int argc, char** argv)
   //save the mesh-size in a parameter to scale the region for printing the solution later accordingly.
   eq_sys.parameters.set<Real>("radius")    = r;
 
-  //set number of eigen values ( \p nev) and number of 
+  //set number of eigen values ( \p nev) and number of
   // basis vectors \p ncv for the solution.
   //Note that ncv >= nev must hold and ncv >= 2*nev is recommended.
   eq_sys.parameters.set<unsigned int>("eigenpairs")    = nev;
 
   eq_sys.parameters.set<unsigned int>("basis vectors") = nev*3+4;
-   
+
   // Set the solver tolerance and the maximum number of iterations.
   eq_sys.parameters.set<Real> ("linear solver tolerance") = pow(TOLERANCE, 5./3.);
   eq_sys.parameters.set<unsigned int>("linear solver maximum iterations") = maxiter;
-   
+
   // set numerical parameters for SLEPC on how to solve the system.
 #if SLEPC_VERSION_LESS_THAN(2,3,2)
   eig_sys.eigen_solver->set_eigensolver_type(ARNOLDI);
 #else
-  eig_sys.eigen_solver->set_eigensolver_type(KRYLOVSCHUR); 
+  eig_sys.eigen_solver->set_eigensolver_type(KRYLOVSCHUR);
 #endif
 
   eig_sys.eigen_solver->set_position_of_spectrum(E);
-  
+
   //fetch the solver-object used internally to be able to manipulate it using the self-written class
   // to set the transformation
-  SlepcEigenSolver<Number> * solver = 
+  SlepcEigenSolver<Number> * solver =
     libmesh_cast_ptr<SlepcEigenSolver<Number>* >( &(*eig_sys.eigen_solver) );
 
   // setup of our class @SlepcSolverConfiguration
   SlepcSolverConfiguration ConfigSolver(*solver);
 
-  // set the spectral transformation: the default (SHIFT) will not converge 
+  // set the spectral transformation: the default (SHIFT) will not converge
   // so we should some more elaborate scheme.
   ConfigSolver.SetST(SINVERT);
 
   solver ->set_solver_configuration(ConfigSolver);
- 
+
   // attach the name of the function that assembles the matrix equation:
   eig_sys.attach_assemble_function (assemble_SchroedingerEquation);
-  
+
   // important to set the system to be generalised nonhermitian eigen problem.
   // By default it is HEP and so _matrix_B is not available.
   // In the infinite element scheme, the Hamiltonian is not hermitian because left and right
@@ -273,7 +269,7 @@ int main (int argc, char** argv)
 
   // Solve system. This function calls the assemble-functions.
   eig_sys.solve();
-   
+
   // get number of actually converged eigenpairs. It can be larger or smaller than \p nev.
   unsigned int nconv = eig_sys.get_n_converged();
 
@@ -330,29 +326,29 @@ int main (int argc, char** argv)
 /**
  * In this function, we assemble the actual system matrices. The inital equation is the eigen system \f$ H \Psi = \epsilon
  * \Psi \f$
- * where H is the Hamilton operator and Psi the eigen vector with corresponding eigen value \f$\epsilon\f$. 
+ * where H is the Hamilton operator and Psi the eigen vector with corresponding eigen value \f$\epsilon\f$.
  * In the FEM-scheme, this becomes the generalised eigen problem  \f$ H \Psi = \epsilon M \Psi \f$ where M is the element mass matrix.
  */
 void assemble_SchroedingerEquation(EquationSystems &es, const std::string &system_name)
 {
-#ifdef  LIBMESH_ENABLE_INFINITE_ELEMENTS
+#if defined(LIBMESH_ENABLE_INFINITE_ELEMENTS) && defined(LIBMESH_HAVE_SLEPC)
   // It is a good idea to make sure we are assembling
   // the proper system.
   libmesh_assert_equal_to (system_name, "EigenSE");
+
   // Get a constant reference to the mesh object.
   const MeshBase& mesh = es.get_mesh();
+
   // The dimension that we are running.
   const unsigned int dim = mesh.mesh_dimension();
 
-#ifdef LIBMESH_HAVE_SLEPC
-      
   // Get a reference to our system.
   EigenSystem & eigen_system = es.get_system<EigenSystem> (system_name);
 
   // Get a constant reference to the Finite Element type
   // for the first (and only) variable in the system.
   FEType fe_type = eigen_system.get_dof_map().variable_type(0);
-      
+
   // A reference to the system matrices
   SparseMatrix<Number>&  matrix_A = *eigen_system.matrix_A;
   SparseMatrix<Number>&  matrix_B = *eigen_system.matrix_B;
@@ -367,57 +363,50 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
   // of as a pointer that will clean up after itself.
   std::unique_ptr<FEBase> fe (FEBase::build(dim, fe_type));
   std::unique_ptr<FEBase> inf_fe (FEBase::build_InfFE(dim, fe_type));
-      
+
   // Tell the finite element object to use our quadrature rule.
   fe->attach_quadrature_rule (&qrule);
   inf_fe->attach_quadrature_rule (&qrule);
-      
-  Number E=es.parameters.get<Number>("gsE");  
+
+  Number E=es.parameters.get<Number>("gsE");
 
   /*
    * this is used as a parameter in the matrix assembly which is used to resemble the exponential
-   * term in the infinite region. 
+   * term in the infinite region.
    * For bound states, i*k is real (and negative), for free states i*k is imaginary.
    * The latter case is what is usually assumed for infinite elements.
    */
-  Number ik=-sqrt(-2.*E); 
+  Number ik=-sqrt(-2.*E);
 
   // set parameters used for the infinite elements:
   es.parameters.set<Real>("speed")=137.0359991;
   es.parameters.set<Number>("current frequency")=es.parameters.get<Real>("speed")*ik/(2*pi);
 
-  Number potval;  
-  Number temp; 
-      
+  Number potval;
+  Number temp;
+
   // A reference to the \p DofMap object for this system.  The \p DofMap
   // object handles the index translation from node and element numbers
   // to degree of freedom numbers.
   const DofMap& dof_map = eigen_system.get_dof_map();
-      
+
   // The element mass matrix M and Hamiltonian H.
   DenseMatrix<Number> M;
   DenseMatrix<Number> H;
-   
+
   // This vector will hold the degree of freedom indices for
   // the element.  These define where in the global system
   // the element degrees of freedom get mapped.
   std::vector<dof_id_type> dof_indices;
-      
+
   // Now we will loop over all the elements in the mesh that
   // live on the local processor. We will compute the element
   // matrix and right-hand-side contribution.  In case users
   // later modify this program to include refinement, we will
   // be safe and will only consider the active elements;
   // hence we use a variant of the \p active_elem_iterator.
-  MeshBase::const_element_iterator       el  = mesh.active_local_elements_begin();
-  const MeshBase::const_element_iterator end_el = mesh.active_local_elements_end();
-      
-  for ( ; el != end_el; ++el)
+  for (const auto & elem : mesh.active_local_element_ptr_range())
     {
-      // Store a pointer to the element we are currently
-      // working on.  This allows for nicer syntax later.
-      const Elem* elem = *el;
-
       // Get the degree of freedom indices for the
       // current element.  These define where in the global
       // matrix and right-hand-side this element will
@@ -425,7 +414,7 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
       dof_map.dof_indices (elem, dof_indices);
 
       // unifyging finite and infinite elements
-      FEBase * cfe = libmesh_nullptr;
+      FEBase * cfe = nullptr;
 
       if (elem->infinite())
         {
@@ -440,7 +429,7 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
         {
           cfe = fe.get();
         }
-     
+
       // The element Jacobian * quadrature weight at each integration point.
       const std::vector<Real>& JxW = cfe->get_JxW();
 
@@ -452,13 +441,13 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
       const std::vector<RealGradient>& dphase = cfe->get_dphase();
       const std::vector<Real>& weight = cfe->get_Sobolev_weight(); // in publication called D
       const std::vector<RealGradient>& dweight = cfe->get_Sobolev_dweight();
-   
+
       // Compute the element-specific data for the current
       // element.  This involves computing the location of the
       // quadrature points (q_point) and the shape functions
       // (phi, dphi) for the current element.
       cfe->reinit (elem);
-   
+
       // Zero the element matrices and rhs before
       // summing them.  We use the resize member here because
       // the number of degrees of freedom might have changed from
@@ -474,7 +463,7 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
       unsigned int max_qp = cfe->n_quadrature_points();
       for (unsigned int qp=0; qp<max_qp; qp++)
         {
-         
+
           // get the Coulomb potential at the core:
           potval=-1./(q_point[qp]).norm();
 
@@ -487,11 +476,11 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
                 {
 
                   // This is just the of derivatives of shape functions i and j.
-                  // For finite elements, dweight==0 and dphase==0, thus  
+                  // For finite elements, dweight==0 and dphase==0, thus
                   // temp=dphi[i][qp]*dphi[j][qp].
                   temp = (dweight[qp]*phi[i][qp]+weight[qp]*(dphi[i][qp]-ik*dphase[qp]*phi[i][qp]))
                     *(dphi[j][qp]+ik*dphase[qp]*phi[j][qp]);
-          
+
                   // assemble the Hamiltonian: H=1/2 Nabla^2 + V
                   H(i,j) += JxW[qp]*(0.5*temp + potval*weight[qp]*phi[i][qp]*phi[j][qp]);
                   // assemble the mass matrix:
@@ -517,39 +506,30 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
       matrix_B.add_matrix (M, dof_indices);
 
     } // end of element loop
-         
+
   /**
    * All done!
    */
 
 #else
   // Avoid unused variable warnings when compiling without infinite
-  // elements enabled.
+  // elements and/or SLEPc enabled.
   libmesh_ignore(es);
   libmesh_ignore(system_name);
-#endif // LIBMESH_HAVE_SLEPC
-#else
-
-  // Avoid unused variable warnings when compiling without infinite
-  // elements enabled.
-  libmesh_ignore(es);
-  libmesh_ignore(system_name);
-#endif // LIBMESH_ENABLE_INFINITE_ELEMENTS
+#endif // LIBMESH_ENABLE_INFINITE_ELEMENTS && LIBMESH_HAVE_SLEPC
 }
 
 #ifdef LIBMESH_HAVE_SLEPC
 //define the functions needed for the @ SlepcSolverConfiguration.
 void SlepcSolverConfiguration::configure_solver()
 {
-  PetscErrorCode ierr = 0;
-
   // if a spectral transformation was requested
   if (_st!=INVALID_ST)
-    {   
+    {
       // initialise the st with the default values and change the spectral transformation value.
       ST st;
-      ierr = EPSGetST(_slepc_solver.eps(), &st);
-      libmesh_assert(ierr == 0);
+      PetscErrorCode ierr = EPSGetST(_slepc_solver.eps(), &st);
+      LIBMESH_CHKERR(ierr);
 
       // Set it to the desired type of spectral transformation.
       // The value of the respective shift is chosen to be the target
@@ -573,13 +553,12 @@ void SlepcSolverConfiguration::configure_solver()
         default:
           // print a warning but do nothing more.
           break;
-        }  
+        }
+      LIBMESH_CHKERR(ierr);
 
       // since st is a reference to the particular object used by \p _slepc_solver,
       // we don't need to hand back the manipulated object. It will be applied before
       // solving the system automatically.
-
-      libmesh_assert(ierr == 0);
     }
 }
 #endif // LIBMESH_HAVE_SLEPC
@@ -597,7 +576,7 @@ void line_print(EquationSystems& es, std::string output, std::string SysName)
   //Since we don't need any functionality that is special for EigenSystem,
   // we can use the base class here, thus keeping this function more general.
   System & system = es.get_system<System> (SysName);
-   
+
   Real r = 2*es.parameters.get<Real>("radius");
 
   // get the variable number to specify, at which quantity we want to look later:

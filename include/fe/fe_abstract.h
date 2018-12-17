@@ -24,12 +24,20 @@
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/point.h"
 #include "libmesh/vector_value.h"
-#include "libmesh/enum_elem_type.h"
 #include "libmesh/fe_type.h"
 #include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/fe_map.h"
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 #include "libmesh/tensor_value.h"
+#endif
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ElemType : int;
+}
+#else
+#include "libmesh/enum_elem_type.h"
 #endif
 
 // C++ includes
@@ -133,8 +141,8 @@ public:
    * the first \p reinit().
    */
   virtual void reinit (const Elem * elem,
-                       const std::vector<Point> * const pts = libmesh_nullptr,
-                       const std::vector<Real> * const weights = libmesh_nullptr) = 0;
+                       const std::vector<Point> * const pts = nullptr,
+                       const std::vector<Real> * const weights = nullptr) = 0;
 
   /**
    * Reinitializes all the physical element-dependent data based on
@@ -147,8 +155,8 @@ public:
   virtual void reinit (const Elem * elem,
                        const unsigned int side,
                        const Real tolerance = TOLERANCE,
-                       const std::vector<Point> * const pts = libmesh_nullptr,
-                       const std::vector<Real> * const weights = libmesh_nullptr) = 0;
+                       const std::vector<Point> * const pts = nullptr,
+                       const std::vector<Real> * const weights = nullptr) = 0;
 
   /**
    * Reinitializes all the physical element-dependent data based on
@@ -161,8 +169,8 @@ public:
   virtual void edge_reinit (const Elem * elem,
                             const unsigned int edge,
                             const Real tolerance = TOLERANCE,
-                            const std::vector<Point> * pts = libmesh_nullptr,
-                            const std::vector<Real> * weights = libmesh_nullptr) = 0;
+                            const std::vector<Point> * pts = nullptr,
+                            const std::vector<Real> * weights = nullptr) = 0;
 
   /**
    * Computes the reference space quadrature points on the side of
@@ -598,37 +606,6 @@ protected:
   virtual bool shapes_need_reinit() const = 0;
 
 };
-
-
-
-
-// ------------------------------------------------------------
-// FEAbstract class inline members
-inline
-FEAbstract::FEAbstract(const unsigned int d,
-                       const FEType & fet) :
-  _fe_map( FEMap::build(fet) ),
-  dim(d),
-  calculations_started(false),
-  calculate_phi(false),
-  calculate_dphi(false),
-  calculate_d2phi(false),
-  calculate_curl_phi(false),
-  calculate_div_phi(false),
-  calculate_dphiref(false),
-  fe_type(fet),
-  elem_type(INVALID_ELEM),
-  _p_level(0),
-  qrule(libmesh_nullptr),
-  shapes_on_quadrature(false)
-{
-}
-
-
-inline
-FEAbstract::~FEAbstract()
-{
-}
 
 } // namespace libMesh
 

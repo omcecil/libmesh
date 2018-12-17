@@ -96,7 +96,7 @@ bool TreeNode<N>::insert (const Elem * elem)
 
 #endif
 
-      unsigned int element_count = elements.size();
+      unsigned int element_count = cast_int<unsigned int>(elements.size());
       if (!mesh.get_count_lower_dim_elems_in_point_locator())
         {
           const std::set<unsigned char> & elem_dimensions = mesh.elem_dimensions();
@@ -443,6 +443,63 @@ void TreeNode<N>::transform_nodes_to_elements (std::vector<std::vector<const Ele
 
 
 template <unsigned int N>
+void TreeNode<N>::transform_nodes_to_elements (std::unordered_map<dof_id_type, std::vector<const Elem *>> & nodes_to_elem)
+{
+  if (this->active())
+    {
+      elements.clear();
+
+      // Temporarily use a set. Since multiple nodes
+      // will likely map to the same element we use a
+      // set to eliminate the duplication.
+      std::set<const Elem *> elements_set;
+
+      for (std::size_t n=0; n<nodes.size(); n++)
+        {
+          // the actual global node number we are replacing
+          // with the connected elements
+          const dof_id_type node_number = nodes[n]->id();
+
+          libmesh_assert_less (node_number, mesh.n_nodes());
+
+          auto & my_elems = nodes_to_elem[node_number];
+          elements_set.insert(my_elems.begin(), my_elems.end());
+        }
+
+      // Done with the nodes.
+      std::vector<const Node *>().swap(nodes);
+
+      // Now the set is built.  We can copy this to the
+      // vector.  Note that the resulting vector will
+      // already be sorted, and will require less memory
+      // than the set.
+      elements.reserve(elements_set.size());
+
+      for (const auto & elem : elements_set)
+        {
+          elements.push_back(elem);
+
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+
+          // flag indicating this node contains
+          // infinite elements
+          if (elem->infinite())
+            this->contains_ifems = true;
+
+#endif
+        }
+    }
+  else
+    {
+      for (std::size_t child=0; child<children.size(); child++)
+        children[child]->transform_nodes_to_elements (nodes_to_elem);
+    }
+
+}
+
+
+
+template <unsigned int N>
 unsigned int TreeNode<N>::n_active_bins() const
 {
   if (this->active())
@@ -479,7 +536,7 @@ TreeNode<N>::find_element (const Point & p,
               return elem;
 
       // The point was not found in any element
-      return libmesh_nullptr;
+      return nullptr;
     }
   else
     return this->find_element_in_children(p,allowed_subdomains,
@@ -508,7 +565,7 @@ const Elem * TreeNode<N>::find_element_in_children (const Point & p,
           children[c]->find_element(p,allowed_subdomains,
                                     relative_tol);
 
-        if (e != libmesh_nullptr)
+        if (e != nullptr)
           return e;
 
         // If we get here then a child that bounds the
@@ -531,17 +588,16 @@ const Elem * TreeNode<N>::find_element_in_children (const Point & p,
           children[c]->find_element(p,allowed_subdomains,
                                     relative_tol);
 
-        if (e != libmesh_nullptr)
+        if (e != nullptr)
           return e;
       }
 
   // If we get here we have searched all our children.
   // Since this process was started at the root node then
   // we have searched all the elements in the tree without
-  // success.  So, we should return NULL since at this point
+  // success.  So, we should return nullptr since at this point
   // _no_ elements in the tree claim to contain point p.
-
-  return libmesh_nullptr;
+  return nullptr;
 }
 
 

@@ -42,9 +42,13 @@ class MeshInputTest : public CppUnit::TestCase {
 public:
   CPPUNIT_TEST_SUITE( MeshInputTest );
 
+#if LIBMESH_DIM > 1
 #ifdef LIBMESH_HAVE_EXODUS_API
   CPPUNIT_TEST( testExodusCopyElementSolution );
 #endif
+
+  CPPUNIT_TEST( testMeshMoveConstructor );
+#endif // LIBMESH_DIM > 1
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -72,10 +76,10 @@ public:
                                            0., 1., 0., 1.);
 
       es.init();
-      sys.project_solution(x_plus_y, NULL, es.parameters);
+      sys.project_solution(x_plus_y, nullptr, es.parameters);
 
       ExodusII_IO exii(mesh);
-      
+
       // Don't try to write element data as nodal data
       std::set<std::string> sys_list;
       exii.write_equation_systems("mesh_with_soln.e", es, &sys_list);
@@ -111,8 +115,8 @@ public:
       exii.copy_elemental_solution(sys, "teste", "e");
 #endif
 
-      for (Real x = 1.L/6.L; x < 1; x += 1.L/3.L)
-        for (Real y = 1.L/6.L; y < 1; y += 1.L/3.L)
+      for (Real x = Real(1.L/6.L); x < 1; x += Real(1.L/3.L))
+        for (Real y = Real(1.L/6.L); y < 1; y += Real(1.L/3.L))
           {
             Point p(x,y);
             CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(0,p)),
@@ -123,6 +127,28 @@ public:
   }
 #endif
 
+  void testMeshMoveConstructor ()
+  {
+    Mesh mesh(*TestCommWorld);
+    MeshTools::Generation::build_square (mesh,
+                                         3, 3,
+                                         0., 1., 0., 1.);
+
+    // Construct mesh2, stealing the resources of the original.
+    Mesh mesh2(std::move(mesh));
+
+    // Make sure mesh2 now has the 9 elements.
+    CPPUNIT_ASSERT_EQUAL(mesh2.n_elem(),
+                         static_cast<dof_id_type>(9));
+
+    // Verify that the moved-from mesh's Partitioner and BoundaryInfo
+    // objects were successfully stolen.  Note: moved-from unique_ptrs
+    // are guaranteed to compare equal to nullptr, see e.g. Section
+    // 20.8.1/4 of the standard.
+    // https://stackoverflow.com/questions/24061767/is-unique-ptr-guaranteed-to-store-nullptr-after-move
+    CPPUNIT_ASSERT(!mesh.partitioner());
+    CPPUNIT_ASSERT(!mesh.boundary_info);
+  }
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION( MeshInputTest );

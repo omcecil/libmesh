@@ -24,7 +24,6 @@
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/point.h"
 #include "libmesh/vector_value.h"
-#include "libmesh/enum_elem_type.h"
 #include "libmesh/fe_type.h"
 #include "libmesh/auto_ptr.h" // deprecated
 
@@ -50,7 +49,7 @@ class FEMap
 {
 public:
 
-  FEMap();
+  FEMap(Real jtol = 0);
   virtual ~FEMap(){}
 
   static std::unique_ptr<FEMap> build(FEType fe_type);
@@ -410,10 +409,18 @@ public:
   { libmesh_assert(!calculations_started || calculate_dxyz);
     calculate_dxyz = true; return dpsidxi_map; }
 
+  const std::vector<std::vector<Real>> & get_dpsidxi() const
+  { libmesh_assert(!calculations_started || calculate_dxyz);
+    calculate_dxyz = true; return dpsidxi_map; }
+
   /**
    * \returns The reference to physical map derivative for the side/edge
    */
   std::vector<std::vector<Real>> & get_dpsideta()
+  { libmesh_assert(!calculations_started || calculate_dxyz);
+    calculate_dxyz = true; return dpsideta_map; }
+
+  const std::vector<std::vector<Real>> & get_dpsideta() const
   { libmesh_assert(!calculations_started || calculate_dxyz);
     calculate_dxyz = true; return dpsideta_map; }
 
@@ -519,6 +526,12 @@ public:
   std::vector<Real> & get_JxW()
   { libmesh_assert(!calculations_started || calculate_dxyz);
     calculate_dxyz = true; return JxW; }
+
+  /**
+   * Set the Jacobian tolerance used for determining when the mapping fails. The mapping is
+   * determined to fail if jac <= jacobian_tolerance.
+   */
+  void set_jacobian_tolerance(Real tol) { jacobian_tolerance = tol; }
 
 protected:
 
@@ -899,6 +912,13 @@ protected:
   template <unsigned int Dim, FEFamily T>
   friend class FE;
 
+  /**
+   * The Jacobian tolerance used for determining when the mapping fails. The mapping is
+   * determined to fail if jac <= jacobian_tolerance. If not set by the user, this number
+   * defaults to 0
+   */
+  Real jacobian_tolerance;
+
 private:
   /**
    * A helper function used by FEMap::compute_single_point_map() to
@@ -909,7 +929,7 @@ private:
   /**
    * Work vector for compute_affine_map()
    */
-  std::vector<const Node *> elem_nodes;
+  std::vector<const Node *> _elem_nodes;
 };
 
 }

@@ -49,32 +49,37 @@ public:
    * to be smart and return, thinking it had already done the work.
    */
   explicit
-  QTrap (const unsigned int _dim,
-         const Order o=FIRST) :
-    QBase(_dim,o)
+  QTrap (unsigned int dim,
+         Order order=FIRST) :
+    QBase(dim,order)
   {
     if (_dim == 1)
       init(EDGE2);
   }
 
   /**
-   * Destructor. Empty.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QTrap() {}
+  QTrap (const QTrap &) = default;
+  QTrap (QTrap &&) = default;
+  QTrap & operator= (const QTrap &) = default;
+  QTrap & operator= (QTrap &&) = default;
+  virtual ~QTrap() = default;
 
   /**
    * \returns \p QTRAP.
    */
-  virtual QuadratureType type() const libmesh_override { return QTRAP; }
+  virtual QuadratureType type() const override;
 
 private:
 
   virtual void init_1D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 };
 
 } // namespace libMesh

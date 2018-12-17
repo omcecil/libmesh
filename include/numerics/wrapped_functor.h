@@ -53,7 +53,21 @@ public:
     : _func(func.clone())
   { }
 
-  virtual std::unique_ptr<FEMFunctionBase<Output>> clone () const libmesh_override
+  /**
+   * This class can't be copy constructed or assigned because it
+   * contains a unique_ptr member.
+   */
+  WrappedFunctor (const WrappedFunctor &) = delete;
+  WrappedFunctor & operator= (const WrappedFunctor &) = delete;
+
+  /**
+   * The remaining 5 special functions can be defaulted.
+   */
+  WrappedFunctor (WrappedFunctor &&) = default;
+  WrappedFunctor & operator= (WrappedFunctor &&) = default;
+  virtual ~WrappedFunctor () = default;
+
+  virtual std::unique_ptr<FEMFunctionBase<Output>> clone () const override
   {
     return std::unique_ptr<FEMFunctionBase<Output>>
       (new WrappedFunctor<Output> (*_func));
@@ -61,19 +75,19 @@ public:
 
   virtual Output operator() (const FEMContext &,
                              const Point & p,
-                             const Real time = 0.) libmesh_override
+                             const Real time = 0.) override
   { return _func->operator()(p, time); }
 
   virtual void operator() (const FEMContext &,
                            const Point & p,
                            const Real time,
-                           DenseVector<Output> & output) libmesh_override
+                           DenseVector<Output> & output) override
   { _func->operator() (p, time, output); }
 
   virtual Output component (const FEMContext &,
                             unsigned int i,
                             const Point & p,
-                            Real time=0.) libmesh_override
+                            Real time=0.) override
   { return _func->component(i, p, time); }
 
 protected:

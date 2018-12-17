@@ -163,7 +163,7 @@ public:
      * \returns A copy of this object as a pointer to
      * the base (non-templated) class.
      */
-    virtual IterBase * clone() const libmesh_override
+    virtual IterBase * clone() const override
     {
 #ifdef __SUNPRO_CC
       variant_filter_iterator::Iter<IterType> * copy =
@@ -180,7 +180,7 @@ public:
      * \returns A copy of this object as a pointer to a
      * different type of object.
      */
-    virtual typename IterBase::const_IterBase * const_clone() const libmesh_override
+    virtual typename IterBase::const_IterBase * const_clone() const override
     {
       /**
        * Important typedef for const_iterators.  Notice the weird syntax!  Does it compile everywhere?
@@ -197,7 +197,7 @@ public:
     /**
      * Dereferences the iterator.
      */
-    virtual ReferenceType operator*() const libmesh_override
+    virtual ReferenceType operator*() const override
     {
       return * iter_data;
     }
@@ -205,7 +205,7 @@ public:
     /**
      * Pre-increments the iterator.
      */
-    virtual Iter & operator++() libmesh_override
+    virtual Iter & operator++() override
     {
       ++iter_data;
       return *this;
@@ -217,7 +217,7 @@ public:
      * fails it means you compared two different derived
      * classes.
      */
-    virtual bool equal(const IterBase * other) const libmesh_override
+    virtual bool equal(const IterBase * other) const override
     {
 #if defined(__SUNPRO_CC) || (defined(__GNUC__) && (__GNUC__ < 3)  && !defined(__INTEL_COMPILER))
       const variant_filter_iterator::Iter<IterType> * p =
@@ -261,7 +261,7 @@ public:
     /**
      * \returns A copy of this object as a pointer to the base class.
      */
-    virtual PredBase * clone() const libmesh_override
+    virtual PredBase * clone() const override
     {
 #ifdef __SUNPRO_CC
       variant_filter_iterator::Pred<IterType,PredType> * copy =
@@ -278,7 +278,7 @@ public:
     /**
      * The redefinition of the const_clone function for the Pred class.
      */
-    virtual typename PredBase::const_PredBase * const_clone() const libmesh_override
+    virtual typename PredBase::const_PredBase * const_clone() const override
     {
       /**
        * Important typedef for const_iterators.
@@ -299,7 +299,7 @@ public:
     /**
      * Re-implementation of op()
      */
-    virtual bool operator() (const IterBase * in) const libmesh_override
+    virtual bool operator() (const IterBase * in) const override
     {
       libmesh_assert(in);
 
@@ -375,18 +375,18 @@ public:
    * Default Constructor.
    */
   variant_filter_iterator () :
-    data(libmesh_nullptr),
-    end(libmesh_nullptr),
-    pred(libmesh_nullptr) {}
+    data(nullptr),
+    end(nullptr),
+    pred(nullptr) {}
 
   /**
    * Copy Constructor.
    * Copy the internal data instead of sharing it.
    */
   variant_filter_iterator (const Iterator & rhs) :
-    data (rhs.data != libmesh_nullptr ? rhs.data->clone() : libmesh_nullptr),
-    end  (rhs.end  != libmesh_nullptr ? rhs.end->clone()  : libmesh_nullptr),
-    pred (rhs.pred != libmesh_nullptr ? rhs.pred->clone() : libmesh_nullptr) {}
+    data (rhs.data != nullptr ? rhs.data->clone() : nullptr),
+    end  (rhs.end  != nullptr ? rhs.end->clone()  : nullptr),
+    pred (rhs.pred != nullptr ? rhs.pred->clone() : nullptr) {}
 
 
 
@@ -403,9 +403,9 @@ public:
    */
   template <class OtherType, class OtherReferenceType, class OtherPointerType>
   variant_filter_iterator (const variant_filter_iterator<Predicate, OtherType, OtherReferenceType, OtherPointerType> & rhs)
-    : data (rhs.data != libmesh_nullptr ? rhs.data->const_clone() : libmesh_nullptr),
-      end  (rhs.end  != libmesh_nullptr ? rhs.end->const_clone()  : libmesh_nullptr),
-      pred (rhs.pred != libmesh_nullptr ? rhs.pred->const_clone() : libmesh_nullptr)
+    : data (rhs.data != nullptr ? rhs.data->const_clone() : nullptr),
+      end  (rhs.end  != nullptr ? rhs.end->const_clone()  : nullptr),
+      pred (rhs.pred != nullptr ? rhs.pred->const_clone() : nullptr)
   {
     // libMesh::out << "Called templated copy constructor for variant_filter_iterator" << std::endl;
   }
@@ -420,9 +420,9 @@ public:
    */
   virtual ~variant_filter_iterator()
   {
-    delete data; data = libmesh_nullptr;
-    delete end;  end  = libmesh_nullptr;
-    delete pred; pred = libmesh_nullptr;
+    delete data; data = nullptr;
+    delete end;  end  = nullptr;
+    delete pred; pred = nullptr;
   }
 
   /**

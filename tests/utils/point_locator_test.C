@@ -30,9 +30,13 @@ public:
   CPPUNIT_TEST_SUITE( PointLocatorTest );
 
   CPPUNIT_TEST( testLocatorOnEdge3 );
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testLocatorOnQuad9 );
   CPPUNIT_TEST( testLocatorOnTri6 );
+#endif
+#if LIBMESH_DIM > 2
   CPPUNIT_TEST( testLocatorOnHex27 );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -49,10 +53,10 @@ public:
   {
     Mesh mesh(*TestCommWorld);
 
-    const unsigned n_elem_per_side = 5;
+    const unsigned int n_elem_per_side = 5;
     const std::unique_ptr<Elem> test_elem = Elem::build(elem_type);
-    const Real ymax = test_elem->dim() > 1;
-    const Real zmax = test_elem->dim() > 2;
+    const unsigned int ymax = test_elem->dim() > 1;
+    const unsigned int zmax = test_elem->dim() > 2;
     const unsigned int ny = ymax * n_elem_per_side;
     const unsigned int nz = zmax * n_elem_per_side;
 
@@ -103,10 +107,12 @@ public:
                   {
                     CPPUNIT_ASSERT_DOUBLES_EQUAL((*node)(0), i*h,
                                                  TOLERANCE*TOLERANCE);
-                    CPPUNIT_ASSERT_DOUBLES_EQUAL((*node)(1), j*h,
-                                                 TOLERANCE*TOLERANCE);
-                    CPPUNIT_ASSERT_DOUBLES_EQUAL((*node)(2), k*h,
-                                                 TOLERANCE*TOLERANCE);
+                    if (LIBMESH_DIM > 1)
+                      CPPUNIT_ASSERT_DOUBLES_EQUAL((*node)(1), j*h,
+                                                   TOLERANCE*TOLERANCE);
+                    if (LIBMESH_DIM > 2)
+                      CPPUNIT_ASSERT_DOUBLES_EQUAL((*node)(2), k*h,
+                                                   TOLERANCE*TOLERANCE);
                   }
               }
           }

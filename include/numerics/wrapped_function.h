@@ -35,6 +35,8 @@ namespace libMesh
 {
 
 /**
+ * \brief Wrap a libMesh-style function pointer into a FunctionBase object.
+ *
  * This class provides a wrapper with which to evaluate a
  * (libMesh-style) function pointer in a FunctionBase-compatible
  * interface. All overridden virtual functions are documented in
@@ -42,6 +44,7 @@ namespace libMesh
  *
  * \author Roy Stogner
  * \date 2012
+ * \note To wrap an ordinary function pointer use the AnalyticFunction class.
  */
 template <typename Output=Number>
 class WrappedFunction : public FunctionBase<Output>
@@ -55,8 +58,8 @@ public:
                    Output fptr(const Point & p,
                                const Parameters & parameters,
                                const std::string & sys_name,
-                               const std::string & unknown_name) = libmesh_nullptr,
-                   const Parameters * parameters = libmesh_nullptr,
+                               const std::string & unknown_name) = nullptr,
+                   const Parameters * parameters = nullptr,
                    unsigned int varnum=0)
     : _sys(sys),
       _fptr(fptr),
@@ -68,18 +71,31 @@ public:
       _parameters = &sys.get_equation_systems().parameters;
   }
 
-  virtual std::unique_ptr<FunctionBase<Output>> clone () const libmesh_override;
+  /**
+   * The move/copy ctor and destructor are defaulted for this class.
+   */
+  WrappedFunction (WrappedFunction &&) = default;
+  WrappedFunction (const WrappedFunction &) = default;
+  virtual ~WrappedFunction () = default;
+
+  /**
+   * This class contains a const reference so it can't be assigned.
+   */
+  WrappedFunction & operator= (const WrappedFunction &) = delete;
+  WrappedFunction & operator= (WrappedFunction &&) = delete;
+
+  virtual std::unique_ptr<FunctionBase<Output>> clone () const override;
 
   virtual Output operator() (const Point & p,
-                             const Real time = 0.) libmesh_override;
+                             const Real time = 0.) override;
 
   virtual void operator() (const Point & p,
                            const Real time,
-                           DenseVector<Output> & output) libmesh_override;
+                           DenseVector<Output> & output) override;
 
   virtual Output component (unsigned int i,
                             const Point & p,
-                            Real time=0.) libmesh_override;
+                            Real time=0.) override;
 
 protected:
 

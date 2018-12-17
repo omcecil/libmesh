@@ -16,14 +16,14 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/side.h"
 #include "libmesh/cell_pyramid14.h"
 #include "libmesh/edge_edge3.h"
 #include "libmesh/face_tri6.h"
 #include "libmesh/face_quad9.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -33,7 +33,14 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // Pyramid14 class static member initializations
-const unsigned int Pyramid14::side_nodes_map[5][9] =
+const int Pyramid14::num_nodes;
+const int Pyramid14::num_sides;
+const int Pyramid14::num_edges;
+const int Pyramid14::num_children;
+const int Pyramid14::nodes_per_side;
+const int Pyramid14::nodes_per_edge;
+
+const unsigned int Pyramid14::side_nodes_map[Pyramid14::num_sides][Pyramid14::nodes_per_side] =
   {
     {0, 1, 4, 5, 10,  9, 99, 99, 99}, // Side 0 (front)
     {1, 2, 4, 6, 11, 10, 99, 99, 99}, // Side 1 (right)
@@ -42,7 +49,7 @@ const unsigned int Pyramid14::side_nodes_map[5][9] =
     {0, 3, 2, 1,  8,  7,  6,  5, 13}  // Side 4 (base)
   };
 
-const unsigned int Pyramid14::edge_nodes_map[8][3] =
+const unsigned int Pyramid14::edge_nodes_map[Pyramid14::num_edges][Pyramid14::nodes_per_edge] =
   {
     {0, 1,  5}, // Edge 0
     {1, 2,  6}, // Edge 1
@@ -92,20 +99,26 @@ bool Pyramid14::is_node_on_side(const unsigned int n,
                                 const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 9; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned>
+Pyramid14::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  auto trim = (s == 4) ? 0 : 3;
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s]) - trim};
 }
 
 bool Pyramid14::is_node_on_edge(const unsigned int n,
                                 const unsigned int e) const
 {
   libmesh_assert_less (e, n_edges());
-  for (unsigned int i = 0; i != 3; ++i)
-    if (edge_nodes_map[e][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(edge_nodes_map[e]),
+                   std::end(edge_nodes_map[e]),
+                   n) != std::end(edge_nodes_map[e]);
 }
 
 
@@ -115,6 +128,13 @@ bool Pyramid14::has_affine_map() const
   // TODO: If the base is a parallelogram and all the triangular faces are planar,
   // the map should be linear, but I need to test this theory...
   return false;
+}
+
+
+
+Order Pyramid14::default_order() const
+{
+  return SECOND;
 }
 
 
@@ -211,6 +231,47 @@ std::unique_ptr<Elem> Pyramid14::build_side_ptr (const unsigned int i, bool prox
 
       return face;
     }
+}
+
+
+
+void Pyramid14::build_side_ptr (std::unique_ptr<Elem> & side,
+                                const unsigned int i)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  switch (i)
+    {
+    case 0: // triangular face 1
+    case 1: // triangular face 2
+    case 2: // triangular face 3
+    case 3: // triangular face 4
+      {
+        if (!side.get() || side->type() != TRI6)
+          {
+            side = this->build_side_ptr(i, false);
+            return;
+          }
+        break;
+      }
+    case 4:  // the quad face at z=0
+      {
+        if (!side.get() || side->type() != QUAD9)
+          {
+            side = this->build_side_ptr(i, false);
+            return;
+          }
+        break;
+      }
+    default:
+      libmesh_error_msg("Invalid side i = " << i);
+    }
+
+  side->subdomain_id() = this->subdomain_id();
+
+  // Set the nodes
+  for (auto n : side->node_index_range())
+    side->set_node(n) = this->node_ptr(Pyramid14::side_nodes_map[i][n]);
 }
 
 
@@ -479,24 +540,24 @@ Real Pyramid14::volume () const
   // Parameters of the quadrature rule
   static const Real
     // Parameters used for (xi, eta) quadrature points.
-    a1 = -7.1805574131988893873307823958101e-01L,
-    a2 = -5.0580870785392503961340276902425e-01L,
-    a3 = -2.2850430565396735359574351631314e-01L,
+    a1 = Real(-7.1805574131988893873307823958101e-01L),
+    a2 = Real(-5.0580870785392503961340276902425e-01L),
+    a3 = Real(-2.2850430565396735359574351631314e-01L),
     // Parameters used for zeta quadrature points.
-    b1 =  7.2994024073149732155837979012003e-02L,
-    b2 =  3.4700376603835188472176354340395e-01L,
-    b3 =  7.0500220988849838312239847758405e-01L,
+    b1 = Real( 7.2994024073149732155837979012003e-02L),
+    b2 = Real( 3.4700376603835188472176354340395e-01L),
+    b3 = Real( 7.0500220988849838312239847758405e-01L),
     // There are 9 unique weight values since there are three
     // for each of the three unique zeta values.
-    w1 =  4.8498876871878584357513834016440e-02L,
-    w2 =  4.5137737425884574692441981593901e-02L,
-    w3 =  9.2440441384508327195915094925393e-03L,
-    w4 =  7.7598202995005734972022134426305e-02L,
-    w5 =  7.2220379881415319507907170550242e-02L,
-    w6 =  1.4790470621521332351346415188063e-02L,
-    w7 =  1.2415712479200917595523541508209e-01L,
-    w8 =  1.1555260781026451121265147288039e-01L,
-    w9 =  2.3664752994434131762154264300901e-02L;
+    w1 = Real( 4.8498876871878584357513834016440e-02L),
+    w2 = Real( 4.5137737425884574692441981593901e-02L),
+    w3 = Real( 9.2440441384508327195915094925393e-03L),
+    w4 = Real( 7.7598202995005734972022134426305e-02L),
+    w5 = Real( 7.2220379881415319507907170550242e-02L),
+    w6 = Real( 1.4790470621521332351346415188063e-02L),
+    w7 = Real( 1.2415712479200917595523541508209e-01L),
+    w8 = Real( 1.1555260781026451121265147288039e-01L),
+    w9 = Real( 2.3664752994434131762154264300901e-02L);
 
   // The points and weights of the 3x3x3 quadrature rule
   static const Real xi[N][3] =

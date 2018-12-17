@@ -41,12 +41,6 @@ namespace Parallel {
 // StandardType<> specializations to return a derived MPI datatype
 // to handle communication of LIBMESH_DIM-vectors.
 //
-// We use static variables to minimize the number of MPI datatype
-// construction calls executed over the course of the program.
-//
-// We use a singleton pattern because a global variable would
-// have tried to call MPI functions before MPI got initialized.
-//
 // We use MPI_Create_struct here because our vector classes might
 // have vptrs, and I'd rather not have the datatype break in those
 // cases.
@@ -55,7 +49,7 @@ class StandardType<TypeVector<T>> : public DataType
 {
 public:
   explicit
-  StandardType(const TypeVector<T> * example=libmesh_nullptr) {
+  StandardType(const TypeVector<T> * example=nullptr) {
     // We need an example for MPI_Address to use
     TypeVector<T> * ex;
     std::unique_ptr<TypeVector<T>> temp;
@@ -67,56 +61,58 @@ public:
         ex = temp.get();
       }
 
-    // _static_type never gets freed, but it only gets committed once
-    // per T, so it's not a *huge* memory leak...
-    static data_type _static_type;
-    static bool _is_initialized = false;
-    if (!_is_initialized)
-      {
 #ifdef LIBMESH_HAVE_MPI
-        StandardType<T> T_type(&((*ex)(0)));
+    StandardType<T> T_type(&((*ex)(0)));
 
-        // We require MPI-2 here:
-        int blocklength = LIBMESH_DIM;
-        MPI_Aint displs, start;
-        MPI_Datatype tmptype, type = T_type;
+    // We require MPI-2 here:
+    int blocklength = LIBMESH_DIM;
+    MPI_Aint displs, start;
+    MPI_Datatype tmptype, type = T_type;
 
-        libmesh_call_mpi
-          (MPI_Get_address (ex, &start));
-        libmesh_call_mpi
-          (MPI_Get_address (&((*ex)(0)), &displs));
+    libmesh_call_mpi
+      (MPI_Get_address (ex, &start));
+    libmesh_call_mpi
+      (MPI_Get_address (&((*ex)(0)), &displs));
 
-        // subtract off offset to first value from the beginning of the structure
-        displs -= start;
+    // subtract off offset to first value from the beginning of the structure
+    displs -= start;
 
-        // create a prototype structure
-        libmesh_call_mpi
-          (MPI_Type_create_struct (1, &blocklength, &displs, &type,
-                                   &tmptype));
-        libmesh_call_mpi
-          (MPI_Type_commit (&tmptype));
+    // create a prototype structure
+    libmesh_call_mpi
+      (MPI_Type_create_struct (1, &blocklength, &displs, &type,
+                               &tmptype));
+    libmesh_call_mpi
+      (MPI_Type_commit (&tmptype));
 
-        // resize the structure type to account for padding, if any
-        libmesh_call_mpi
-          (MPI_Type_create_resized (tmptype, 0, sizeof(TypeVector<T>),
-                                    &_static_type));
+    // resize the structure type to account for padding, if any
+    libmesh_call_mpi
+      (MPI_Type_create_resized (tmptype, 0, sizeof(TypeVector<T>),
+                                &_datatype));
 
-        libmesh_call_mpi
-          (MPI_Type_commit (&_static_type));
+    libmesh_call_mpi
+      (MPI_Type_commit (&_datatype));
+
+    libmesh_call_mpi
+      (MPI_Type_free (&tmptype));
 #endif // #ifdef LIBMESH_HAVE_MPI
-
-        _is_initialized = true;
-      }
-    _datatype = _static_type;
   }
+
+  StandardType(const StandardType<TypeVector<T>> & libmesh_mpi_var(t))
+    : DataType()
+  {
+    libmesh_call_mpi (MPI_Type_dup (t._datatype, &_datatype));
+  }
+
+  ~StandardType() { this->free(); }
 };
+
 
 template <typename T>
 class StandardType<VectorValue<T>> : public DataType
 {
 public:
   explicit
-  StandardType(const VectorValue<T> * example=libmesh_nullptr) {
+  StandardType(const VectorValue<T> * example=nullptr) {
     // We need an example for MPI_Address to use
     VectorValue<T> * ex;
     std::unique_ptr<VectorValue<T>> temp;
@@ -128,115 +124,121 @@ public:
         ex = temp.get();
       }
 
-    // _static_type never gets freed, but it only gets committed once
-    // per T, so it's not a *huge* memory leak...
-    static data_type _static_type;
-    static bool _is_initialized = false;
-    if (!_is_initialized)
-      {
 #ifdef LIBMESH_HAVE_MPI
-        StandardType<T> T_type(&((*ex)(0)));
+    StandardType<T> T_type(&((*ex)(0)));
 
-        int blocklength = LIBMESH_DIM;
-        MPI_Aint displs, start;
-        MPI_Datatype tmptype, type = T_type;
+    int blocklength = LIBMESH_DIM;
+    MPI_Aint displs, start;
+    MPI_Datatype tmptype, type = T_type;
 
-        libmesh_call_mpi
-          (MPI_Get_address (ex, &start));
-        libmesh_call_mpi
-          (MPI_Get_address (&((*ex)(0)), &displs));
+    libmesh_call_mpi
+      (MPI_Get_address (ex, &start));
+    libmesh_call_mpi
+      (MPI_Get_address (&((*ex)(0)), &displs));
 
-        // subtract off offset to first value from the beginning of the structure
-        displs -= start;
+    // subtract off offset to first value from the beginning of the structure
+    displs -= start;
 
-        // create a prototype structure
-        libmesh_call_mpi
-          (MPI_Type_create_struct (1, &blocklength, &displs, &type,
-                                   &tmptype));
-        libmesh_call_mpi
-          (MPI_Type_commit (&tmptype));
+    // create a prototype structure
+    libmesh_call_mpi
+      (MPI_Type_create_struct (1, &blocklength, &displs, &type,
+                               &tmptype));
+    libmesh_call_mpi
+      (MPI_Type_commit (&tmptype));
 
-        // resize the structure type to account for padding, if any
-        libmesh_call_mpi
-          (MPI_Type_create_resized (tmptype, 0,
-                                    sizeof(VectorValue<T>),
-                                    &_static_type));
+    // resize the structure type to account for padding, if any
+    libmesh_call_mpi
+      (MPI_Type_create_resized (tmptype, 0,
+                                sizeof(VectorValue<T>),
+                                &_datatype));
 
-        libmesh_call_mpi
-          (MPI_Type_commit (&_static_type));
+    libmesh_call_mpi
+      (MPI_Type_commit (&_datatype));
+
+    libmesh_call_mpi
+      (MPI_Type_free (&tmptype));
 #endif // #ifdef LIBMESH_HAVE_MPI
-
-        _is_initialized = true;
-      }
-    _datatype = _static_type;
   }
+
+  StandardType(const StandardType<VectorValue<T>> & t)
+    : DataType()
+  {
+#ifdef LIBMESH_HAVE_MPI
+    libmesh_call_mpi (MPI_Type_dup (t._datatype, &_datatype));
+#endif
+  }
+
+  ~StandardType() { this->free(); }
 };
+
 
 template <>
 class StandardType<Point> : public DataType
 {
 public:
   explicit
-  StandardType(const Point * example=libmesh_nullptr)
+  StandardType(const Point * example=nullptr)
   {
     // Prevent unused variable warnings when !LIBMESH_HAVE_MPI
     libmesh_ignore(example);
 
-    // _static_type never gets freed, but it only gets committed once
-    // per T, so it's not a *huge* memory leak...
-    static data_type _static_type;
-    static bool _is_initialized = false;
-    if (!_is_initialized)
-      {
 #ifdef LIBMESH_HAVE_MPI
 
-        // We need an example for MPI_Address to use
-        Point * ex;
+    // We need an example for MPI_Address to use
+    Point * ex;
 
-        std::unique_ptr<Point> temp;
-        if (example)
-          ex = const_cast<Point *>(example);
-        else
-          {
-            temp.reset(new Point());
-            ex = temp.get();
-          }
-
-        StandardType<Real> T_type(&((*ex)(0)));
-
-        int blocklength = LIBMESH_DIM;
-        MPI_Aint displs, start;
-        MPI_Datatype tmptype, type = T_type;
-
-        libmesh_call_mpi
-          (MPI_Get_address (ex, &start));
-        libmesh_call_mpi
-          (MPI_Get_address (&((*ex)(0)), &displs));
-
-        // subtract off offset to first value from the beginning of the structure
-        displs -= start;
-
-        // create a prototype structure
-        libmesh_call_mpi
-          (MPI_Type_create_struct (1, &blocklength, &displs, &type,
-                                   &tmptype));
-        libmesh_call_mpi
-          (MPI_Type_commit (&tmptype));
-
-        // resize the structure type to account for padding, if any
-        libmesh_call_mpi
-          (MPI_Type_create_resized (tmptype, 0, sizeof(Point),
-                                    &_static_type));
-
-        libmesh_call_mpi
-          (MPI_Type_commit (&_static_type));
-#endif // #ifdef LIBMESH_HAVE_MPI
-
-        _is_initialized = true;
+    std::unique_ptr<Point> temp;
+    if (example)
+      ex = const_cast<Point *>(example);
+    else
+      {
+        temp.reset(new Point());
+        ex = temp.get();
       }
-    _datatype = _static_type;
+
+    StandardType<Real> T_type(&((*ex)(0)));
+
+    int blocklength = LIBMESH_DIM;
+    MPI_Aint displs, start;
+    MPI_Datatype tmptype, type = T_type;
+
+    libmesh_call_mpi
+      (MPI_Get_address (ex, &start));
+    libmesh_call_mpi
+      (MPI_Get_address (&((*ex)(0)), &displs));
+
+    // subtract off offset to first value from the beginning of the structure
+    displs -= start;
+
+    // create a prototype structure
+    libmesh_call_mpi
+      (MPI_Type_create_struct (1, &blocklength, &displs, &type,
+                               &tmptype));
+    libmesh_call_mpi
+      (MPI_Type_commit (&tmptype));
+
+    // resize the structure type to account for padding, if any
+    libmesh_call_mpi
+      (MPI_Type_create_resized (tmptype, 0, sizeof(Point),
+                                &_datatype));
+
+    libmesh_call_mpi
+      (MPI_Type_commit (&_datatype));
+
+    libmesh_call_mpi
+      (MPI_Type_free (&tmptype));
+#endif // #ifdef LIBMESH_HAVE_MPI
   }
+
+  StandardType(const StandardType<Point> & libmesh_mpi_var(t))
+    : DataType()
+  {
+    libmesh_call_mpi (MPI_Type_dup (t._datatype, &_datatype));
+  }
+
+  ~StandardType() { this->free(); }
 };
+
 
 // OpFunction<> specializations to return an MPI_Op version of the
 // reduction operations on LIBMESH_DIM-vectors.
@@ -354,8 +356,8 @@ class StandardType<TypeTensor<T>> : public DataType
 {
 public:
   explicit
-  StandardType(const TypeTensor<T> * example=libmesh_nullptr) :
-    DataType(StandardType<T>(example ?  &((*example)(0,0)) : libmesh_nullptr), LIBMESH_DIM*LIBMESH_DIM) {}
+  StandardType(const TypeTensor<T> * example=nullptr) :
+    DataType(StandardType<T>(example ?  &((*example)(0,0)) : nullptr), LIBMESH_DIM*LIBMESH_DIM) {}
 
   inline ~StandardType() { this->free(); }
 };
@@ -365,8 +367,8 @@ class StandardType<TensorValue<T>> : public DataType
 {
 public:
   explicit
-  StandardType(const TensorValue<T> * example=libmesh_nullptr) :
-    DataType(StandardType<T>(example ?  &((*example)(0,0)) : libmesh_nullptr), LIBMESH_DIM*LIBMESH_DIM) {}
+  StandardType(const TensorValue<T> * example=nullptr) :
+    DataType(StandardType<T>(example ?  &((*example)(0,0)) : nullptr), LIBMESH_DIM*LIBMESH_DIM) {}
 
   inline ~StandardType() { this->free(); }
 };

@@ -24,6 +24,7 @@
 #include "libmesh/message_tag.h"
 #include "libmesh/request.h"
 #include "libmesh/status.h"
+#include "libmesh/post_wait_dereference_shared_ptr.h"
 
 // libMesh Includes
 #include "libmesh/libmesh_common.h"
@@ -51,6 +52,9 @@ namespace libMesh
  */
 namespace Parallel
 {
+
+template <typename T>
+class Packing;
 
 #ifdef LIBMESH_HAVE_MPI
 
@@ -99,6 +103,20 @@ public:
    * Constructor from MPI_Comm
    */
   explicit Communicator (const communicator & comm);
+
+  /*
+   * Don't use copy construction or assignment, just copy by reference
+   * or pointer - it's too hard to keep a common used_tag_values if
+   * each communicator is shared by more than one Communicator
+   */
+  Communicator (const Communicator &) = delete;
+  Communicator & operator= (const Communicator &) = delete;
+
+  /*
+   * Move constructor and assignment operator
+   */
+  Communicator (Communicator &&) = default;
+  Communicator & operator= (Communicator &&) = default;
 
   /*
    * NON-VIRTUAL destructor
@@ -152,9 +170,9 @@ public:
 
   Communicator & operator= (const communicator & comm);
 
-  unsigned int rank() const { return _rank; }
+  processor_id_type rank() const { return _rank; }
 
-  unsigned int size() const { return _size; }
+  processor_id_type size() const { return _size; }
 
   /**
    * Whether to use default or synchronous sends?
@@ -163,11 +181,6 @@ public:
 
 private:
 
-  // Don't use the copy constructor, just copy by reference or
-  // pointer - it's too hard to keep a common used_tag_values if
-  // each communicator is shared by more than one Communicator
-  explicit Communicator (const Communicator &);
-
   /**
    * Utility function for setting our member variables from an MPI
    * communicator
@@ -175,7 +188,7 @@ private:
   void assign(const communicator & comm);
 
   communicator  _communicator;
-  unsigned int  _rank, _size;
+  processor_id_type _rank, _size;
   SendMode _send_mode;
 
   // mutable used_tag_values - not thread-safe, but then Parallel::
@@ -210,7 +223,7 @@ public:
 
   /**
    * Verify that a local pointer points to the same value on all
-   * processors where it is not NULL.
+   * processors where it is not nullptr.
    * Containers must have the same value in every entry.
    */
   template <typename T>
@@ -237,9 +250,9 @@ public:
    * of it's values on all processors.  Set each \p min_id entry to
    * the minimum rank where a corresponding minimum was found.
    */
-  template <typename T>
-  void minloc(std::vector<T> & r,
-              std::vector<unsigned int> & min_id) const;
+  template <typename T, typename A1, typename A2>
+  void minloc(std::vector<T,A1> & r,
+              std::vector<unsigned int,A2> & min_id) const;
 
   /**
    * Take a local variable and replace it with the maximum of it's values
@@ -262,9 +275,9 @@ public:
    * of it's values on all processors.  Set each \p min_id entry to
    * the minimum rank where a corresponding maximum was found.
    */
-  template <typename T>
-  void maxloc(std::vector<T> & r,
-              std::vector<unsigned int> & max_id) const;
+  template <typename T, typename A1, typename A2>
+  void maxloc(std::vector<T,A1> & r,
+              std::vector<unsigned int,A2> & max_id) const;
 
   /**
    * Take a local variable and replace it with the sum of it's values
@@ -331,6 +344,10 @@ public:
 
   /**
    * Blocking-send to one processor with user-defined type.
+   *
+   * If \p T is a container, container-of-containers, etc., then
+   * \p type should be the DataType of the underlying fixed-size
+   * entries in the container(s).
    */
   template <typename T>
   void send (const unsigned int dest_processor_id,
@@ -340,6 +357,10 @@ public:
 
   /**
    * Nonblocking-send to one processor with user-defined type.
+   *
+   * If \p T is a container, container-of-containers, etc., then
+   * \p type should be the DataType of the underlying fixed-size
+   * entries in the container(s).
    */
   template <typename T>
   void send (const unsigned int dest_processor_id,
@@ -367,6 +388,10 @@ public:
 
   /**
    * Blocking-receive from one processor with user-defined type.
+   *
+   * If \p T is a container, container-of-containers, etc., then
+   * \p type should be the DataType of the underlying fixed-size
+   * entries in the container(s).
    */
   template <typename T>
   Status receive (const unsigned int dest_processor_id,
@@ -376,6 +401,10 @@ public:
 
   /**
    * Nonblocking-receive from one processor with user-defined type.
+   *
+   * If \p T is a container, container-of-containers, etc., then
+   * \p type should be the DataType of the underlying fixed-size
+   * entries in the container(s).
    */
   template <typename T>
   void receive (const unsigned int dest_processor_id,
@@ -441,6 +470,24 @@ public:
                                       Request & req,
                                       const MessageTag & tag=no_tag) const;
 
+
+  /**
+   * Similar to the above Nonblocking send_packed_range with a few important differences:
+   *
+   * 1. The total size of the packed buffer MUST be less than std::numeric_limits<int>::max()
+   * 2. Only _one_ message is generated
+   * 3. On the receiving end the message should be tested for using Communicator::packed_range_probe()
+   * 4. The message must be received by Communicator::nonblocking_receive_packed_range()
+   */
+  template <typename Context, typename Iter>
+  void nonblocking_send_packed_range (const unsigned int dest_processor_id,
+                                      const Context * context,
+                                      Iter range_begin,
+                                      const Iter range_end,
+                                      Request & req,
+                                      std::shared_ptr<std::vector<typename Parallel::Packing<typename std::iterator_traits<Iter>::value_type>::buffer_type>> & buffer,
+                                      const MessageTag & tag=no_tag) const;
+
   /**
    * Blocking-receive range-of-pointers from one processor.  This
    * function does not receive raw pointers, but rather constructs new
@@ -494,6 +541,29 @@ public:
                                          Request & req,
                                          Status & stat,
                                          const MessageTag & tag=any_tag) const;
+
+  /**
+   * Non-Blocking-receive range-of-pointers from one processor.
+   *
+   * This is meant to receive messages from nonblocking_send_packed_range
+   *
+   * Similar in design to the above receive_packed_range.  However,
+   * this version requires a Request and a Status.
+   *
+   * The Status must be a positively tested Status for a message of this
+   * type (i.e. a message _does_ exist).  It should most likely be generated by
+   * Communicator::packed_range_probe.
+   */
+  template <typename Context, typename OutputIter, typename T>
+  void nonblocking_receive_packed_range (const unsigned int src_processor_id,
+                                         Context * context,
+                                         OutputIter out,
+                                         const T * output_type,
+                                         Request & req,
+                                         Status & stat,
+                                         std::shared_ptr<std::vector<typename Parallel::Packing<T>::buffer_type>> & buffer,
+                                         const MessageTag & tag=any_tag
+                                         ) const;
 
   /**
    * Send data \p send to one processor while simultaneously receiving
@@ -575,20 +645,20 @@ public:
    * Take a vector of length comm.size(), and on processor root_id fill in
    * recv[processor_id] = the value of send on processor processor_id
    */
-  template <typename T>
+  template <typename T, typename A>
   inline void gather(const unsigned int root_id,
                      const T & send,
-                     std::vector<T> & recv) const;
+                     std::vector<T,A> & recv) const;
 
   /**
    * The gather overload for string types has an optional
    * identical_buffer_sizes optimization for when all strings are the
    * same length.
    */
-  template <typename T>
+  template <typename T, typename A>
   inline void gather(const unsigned int root_id,
                      const std::basic_string<T> & send,
-                     std::vector<std::basic_string<T>> & recv,
+                     std::vector<std::basic_string<T>,A> & recv,
                      const bool identical_buffer_sizes=false) const;
 
   /**
@@ -613,26 +683,26 @@ public:
    * on processor root_id. This function is collective and therefore
    * must be called by all processors in the Communicator.
    */
-  template <typename T>
+  template <typename T, typename A>
   inline void gather(const unsigned int root_id,
-                     std::vector<T> & r) const;
+                     std::vector<T,A> & r) const;
 
   /**
    * Take a vector of length \p this->size(), and fill in
    * \p recv[processor_id] = the value of \p send on that processor
    */
-  template <typename T>
+  template <typename T, typename A>
   inline void allgather(const T & send,
-                        std::vector<T> & recv) const;
+                        std::vector<T,A> & recv) const;
 
   /**
    * The allgather overload for string types has an optional
    * identical_buffer_sizes optimization for when all strings are the
    * same length.
    */
-  template <typename T>
+  template <typename T, typename A>
   inline void allgather(const std::basic_string<T> & send,
-                        std::vector<std::basic_string<T>> & recv,
+                        std::vector<std::basic_string<T>,A> & recv,
                         const bool identical_buffer_sizes=false) const;
 
   /**
@@ -659,15 +729,15 @@ public:
    * on each processor. This function is collective and therefore
    * must be called by all processors in the Communicator.
    */
-  template <typename T>
-  inline void allgather(std::vector<T> & r,
+  template <typename T, typename A>
+  inline void allgather(std::vector<T,A> & r,
                         const bool identical_buffer_sizes = false) const;
 
   /**
    * AllGather overload for vectors of string types
    */
-  template <typename T>
-  inline void allgather(std::vector<std::basic_string<T>> & r,
+  template <typename T, typename A>
+  inline void allgather(std::vector<std::basic_string<T>,A> & r,
                         const bool identical_buffer_sizes = false) const;
 
   //-------------------------------------------------------------------
@@ -675,8 +745,8 @@ public:
    * Take a vector of local variables and scatter the ith item to the ith
    * processor in the communicator. The result is saved into recv.
    */
-  template <typename T>
-  inline void scatter(const std::vector<T> & data,
+  template <typename T, typename A>
+  inline void scatter(const std::vector<T,A> & data,
                       T & recv,
                       const unsigned int root_id=0) const;
 
@@ -686,9 +756,9 @@ public:
    * multiple of the communicator size. The result is saved into recv buffer.
    * The recv buffer does not have to be sized prior to this operation.
    */
-  template <typename T>
-  inline void scatter(const std::vector<T> & data,
-                      std::vector<T> & recv,
+  template <typename T, typename A>
+  inline void scatter(const std::vector<T,A> & data,
+                      std::vector<T,A> & recv,
                       const unsigned int root_id=0) const;
 
   /**
@@ -697,10 +767,10 @@ public:
    * the number of items for each processor. The result is saved into recv buffer.
    * The recv buffer does not have to be sized prior to this operation.
    */
-  template <typename T>
-  inline void scatter(const std::vector<T> & data,
-                      const std::vector<int> counts,
-                      std::vector<T> & recv,
+  template <typename T, typename A1, typename A2>
+  inline void scatter(const std::vector<T,A1> & data,
+                      const std::vector<int,A2> counts,
+                      std::vector<T,A1> & recv,
                       const unsigned int root_id=0) const;
 
   /**
@@ -708,9 +778,9 @@ public:
    * to the ith processor in the communicator. The result is saved into recv buffer.
    * The recv buffer does not have to be sized prior to this operation.
    */
-  template <typename T>
-  inline void scatter(const std::vector<std::vector<T>> & data,
-                      std::vector<T> & recv,
+  template <typename T, typename A1, typename A2>
+  inline void scatter(const std::vector<std::vector<T,A1>,A2> & data,
+                      std::vector<T,A1> & recv,
                       const unsigned int root_id=0,
                       const bool identical_buffer_sizes=false) const;
 
@@ -741,8 +811,8 @@ public:
    * The jth entry on processor i is replaced with the ith entry
    * from processor j.
    */
-  template <typename T>
-  inline void alltoall(std::vector<T> & r) const;
+  template <typename T, typename A>
+  inline void alltoall(std::vector<T,A> & r) const;
 
   /**
    * Take a local value and broadcast it to all processors.
@@ -790,33 +860,6 @@ public:
 #include "libmesh/parallel_communicator_specializations"
 
 }; // class Communicator
-
-
-// ------------------------------------------------------------
-// Simple Communicator member functions
-
-inline
-void Communicator::reference_unique_tag(int tagvalue) const
-{
-  // This had better be an already-acquired tag.
-  libmesh_assert(used_tag_values.count(tagvalue));
-
-  used_tag_values[tagvalue]++;
-}
-
-
-inline
-void Communicator::dereference_unique_tag(int tagvalue) const
-{
-  // This had better be an already-acquired tag.
-  libmesh_assert(used_tag_values.count(tagvalue));
-
-  used_tag_values[tagvalue]--;
-  // If we don't have any more outstanding references, we
-  // don't even need to keep this tag in our "used" set.
-  if (!used_tag_values[tagvalue])
-    used_tag_values.erase(tagvalue);
-}
 
 
 } // namespace Parallel

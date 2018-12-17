@@ -44,11 +44,11 @@ namespace libMesh
  *              12 o/    |    o 11
  *                //     |     \
  *               /o 9    o 10   \
- *              //       |       \
- *             //        |        \
- *          3 o/.......o.|........o 2
- *           ./       7  |       /
- *          ./           |      /
+ *              //       |       \          zeta
+ *             //        |        \          ^   eta (into page)
+ *          3 o/.......o.|........o 2        | /
+ *           ./       7  |       /           |/
+ *          ./           |      /            o---> xi
  *         ./            |     /
  *        ./             |    /
  *     8 o/              |   o 6
@@ -58,12 +58,14 @@ namespace libMesh
  *    o--------o---------o
  *    0        5         1
  * \endverbatim
+ * (xi, eta, zeta) are the reference element coordinates associated with
+ * the given numbering.
  *
  * \author John W. Peterson
  * \date 2014
  * \brief A 3D pyramid element with 13 nodes.
  */
-class Pyramid13 libmesh_final : public Pyramid
+class Pyramid13 final : public Pyramid
 {
 public:
 
@@ -71,124 +73,148 @@ public:
    * Constructor.  By default this element has no parent.
    */
   explicit
-  Pyramid13 (Elem * p=libmesh_nullptr) :
+  Pyramid13 (Elem * p=nullptr) :
     Pyramid(Pyramid13::n_nodes(), p, _nodelinks_data)
   {}
+
+  Pyramid13 (Pyramid13 &&) = delete;
+  Pyramid13 (const Pyramid13 &) = delete;
+  Pyramid13 & operator= (const Pyramid13 &) = delete;
+  Pyramid13 & operator= (Pyramid13 &&) = delete;
+  virtual ~Pyramid13() = default;
 
   /**
    * \returns 13.
    */
-  virtual unsigned int n_nodes() const libmesh_override { return 13; }
+  virtual unsigned int n_nodes() const override { return num_nodes; }
 
   /**
    * \returns \p PRYAMID13.
    */
-  virtual ElemType type () const libmesh_override { return PYRAMID13; }
+  virtual ElemType type () const override { return PYRAMID13; }
 
   /**
    * FIXME: we don't yet have a refinement pattern for pyramids...
    * \returns 1.
    */
-  virtual unsigned int n_sub_elem() const libmesh_override { return 1; }
+  virtual unsigned int n_sub_elem() const override { return 1; }
 
   /**
    * \returns \p true if the specified (local) node number is a vertex.
    */
-  virtual bool is_vertex(const unsigned int i) const libmesh_override;
+  virtual bool is_vertex(const unsigned int i) const override;
 
   /**
    * \returns \p true if the specified (local) node number is an edge.
    */
-  virtual bool is_edge(const unsigned int i) const libmesh_override;
+  virtual bool is_edge(const unsigned int i) const override;
 
   /**
    * \returns \p true if the specified (local) node number is a face.
    */
-  virtual bool is_face(const unsigned int i) const libmesh_override;
+  virtual bool is_face(const unsigned int i) const override;
 
   /**
    * \returns \p true if the specified (local) node number is on the
    * specified side.
    */
   virtual bool is_node_on_side(const unsigned int n,
-                               const unsigned int s) const libmesh_override;
+                               const unsigned int s) const override;
+
+  virtual std::vector<unsigned int> nodes_on_side(const unsigned int s) const override;
 
   /**
    * \returns \p true if the specified (local) node number is on the
    * specified edge.
    */
   virtual bool is_node_on_edge(const unsigned int n,
-                               const unsigned int e) const libmesh_override;
+                               const unsigned int e) const override;
 
   /**
    * \returns \p true if the element map is definitely affine within
    * numerical tolerances.
    */
-  virtual bool has_affine_map () const libmesh_override;
+  virtual bool has_affine_map () const override;
 
   /**
    * \returns SECOND.
    */
-  virtual Order default_order() const libmesh_override { return SECOND; }
+  virtual Order default_order() const override;
 
   /**
    * \returns \p Pyramid13::side_nodes_map[side][side_node] after doing some range checking.
    */
   virtual unsigned int which_node_am_i(unsigned int side,
-                                       unsigned int side_node) const libmesh_override;
+                                       unsigned int side_node) const override;
 
   /**
    * Builds a \p QUAD8 or \p TRI6 coincident with face i.
    * The \p std::unique_ptr<Elem> handles the memory aspect.
    */
   virtual std::unique_ptr<Elem> build_side_ptr (const unsigned int i,
-                                                bool proxy) libmesh_override;
+                                                bool proxy=true) override;
+
+  /**
+   * Rebuilds a \p QUAD8 or \p TRI6 built coincident with face i.
+   */
+  virtual void build_side_ptr (std::unique_ptr<Elem> & elem,
+                               const unsigned int i) override;
 
   /**
    * Builds a \p EDGE3 coincident with edge i.
    * The \p std::unique_ptr<Elem> handles the memory aspect.
    */
-  virtual std::unique_ptr<Elem> build_edge_ptr (const unsigned int i) libmesh_override;
+  virtual std::unique_ptr<Elem> build_edge_ptr (const unsigned int i) override;
 
   virtual void connectivity(const unsigned int sc,
                             const IOPackage iop,
-                            std::vector<dof_id_type> & conn) const libmesh_override;
+                            std::vector<dof_id_type> & conn) const override;
 
   /**
    * \returns 2 for all edge nodes.
    */
-  virtual unsigned int n_second_order_adjacent_vertices (const unsigned int n) const libmesh_override;
+  virtual unsigned int n_second_order_adjacent_vertices (const unsigned int n) const override;
 
   /**
    * \returns The element-local number of the \f$ v^{th} \f$ vertex
    * that defines the \f$ n^{th} \f$ second-order node.
    */
   virtual unsigned short int second_order_adjacent_vertex (const unsigned int n,
-                                                           const unsigned int v) const libmesh_override;
+                                                           const unsigned int v) const override;
+
+  /**
+   * Geometric constants for Pyramid13.
+   */
+  static const int num_nodes = 13;
+  static const int num_sides = 5;
+  static const int num_edges = 8;
+  static const int num_children = 0; // not implemented
+  static const int nodes_per_side = 8;
+  static const int nodes_per_edge = 3;
 
   /**
    * This maps the \f$ j^{th} \f$ node of the \f$ i^{th} \f$ side to
    * element node numbers.
    */
-  static const unsigned int side_nodes_map[5][8];
+  static const unsigned int side_nodes_map[num_sides][nodes_per_side];
 
   /**
    * This maps the \f$ j^{th} \f$ node of the \f$ i^{th} \f$ edge to
    * element node numbers.
    */
-  static const unsigned int edge_nodes_map[8][3];
+  static const unsigned int edge_nodes_map[num_edges][nodes_per_edge];
 
   /**
    * Specialization for computing the volume of a Pyramid13.
    */
-  virtual Real volume () const libmesh_override;
+  virtual Real volume () const override;
 
 protected:
 
   /**
    * Data for links to nodes.
    */
-  Node * _nodelinks_data[13];
+  Node * _nodelinks_data[num_nodes];
 
 
 
@@ -199,7 +225,7 @@ protected:
    */
   virtual float embedding_matrix (const unsigned int,
                                   const unsigned int,
-                                  const unsigned int) const libmesh_override
+                                  const unsigned int) const override
   { libmesh_not_implemented(); return 0.; }
 
   LIBMESH_ENABLE_TOPOLOGY_CACHES;

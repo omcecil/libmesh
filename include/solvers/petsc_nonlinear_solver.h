@@ -112,13 +112,13 @@ public:
   /**
    * Release all memory and clear data structures.
    */
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
   /**
    * Initialize data structures if not done so already.
    * May assign a name to the solver in some implementations
    */
-  virtual void init (const char * name = libmesh_nullptr) libmesh_override;
+  virtual void init (const char * name = nullptr) override;
 
   /**
    * \returns The raw PETSc snes context pointer.
@@ -134,13 +134,13 @@ public:
          NumericVector<T> &,                    // Solution vector
          NumericVector<T> &,                    // Residual vector
          const double,                         // Stopping tolerance
-         const unsigned int) libmesh_override; // N. Iterations
+         const unsigned int) override; // N. Iterations
 
   /**
    * Prints a useful message about why the latest nonlinear solve
    * con(di)verged.
    */
-  virtual void print_converged_reason() libmesh_override;
+  virtual void print_converged_reason() override;
 
   /**
    * \returns The currently-available (or most recently obtained, if
@@ -154,14 +154,14 @@ public:
   /**
    * Get the total number of linear iterations done in the last solve
    */
-  virtual int get_total_linear_iterations() libmesh_override;
+  virtual int get_total_linear_iterations() override;
 
   /**
    * \returns The current nonlinear iteration number if called
    * *during* the solve(), for example by the user-specified residual
    * or Jacobian function.
    */
-  virtual unsigned get_current_nonlinear_iteration_number() const libmesh_override
+  virtual unsigned get_current_nonlinear_iteration_number() const override
   { return _current_nonlinear_iteration_number; }
 
   /**
@@ -178,6 +178,11 @@ public:
    * Set to true to use the libMesh's default monitor, set to false to use your own
    */
   void use_default_monitor(bool state) { _default_monitor = state; }
+
+  /**
+   * Set to true to let PETSc reuse the base vector
+   */
+  void set_snesmf_reuse_base(bool state) { _snesmf_reuse_base = state; }
 
   /**
    * Abstract base class to be used to implement a custom line-search algorithm
@@ -238,6 +243,13 @@ protected:
    * true if we want the default monitor to be set, false for no monitor (i.e. user code can use their own)
    */
   bool _default_monitor;
+
+  /**
+   * True, If we want the base vector to be used for differencing even if the function provided to SNESSetFunction()
+   * is not the same as that provided to MatMFFDSetFunction().
+   * https://www.mcs.anl.gov/petsc/petsc-current/docs/manualpages/SNES/MatSNESMFSetReuseBase.html
+   */
+  bool _snesmf_reuse_base;
 
 #if !PETSC_VERSION_LESS_THAN(3,3,0)
   void build_mat_null_space(NonlinearImplicitSystem::ComputeVectorSubspace * computeSubspaceObject,

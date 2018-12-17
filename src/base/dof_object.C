@@ -42,7 +42,7 @@ const processor_id_type DofObject::invalid_processor_id;
 DofObject::DofObject (const DofObject & dof_obj) :
   ReferenceCountedObject<DofObject>(),
 #ifdef LIBMESH_ENABLE_AMR
-  old_dof_object (libmesh_nullptr),
+  old_dof_object (nullptr),
 #endif
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   _unique_id     (dof_obj._unique_id),
@@ -142,7 +142,7 @@ DofObject & DofObject::operator= (const DofObject & dof_obj)
 void  DofObject::clear_old_dof_object ()
 {
   delete this->old_dof_object;
-  this->old_dof_object = libmesh_nullptr;
+  this->old_dof_object = nullptr;
 }
 
 
@@ -316,11 +316,6 @@ void DofObject::set_n_vars_per_group(const unsigned int s,
 
 #ifdef DEBUG
 
-  // libMesh::out << " [ ";
-  // for (std::size_t i=0; i<_idx_buf.size(); i++)
-  //   libMesh::out << _idx_buf[i] << " ";
-  // libMesh::out << "]\n";
-
   libmesh_assert_equal_to (this->n_var_groups(s), nvpg.size());
 
   for (unsigned int vg=0; vg<this->n_var_groups(s); vg++)
@@ -441,13 +436,6 @@ void DofObject::set_dof_number(const unsigned int s,
   else
     base_idx = dn;
 
-  // #ifdef DEBUG
-  //   libMesh::out << " [ ";
-  //   for (std::size_t i=0; i<_idx_buf.size(); i++)
-  //     libMesh::out << _idx_buf[i] << " ";
-  //   libMesh::out << "]\n";
-  // #endif
-
   libmesh_assert_equal_to (this->dof_number(s, var, comp), dn);
 }
 
@@ -459,7 +447,7 @@ unsigned int DofObject::packed_indexing_size() const
   return
     cast_int<unsigned int> (
 #ifdef LIBMESH_ENABLE_AMR
-                            ((old_dof_object == libmesh_nullptr) ? 0 : old_dof_object->packed_indexing_size()) + 2 +
+                            ((old_dof_object == nullptr) ? 0 : old_dof_object->packed_indexing_size()) + 2 +
 #else
                             1 +
 #endif
@@ -533,7 +521,7 @@ DofObject::pack_indexing(std::back_insert_iterator<std::vector<largest_id_type>>
 {
 #ifdef LIBMESH_ENABLE_AMR
   // We might need to pack old_dof_object too
-  *target++ = (old_dof_object == libmesh_nullptr) ? 0 : 1;
+  *target++ = (old_dof_object == nullptr) ? 0 : 1;
 #endif
 
   *target++ = _idx_buf.size();
@@ -550,8 +538,8 @@ DofObject::pack_indexing(std::back_insert_iterator<std::vector<largest_id_type>>
 void DofObject::debug_buffer () const
 {
   libMesh::out << " [ ";
-  for (std::size_t i=0; i<_idx_buf.size(); i++)
-    libMesh::out << _idx_buf[i] << " ";
+  for (const auto & idx : _idx_buf)
+    libMesh::out << idx << " ";
   libMesh::out << "]\n";
 }
 

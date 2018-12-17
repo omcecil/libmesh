@@ -44,16 +44,22 @@ class MappedSubdomainPartitioner : public Partitioner
 public:
 
   /**
-   * Constructor.
+   * Ctors, assignment operators, and destructor are all explicitly
+   * defaulted for this class.
    */
-  MappedSubdomainPartitioner () {}
+  MappedSubdomainPartitioner () = default;
+  MappedSubdomainPartitioner (const MappedSubdomainPartitioner &) = default;
+  MappedSubdomainPartitioner (MappedSubdomainPartitioner &&) = default;
+  MappedSubdomainPartitioner & operator= (const MappedSubdomainPartitioner &) = default;
+  MappedSubdomainPartitioner & operator= (MappedSubdomainPartitioner &&) = default;
+  virtual ~MappedSubdomainPartitioner() = default;
 
   /**
    * \returns A copy of this partitioner wrapped in a smart pointer.
    */
-  virtual std::unique_ptr<Partitioner> clone () const libmesh_override
+  virtual std::unique_ptr<Partitioner> clone () const override
   {
-    return libmesh_make_unique<MappedSubdomainPartitioner>();
+    return libmesh_make_unique<MappedSubdomainPartitioner>(*this);
   }
 
   /**
@@ -78,7 +84,7 @@ public:
   virtual void partition_range(MeshBase & mesh,
                                MeshBase::element_iterator it,
                                MeshBase::element_iterator end,
-                               const unsigned int n) libmesh_override;
+                               const unsigned int n) override;
 
 protected:
 
@@ -86,7 +92,7 @@ protected:
    * Partition the \p MeshBase into \p n subdomains.
    */
   virtual void _do_partition (MeshBase & mesh,
-                              const unsigned int n) libmesh_override;
+                              const unsigned int n) override;
 };
 
 } // namespace libMesh

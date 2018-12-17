@@ -58,7 +58,10 @@
 #define EXTERN_C_FOR_PETSC_END
 
 // Petsc include files
+// Wrapped to avoid triggering our more paranoid warnings
+#include <libmesh/ignore_warnings.h>
 #include <petsc.h>
+#include <libmesh/restore_warnings.h>
 
 #if PETSC_RELEASE_LESS_THAN(3,1,1)
 typedef PetscTruth PetscBool;
@@ -82,6 +85,13 @@ typedef PetscTruth PetscBool;
 #  define LibMeshSNESDestroy(x)        SNESDestroy(x)
 #  define LibMeshPetscViewerDestroy(x) PetscViewerDestroy(x)
 #  define LibMeshPCDestroy(x)          PCDestroy(x)
+#endif
+
+// Once PETSc-3.11.0 is released, "&& PETSC_VERSION_RELEASE" should be removed
+#if PETSC_VERSION_LESS_THAN(3,11,0) && PETSC_VERSION_RELEASE
+#  define LibMeshVecScatterCreate(xin,ix,yin,iy,newctx)  VecScatterCreate(xin,ix,yin,iy,newctx)
+#else
+#  define LibMeshVecScatterCreate(xin,ix,yin,iy,newctx)  VecScatterCreateWithData(xin,ix,yin,iy,newctx)
 #endif
 
 #if PETSC_RELEASE_LESS_THAN(3,1,1)

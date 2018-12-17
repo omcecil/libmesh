@@ -16,9 +16,11 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
+// libMesh includes
 #include "libmesh/quadrature_conical.h"
 #include "libmesh/quadrature_gauss.h"
 #include "libmesh/quadrature_jacobi.h"
+#include "libmesh/enum_quadrature_type.h"
 
 namespace libMesh
 {
@@ -28,23 +30,10 @@ namespace libMesh
 // quadrature_conical_3D.C
 // for additional implementation.
 
-
-
-
-// Constructor
-QConical::QConical(const unsigned int d,
-                   const Order o) : QBase(d,o)
+QuadratureType QConical::type() const
 {
+  return QCONICAL;
 }
-
-
-
-// Destructor
-QConical::~QConical()
-{
-}
-
-
 
 void QConical::init_1D(const ElemType /*type_in*/,
                        unsigned int p)

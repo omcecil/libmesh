@@ -58,13 +58,31 @@ public:
    * as tags.  Communicator::get_unique_tag is recommended instead.
    */
   explicit MessageTag(int tagvalue = invalid_tag)
-    : _tagvalue(tagvalue), _comm(libmesh_nullptr) {}
+    : _tagvalue(tagvalue), _comm(nullptr) {}
 
   /**
    * Copy constructor.  Helps Communicator do reference counting on
    * unique tags
    */
   MessageTag(const MessageTag & other);
+
+  /**
+   * Move constructor.  Helps Communicator do reference counting on
+   * unique tags
+   */
+  MessageTag(MessageTag && other);
+
+  /**
+   * Copy assignment operator.  Helps Communicator do reference
+   * counting on unique tags
+   */
+  MessageTag & operator = (const MessageTag & other);
+
+  /**
+   * Move assignment operator.  Helps Communicator do reference
+   * counting on unique tags
+   */
+  MessageTag & operator = (MessageTag && other);
 
   /**
    * Destructor.  Helps Communicator do reference counting on unique

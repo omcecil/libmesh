@@ -100,7 +100,7 @@ class Elem;
  * We return variable-stuff-sets as pointers to CouplingMatrix.  That
  * way, in the common case where the user cares about all variables and
  * couple to all variables, all the functor needs to return for
- * variable-number-sets and variable-number-pair-sets is a NULL (which
+ * variable-number-sets and variable-number-pair-sets is nullptr (which
  * as in other libMesh APIs will be interpreted and documented to mean
  * the full set). In the common case where the user wants coupling
  * between elements to match coupling within elements, the functor can
@@ -115,6 +115,20 @@ class Elem;
  * imposed had that matrix been used for a C'.  In other words, if the
  * returned CouplingMatrix CM has CM(i,j)==true for any i, then
  * variable j will be evaluable on the algebraically ghosted element.
+ *
+ * After a GhostingFunctor has been created, a reference to it can be
+ * passed to MeshBase::add_ghosting_functor to expand geometric
+ * ghosting, or to DofMap::add_algebraic_ghosting_functor to expand
+ * both algebraic and geometric ghosting, or to
+ * DofMap::add_coupling_functor to expand coupling along with both
+ * types of ghosting.
+ *
+ * Note that when an element is specified in algebraic ghosting or
+ * coupling queries, only degrees of freedom for the variables
+ * supported on that element are thereby ghosted and/or coupled.
+ * Any unsupported variable dofs associated with the element's nodes
+ * (e.g. subdomain-restricted variables on a neighboring subdomain)
+ * will be unaffected.
  *
  * \author Roy H. Stogner
  * \date 2016

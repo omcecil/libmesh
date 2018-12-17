@@ -37,19 +37,39 @@
 #include "libmesh/quadrature.h"
 #include "libmesh/system.h"
 #include "libmesh/tensor_tools.h"
+#include "libmesh/enum_error_estimator_type.h"
+#include "libmesh/enum_norm_type.h"
 
 namespace libMesh
 {
 
 //-----------------------------------------------------------------
 // ErrorEstimator implementations
+ExactErrorEstimator::ExactErrorEstimator() :
+    ErrorEstimator(),
+    _exact_value(nullptr),
+    _exact_deriv(nullptr),
+    _exact_hessian(nullptr),
+    _equation_systems_fine(nullptr),
+    _extra_order(0)
+{
+  error_norm = H1;
+}
+
+
+ErrorEstimatorType ExactErrorEstimator::type() const
+{
+  return EXACT;
+}
+
+
 void ExactErrorEstimator::attach_exact_value (ValueFunctionPointer fptr)
 {
   libmesh_assert(fptr);
   _exact_value = fptr;
 
   // We're not using a fine grid solution
-  _equation_systems_fine = libmesh_nullptr;
+  _equation_systems_fine = nullptr;
 
   // We're not using user-provided functors
   this->clear_functors();
@@ -63,7 +83,7 @@ void ExactErrorEstimator::attach_exact_values (std::vector<FunctionBase<Number> 
   _exact_values.clear();
 
   for (auto ptr : f)
-    _exact_values.emplace_back(ptr ? ptr->clone() : libmesh_nullptr);
+    _exact_values.emplace_back(ptr ? ptr->clone() : nullptr);
 }
 
 
@@ -84,7 +104,7 @@ void ExactErrorEstimator::attach_exact_deriv (GradientFunctionPointer gptr)
   _exact_deriv = gptr;
 
   // We're not using a fine grid solution
-  _equation_systems_fine = libmesh_nullptr;
+  _equation_systems_fine = nullptr;
 
   // We're not using user-provided functors
   this->clear_functors();
@@ -98,7 +118,7 @@ void ExactErrorEstimator::attach_exact_derivs (std::vector<FunctionBase<Gradient
   _exact_derivs.clear();
 
   for (auto ptr : g)
-    _exact_derivs.emplace_back(ptr ? ptr->clone() : libmesh_nullptr);
+    _exact_derivs.emplace_back(ptr ? ptr->clone() : nullptr);
 }
 
 
@@ -121,7 +141,7 @@ void ExactErrorEstimator::attach_exact_hessian (HessianFunctionPointer hptr)
   _exact_hessian = hptr;
 
   // We're not using a fine grid solution
-  _equation_systems_fine = libmesh_nullptr;
+  _equation_systems_fine = nullptr;
 
   // We're not using user-provided functors
   this->clear_functors();
@@ -135,7 +155,7 @@ void ExactErrorEstimator::attach_exact_hessians (std::vector<FunctionBase<Tensor
   _exact_hessians.clear();
 
   for (auto ptr : h)
-    _exact_hessians.emplace_back(ptr ? ptr->clone() : libmesh_nullptr);
+    _exact_hessians.emplace_back(ptr ? ptr->clone() : nullptr);
 }
 
 
@@ -157,9 +177,9 @@ void ExactErrorEstimator::attach_reference_solution (EquationSystems * es_fine)
 
   // If we're using a fine grid solution, we're not using exact value
   // function pointers or functors.
-  _exact_value = libmesh_nullptr;
-  _exact_deriv = libmesh_nullptr;
-  _exact_hessian = libmesh_nullptr;
+  _exact_value = nullptr;
+  _exact_deriv = nullptr;
+  _exact_hessian = nullptr;
 
   this->clear_functors();
 }
@@ -356,7 +376,7 @@ void ExactErrorEstimator::estimate_error (const System & system,
   // Compute the square-root of each component.
   {
     LOG_SCOPE("std::sqrt()", "ExactErrorEstimator");
-    for (auto & val : error_per_cell) // std::size_t i=0; i<error_per_cell.size(); i++)
+    for (auto & val : error_per_cell)
       if (val != 0.)
         {
           libmesh_assert_greater (val, 0.);

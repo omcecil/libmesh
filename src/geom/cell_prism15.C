@@ -16,14 +16,14 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/side.h"
 #include "libmesh/cell_prism15.h"
 #include "libmesh/edge_edge3.h"
 #include "libmesh/face_quad8.h"
 #include "libmesh/face_tri6.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -32,7 +32,14 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // Prism15 class static member initializations
-const unsigned int Prism15::side_nodes_map[5][8] =
+const int Prism15::num_nodes;
+const int Prism15::num_sides;
+const int Prism15::num_edges;
+const int Prism15::num_children;
+const int Prism15::nodes_per_side;
+const int Prism15::nodes_per_edge;
+
+const unsigned int Prism15::side_nodes_map[Prism15::num_sides][Prism15::nodes_per_side] =
   {
     {0, 2, 1,  8,  7,  6, 99, 99}, // Side 0
     {0, 1, 4,  3,  6, 10, 12,  9}, // Side 1
@@ -41,7 +48,7 @@ const unsigned int Prism15::side_nodes_map[5][8] =
     {3, 4, 5, 12, 13, 14, 99, 99}  // Side 4
   };
 
-const unsigned int Prism15::edge_nodes_map[9][3] =
+const unsigned int Prism15::edge_nodes_map[Prism15::num_edges][Prism15::nodes_per_edge] =
   {
     {0, 1,  6}, // Edge 0
     {1, 2,  7}, // Edge 1
@@ -81,20 +88,26 @@ bool Prism15::is_node_on_side(const unsigned int n,
                               const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 8; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned int>
+Prism15::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  auto trim = (s > 0 && s < 4) ? 0 : 2;
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s]) - trim};
 }
 
 bool Prism15::is_node_on_edge(const unsigned int n,
                               const unsigned int e) const
 {
   libmesh_assert_less (e, n_edges());
-  for (unsigned int i = 0; i != 3; ++i)
-    if (edge_nodes_map[e][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(edge_nodes_map[e]),
+                   std::end(edge_nodes_map[e]),
+                   n) != std::end(edge_nodes_map[e]);
 }
 
 
@@ -129,13 +142,20 @@ bool Prism15::has_affine_map() const
 
 
 
+Order Prism15::default_order() const
+{
+  return SECOND;
+}
+
+
+
 unsigned int Prism15::which_node_am_i(unsigned int side,
                                       unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
 
   // Never more than 8 nodes per side.
-  libmesh_assert_less(side_node, 8);
+  libmesh_assert_less(side_node, Prism15::nodes_per_side);
 
   // Some sides have 6 nodes.
   libmesh_assert(!(side==0 || side==4) || side_node < 6);
@@ -201,6 +221,49 @@ std::unique_ptr<Elem> Prism15::build_side_ptr (const unsigned int i,
       return face;
     }
 }
+
+
+void Prism15::build_side_ptr (std::unique_ptr<Elem> & side,
+                              const unsigned int i)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  switch (i)
+    {
+    case 0: // the triangular face at z=-1
+    case 4: // the triangular face at z=1
+      {
+        if (!side.get() || side->type() != TRI6)
+          {
+            side = this->build_side_ptr(i, false);
+            return;
+          }
+        break;
+      }
+
+    case 1: // the quad face at y=0
+    case 2: // the other quad face
+    case 3: // the quad face at x=0
+      {
+        if (!side.get() || side->type() != QUAD8)
+          {
+            side = this->build_side_ptr(i, false);
+            return;
+          }
+        break;
+      }
+
+    default:
+      libmesh_error_msg("Invalid side i = " << i);
+    }
+
+  side->subdomain_id() = this->subdomain_id();
+
+  // Set the nodes
+  for (auto n : side->node_index_range())
+    side->set_node(n) = this->node_ptr(Prism15::side_nodes_map[i][n]);
+}
+
 
 
 std::unique_ptr<Elem> Prism15::build_edge_ptr (const unsigned int i)
@@ -361,10 +424,10 @@ Real Prism15::volume () const
 
   // Parameters of the 2D rule
   static const Real
-    w1 = 1.1169079483900573284750350421656140e-01L,
-    w2 = 5.4975871827660933819163162450105264e-02L,
-    a1 = 4.4594849091596488631832925388305199e-01L,
-    a2 = 9.1576213509770743459571463402201508e-02L;
+    w1 = Real(1.1169079483900573284750350421656140e-01L),
+    w2 = Real(5.4975871827660933819163162450105264e-02L),
+    a1 = Real(4.4594849091596488631832925388305199e-01L),
+    a2 = Real(9.1576213509770743459571463402201508e-02L);
 
   // Points and weights of the 2D rule
   static const Real w2D[N2D] = {w1, w1, w1, w2, w2, w2};
@@ -453,7 +516,7 @@ Real Prism15::volume () const
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Prism15::_embedding_matrix[8][15][15] =
+const float Prism15::_embedding_matrix[Prism15::num_children][Prism15::num_nodes][Prism15::num_nodes] =
   {
     // Embedding matrix for child 0
     {

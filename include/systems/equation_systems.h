@@ -24,8 +24,16 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/parameters.h"
 #include "libmesh/system.h"
-#include "libmesh/enum_xdr_mode.h"
 #include "libmesh/parallel_object.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum XdrMODE : int;
+}
+#else
+#include "libmesh/enum_xdr_mode.h"
+#endif
 
 // HP aCC needs these for some reason
 #ifdef __HP_aCC
@@ -113,6 +121,20 @@ public:
    * updated mesh
    */
   virtual void reinit ();
+
+  /**
+   * Enable or disable default ghosting functors on the Mesh and on
+   * all Systems.  Standard ghosting is enabled by default.  If
+   * disabled, default ghosting will also be disabled on any later
+   * added systems.
+   *
+   * Unless other equivalent ghosting functors have been added,
+   * removing the default coupling functor is only safe for explicit
+   * solves, and removing the default algebraic ghosting functor is
+   * only safe for codes where no evaluations on neighbor cells (e.g.
+   * no jump error estimators) are done.
+   */
+  virtual void enable_default_ghosting (bool enable);
 
   /**
    * Updates local values for all the systems
@@ -263,12 +285,12 @@ public:
    * Fill the input vector \p var_names with the names
    * of the variables for each system. If \p type is passed,
    * only variables of the specified type will be populated.
-   * If systems_names!=NULL, only include names from the
+   * If systems_names!=nullptr, only include names from the
    * specified systems.
    */
   void build_variable_names (std::vector<std::string> & var_names,
-                             const FEType * type=libmesh_nullptr,
-                             const std::set<std::string> * system_names=libmesh_nullptr) const;
+                             const FEType * type=nullptr,
+                             const std::set<std::string> * system_names=nullptr) const;
 
   /**
    * Fill the input vector \p soln with the solution values for the
@@ -286,11 +308,11 @@ public:
    * Fill the input vector \p soln with solution values.  The
    * entries will be in variable-major format (corresponding to
    * the names from \p build_variable_names()).
-   * If systems_names!=NULL, only include data from the
+   * If systems_names!=nullptr, only include data from the
    * specified systems.
    */
   void build_solution_vector (std::vector<Number> & soln,
-                              const std::set<std::string> * system_names=libmesh_nullptr) const;
+                              const std::set<std::string> * system_names=nullptr) const;
 
   /**
    * A version of build_solution_vector which is appropriate for
@@ -301,7 +323,7 @@ public:
    * get the local values they need to write on each processor.
    */
   std::unique_ptr<NumericVector<Number>>
-  build_parallel_solution_vector(const std::set<std::string> * system_names=libmesh_nullptr) const;
+  build_parallel_solution_vector(const std::set<std::string> * system_names=nullptr) const;
 
   /**
    * Retrieve \p vars_active_subdomains, which indicates the active
@@ -314,19 +336,52 @@ public:
    * Retrieve the solution data for CONSTANT MONOMIALs.  If \p names
    * is populated, only the variables corresponding to those names will
    * be retrieved.  This can be used to filter which variables are retrieved.
+   *
+   * \deprecated Call the more appropriately-named build_elemental_solution_vector()
+   * instead.
    */
-  void get_solution( std::vector<Number> & soln,
+  void get_solution (std::vector<Number> & soln,
                      std::vector<std::string> & names) const;
+
+  /**
+   * Retrieve the solution data for CONSTANT MONOMIALs.  If \p names
+   * is populated, only the variables corresponding to those names will
+   * be retrieved.  This can be used to filter which variables are retrieved.
+   *
+   * This is the more appropriately-named replacement for the get_solution()
+   * function defined above.
+   */
+  void build_elemental_solution_vector (std::vector<Number> & soln,
+                                        std::vector<std::string> & names) const;
+
+  /**
+   * Builds a parallel vector of CONSTANT MONOMIAL solution values
+   * corresponding to the entries in the input 'names' vector.  This
+   * vector is approximately uniformly distributed across all of the
+   * available processors.
+   *
+   * The related function build_elemental_solution_vector() is
+   * implemented by calling this function and then calling
+   * localize_to_one() on the resulting vector.
+   *
+   * \returns A nullptr (if no CONSTANT, MONOMIAL variables exist on
+   * the system) or a std::unique_ptr to a var-major numeric vector of
+   * total length n_elem * n_vars ordered according to:
+   * [u0, u1, ... uN, v0, v1, ... vN, w0, w1, ... wN]
+   * for constant monomial variables (u, v, w) on a mesh with N elements.
+   */
+  std::unique_ptr<NumericVector<Number>>
+  build_parallel_elemental_solution_vector (std::vector<std::string> & names) const;
 
   /**
    * Fill the input vector \p soln with solution values.  The
    * entries will be in variable-major format (corresponding to
    * the names from \p build_variable_names()).
-   * If systems_names!=NULL, only include data from the
+   * If systems_names!=nullptr, only include data from the
    * specified systems.
    */
   void build_discontinuous_solution_vector (std::vector<Number> & soln,
-                                            const std::set<std::string> * system_names=libmesh_nullptr) const;
+                                            const std::set<std::string> * system_names=nullptr) const;
 
   /**
    * Read & initialize the systems from disk using the XDR data format.
@@ -516,6 +571,12 @@ protected:
    */
   bool _refine_in_reinit;
 
+  /**
+   * Flag for whether to enable default ghosting on newly added Systems.
+   * Default value: true
+   */
+  bool _enable_default_ghosting;
+
 private:
 
   /**
@@ -545,6 +606,12 @@ private:
    * is to avoid coupling this header file to mesh.h, and elem.h.
    */
   void _add_system_to_nodes_and_elems();
+
+  /**
+   * This just calls DofMap::remove_default_ghosting() but using a
+   * shim lets us forward-declare DofMap.
+   */
+  void _remove_default_ghosting(unsigned int sys_num);
 };
 
 
@@ -579,13 +646,17 @@ template <typename T_sys>
 inline
 T_sys & EquationSystems::add_system (const std::string & name)
 {
-  T_sys * ptr = libmesh_nullptr;
+  T_sys * ptr = nullptr;
 
   if (!_systems.count(name))
     {
-      ptr = new T_sys(*this, name, this->n_systems());
+      const unsigned int sys_num = this->n_systems();
+      ptr = new T_sys(*this, name, sys_num);
 
       _systems.insert (std::make_pair(name, ptr));
+
+      if (!_enable_default_ghosting)
+        this->_remove_default_ghosting(sys_num);
 
       // Tell all the \p DofObject entities to add a system.
       this->_add_system_to_nodes_and_elems();

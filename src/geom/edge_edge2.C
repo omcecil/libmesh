@@ -19,14 +19,20 @@
 
 // Local includes
 #include "libmesh/edge_edge2.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
 
 
+// Edge2 class static member initializations
+const int Edge2::num_nodes;
+const int Edge2::num_children;
+
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Edge2::_embedding_matrix[2][2][2] =
+const float Edge2::_embedding_matrix[Edge2::num_children][Edge2::num_nodes][Edge2::num_nodes] =
   {
     // embedding matrix for child 0
     {
@@ -63,7 +69,7 @@ bool Edge2::is_face(const unsigned int) const
 bool Edge2::is_node_on_side(const unsigned int n,
                             const unsigned int s) const
 {
-  libmesh_assert_less (s, 2);
+  libmesh_assert_less (s, Edge2::num_nodes);
   return (s == n);
 }
 
@@ -73,6 +79,15 @@ bool Edge2::is_node_on_edge(const unsigned int,
   libmesh_assert_equal_to (e, 0);
   return true;
 }
+
+
+
+Order Edge2::default_order() const
+{
+  return FIRST;
+}
+
+
 
 void Edge2::connectivity(const unsigned int libmesh_dbg_var(sc),
                          const IOPackage iop,

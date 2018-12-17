@@ -25,6 +25,8 @@
 #include "libmesh/system.h"
 #include "libmesh/system_norm.h"
 #include "libmesh/qoi_set.h"
+#include "libmesh/enum_error_estimator_type.h"
+#include "libmesh/int_range.h"
 
 // C++ includes
 #include <iostream>
@@ -43,6 +45,14 @@ AdjointResidualErrorEstimator::AdjointResidualErrorEstimator () :
   _dual_error_estimator(new PatchRecoveryErrorEstimator()),
   _qoi_set(QoISet())
 {
+}
+
+
+
+ErrorEstimatorType
+AdjointResidualErrorEstimator::type() const
+{
+  return ADJOINT_RESIDUAL;
 }
 
 
@@ -112,7 +122,7 @@ void AdjointResidualErrorEstimator::estimate_error (const System & _system,
     }
 
   // Sum and weight the dual error estimate based on our QoISet
-  for (std::size_t i = 0; i != _system.qoi.size(); ++i)
+  for (unsigned int i = 0, n_qois = _system.n_qois(); i != n_qois; ++i)
     {
       if (_qoi_set.has_index(i))
         {
@@ -240,7 +250,7 @@ void AdjointResidualErrorEstimator::estimate_error (const System & _system,
 
   // Weight the primal error by the dual error using the system norm object
   // FIXME: we ought to thread this
-  for (std::size_t i=0; i != error_per_cell.size(); ++i)
+  for (auto i : index_range(error_per_cell))
     {
       // Have we been asked to weight the variable error contributions in any specific manner
       if (!error_norm_is_identity) // If we do

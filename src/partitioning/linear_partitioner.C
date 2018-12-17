@@ -30,19 +30,22 @@ void LinearPartitioner::partition_range(MeshBase & mesh,
                                         MeshBase::element_iterator end,
                                         const unsigned int n)
 {
-  libmesh_assert_greater (n, 0);
+  const bool mesh_is_serial = mesh.is_serial();
 
-  // Check for an easy return
+  // Check for easy returns
+  if (it == end && mesh_is_serial)
+    return;
+
   if (n == 1)
     {
       this->single_partition_range (it, end);
       return;
     }
 
+  libmesh_assert_greater (n, 0);
+
   // Create a simple linear partitioning
   LOG_SCOPE ("partition_range()", "LinearPartitioner");
-
-  const bool mesh_is_serial = mesh.is_serial();
 
   // This has to be an ordered set
   std::set<dof_id_type> element_ids;
@@ -51,7 +54,8 @@ void LinearPartitioner::partition_range(MeshBase & mesh,
   // every processor.
   if (mesh_is_serial)
     {
-      const dof_id_type blksize = std::distance(it, end) / n;
+      const dof_id_type blksize = cast_int<dof_id_type>
+        (std::distance(it, end) / n);
 
       dof_id_type e = 0;
       for (auto & elem : as_range(it, end))
@@ -78,7 +82,8 @@ void LinearPartitioner::partition_range(MeshBase & mesh,
 
       mesh.comm().set_union(element_ids);
 
-      const dof_id_type blksize = element_ids.size();
+      const dof_id_type blksize = cast_int<dof_id_type>
+        (element_ids.size());
 
       dof_id_type e = 0;
       for (auto eid : element_ids)

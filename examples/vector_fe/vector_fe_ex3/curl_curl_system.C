@@ -107,7 +107,7 @@ bool CurlCurlSystem::element_time_derivative (bool request_jacobian,
   FEMContext & c = cast_ref<FEMContext &>(context);
 
   // Get finite element object
-  FEGenericBase<RealGradient> * fe = libmesh_nullptr;
+  FEGenericBase<RealGradient> * fe = nullptr;
   c.get_element_fe<RealGradient>(u_var, fe);
 
   // First we get some references to cell-specific data that
@@ -126,7 +126,7 @@ bool CurlCurlSystem::element_time_derivative (bool request_jacobian,
   const std::vector<Point> & qpoint = fe->get_xyz();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_u_dofs = c.get_dof_indices(u_var).size();
+  const unsigned int n_u_dofs = c.n_dof_indices(u_var);
 
   DenseSubMatrix<Number> & Kuu = c.get_elem_jacobian(u_var, u_var);
 
@@ -176,7 +176,7 @@ bool CurlCurlSystem::side_time_derivative (bool request_jacobian,
   FEMContext & c = cast_ref<FEMContext &>(context);
 
   // Get finite element object
-  FEGenericBase<RealGradient> * side_fe = libmesh_nullptr;
+  FEGenericBase<RealGradient> * side_fe = nullptr;
   c.get_side_fe<RealGradient>(u_var, side_fe);
 
   // First we get some references to cell-specific data that
@@ -189,7 +189,7 @@ bool CurlCurlSystem::side_time_derivative (bool request_jacobian,
   const std::vector<std::vector<RealGradient>> & phi = side_fe->get_phi();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_u_dofs = c.get_dof_indices(u_var).size();
+  const unsigned int n_u_dofs = c.n_dof_indices(u_var);
 
   const std::vector<Point> & normals = side_fe->get_normals();
 

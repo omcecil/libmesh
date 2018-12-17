@@ -67,25 +67,20 @@ public:
         (ParentType::side_nodes_map[_side_number][n]);
   }
 
+  Side (Side &&) = delete;
+  Side (const Side &) = delete;
+  Side & operator= (const Side &) = delete;
+  Side & operator= (Side &&) = delete;
+  virtual ~Side() = default;
+
   /**
    * Setting a side node changes the node on the parent.
    */
-  virtual Node * & set_node (const unsigned int i) libmesh_override
+  virtual Node * & set_node (const unsigned int i) override
   {
     libmesh_assert_less (i, this->n_nodes());
     return this->parent()->set_node (ParentType::side_nodes_map[_side_number][i]);
   }
-
-  /**
-   * Sides do not have sides.
-   */
-  virtual unsigned int n_sides () const libmesh_override
-  { return 0; }
-
-  virtual bool is_child_on_side(const unsigned int,
-                                const unsigned int) const libmesh_override
-  { libmesh_not_implemented(); return false; }
-
 
 private:
 
@@ -132,16 +127,11 @@ public:
   /**
    * Setting an edge node changes the node on the parent.
    */
-  virtual Node * & set_node (const unsigned int i) libmesh_override
+  virtual Node * & set_node (const unsigned int i) override
   {
     libmesh_assert_less (i, this->n_nodes());
     return this->parent()->set_node (ParentType::edge_nodes_map[_edge_number][i]);
   }
-
-  /**
-   * \returns 0. Edges do not have sides, so don't even ask!
-   */
-  virtual unsigned int n_sides () const libmesh_override { return 0; }
 
 private:
 

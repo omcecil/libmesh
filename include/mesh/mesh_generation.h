@@ -22,7 +22,7 @@
 
 // Local Includes
 #include "libmesh/libmesh.h"
-#include "libmesh/enum_elem_type.h"
+#include "libmesh/enum_elem_type.h" // INVALID_ELEM
 #include "libmesh/vector_value.h"
 #ifdef LIBMESH_HAVE_TRIANGLE
 #include "libmesh/mesh_triangle_interface.h"
@@ -127,7 +127,7 @@ void build_extrusion (UnstructuredMesh & mesh,
                       const MeshBase & cross_section,
                       const unsigned int nz,
                       RealVectorValue extrusion_vector,
-                      QueryElemSubdomainIDBase * elem_subdomain = libmesh_nullptr);
+                      QueryElemSubdomainIDBase * elem_subdomain = nullptr);
 
 #ifdef LIBMESH_HAVE_TRIANGLE
 /**
@@ -141,7 +141,7 @@ void build_delaunay_square(UnstructuredMesh & mesh,
                            const Real xmin, const Real xmax,
                            const Real ymin, const Real ymax,
                            const ElemType type,
-                           const std::vector<TriangleInterface::Hole*> * holes=libmesh_nullptr);
+                           const std::vector<TriangleInterface::Hole*> * holes=nullptr);
 #endif // #define LIBMESH_HAVE_TRIANGLE
 
 /**

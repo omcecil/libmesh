@@ -46,7 +46,8 @@ void EpetraMatrix<T>::update_sparsity_pattern (const SparsityPattern::Graph & sp
   // big trouble if this fails!
   libmesh_assert(this->_dof_map);
 
-  const numeric_index_type n_rows = sparsity_pattern.size();
+  const numeric_index_type n_rows = cast_int<numeric_index_type>
+    (sparsity_pattern.size());
 
   const numeric_index_type m   = this->_dof_map->n_dofs();
   const numeric_index_type n   = m;
@@ -96,14 +97,14 @@ void EpetraMatrix<T>::update_sparsity_pattern (const SparsityPattern::Graph & sp
   if (m==0)
     return;
 
-  _graph = new Epetra_CrsGraph(Copy, *_map, &n_nz_tot[0]);
+  _graph = new Epetra_CrsGraph(Copy, *_map, n_nz_tot.data());
 
   // Tell the matrix about its structure.  Initialize it
   // to zero.
   for (numeric_index_type i=0; i<n_rows; i++)
     _graph->InsertGlobalIndices(_graph->GRID(i),
-                                sparsity_pattern[i].size(),
-                                const_cast<int *>((const int *)&sparsity_pattern[i][0]));
+                                cast_int<numeric_index_type>(sparsity_pattern[i].size()),
+                                const_cast<int *>(reinterpret_cast<const int *>(sparsity_pattern[i].data())));
 
   _graph->FillComplete();
 
@@ -251,7 +252,9 @@ void EpetraMatrix<T>::add_matrix(const DenseMatrix<T> & dm,
   libmesh_assert_equal_to (rows.size(), m);
   libmesh_assert_equal_to (cols.size(), n);
 
-  _mat->SumIntoGlobalValues(m, (int *)&rows[0], n, (int *)&cols[0], &dm.get_values()[0]);
+  _mat->SumIntoGlobalValues(m, numeric_trilinos_cast(rows.data()),
+                            n, numeric_trilinos_cast(cols.data()),
+                            dm.get_values().data());
 }
 
 
@@ -277,8 +280,12 @@ void EpetraMatrix<T>::get_transpose (SparseMatrix<T> & dest) const
   // Make sure the SparseMatrix passed in is really a EpetraMatrix
   EpetraMatrix<T> & epetra_dest = cast_ref<EpetraMatrix<T> &>(dest);
 
+  // We currently only support calling get_transpose() with ourself
+  // as the destination. Previously, this called the default copy
+  // constructor which was not safe because this class manually
+  // manages memory.
   if (&epetra_dest != this)
-    epetra_dest = *this;
+    libmesh_not_implemented();
 
   epetra_dest._use_transpose = !epetra_dest._use_transpose;
   epetra_dest._mat->SetUseTranspose(epetra_dest._use_transpose);
@@ -419,7 +426,7 @@ void EpetraMatrix<T>::add_matrix(const DenseMatrix<T> & dm,
 
 
 template <typename T>
-void EpetraMatrix<T>::add (const T a_in, SparseMatrix<T> & X_in)
+void EpetraMatrix<T>::add (const T a_in, const SparseMatrix<T> & X_in)
 {
 #ifdef LIBMESH_TRILINOS_HAVE_EPETRAEXT
   libmesh_assert (this->initialized());
@@ -429,7 +436,8 @@ void EpetraMatrix<T>::add (const T a_in, SparseMatrix<T> & X_in)
   libmesh_assert_equal_to (this->m(), X_in.m());
   libmesh_assert_equal_to (this->n(), X_in.n());
 
-  EpetraMatrix<T> * X = cast_ptr<EpetraMatrix<T> *> (&X_in);
+  const EpetraMatrix<T> * X =
+    cast_ptr<const EpetraMatrix<T> *> (&X_in);
 
   EpetraExt::MatrixMatrix::Add (*X->_mat, false, a_in, *_mat, 1.);
 #else

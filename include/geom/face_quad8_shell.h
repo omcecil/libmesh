@@ -29,7 +29,7 @@ namespace libMesh
  * "stub" class in order to differentiate between this class and other
  * classes when reading/writing Mesh files.
  *
- * \author Sylvain Vallaghe 
+ * \author Sylvain Vallaghe
  * \date 2017
  * \brief A 2D quadrilateral shell element with 8 nodes.
  */
@@ -40,13 +40,19 @@ public:
    * Constructor.  By default this element has no parent.
    */
   explicit
-  QuadShell8 (Elem * p=libmesh_nullptr) :
+  QuadShell8 (Elem * p=nullptr) :
     Quad8(p) {}
+
+  QuadShell8 (QuadShell8 &&) = delete;
+  QuadShell8 (const QuadShell8 &) = delete;
+  QuadShell8 & operator= (const QuadShell8 &) = delete;
+  QuadShell8 & operator= (QuadShell8 &&) = delete;
+  virtual ~QuadShell8() = default;
 
   /**
    * \returns \p QUADSHELL8.
    */
-  virtual ElemType type () const libmesh_override { return QUADSHELL8; }
+  virtual ElemType type () const override { return QUADSHELL8; }
 };
 
 } // namespace libMesh

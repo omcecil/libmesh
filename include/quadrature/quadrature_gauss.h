@@ -49,33 +49,38 @@ public:
    * however if we called the function with INVALID_ELEM it would try
    * to be smart and return, thinking it had already done the work.
    */
-  QGauss (const unsigned int _dim,
-          const Order _order=INVALID_ORDER) :
-    QBase(_dim, _order)
+  QGauss (unsigned int dim,
+          Order order=INVALID_ORDER) :
+    QBase(dim, order)
   {
-    if (_dim == 1)
+    if (dim == 1)
       init(EDGE2);
   }
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QGauss() {}
+  QGauss (const QGauss &) = default;
+  QGauss (QGauss &&) = default;
+  QGauss & operator= (const QGauss &) = default;
+  QGauss & operator= (QGauss &&) = default;
+  virtual ~QGauss() = default;
 
   /**
    * \returns \p QGAUSS.
    */
-  virtual QuadratureType type() const libmesh_override { return QGAUSS; }
+  virtual QuadratureType type() const override;
 
 
 private:
 
   virtual void init_1D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 
   /**
    * The Dunavant rules are for triangles. This function takes

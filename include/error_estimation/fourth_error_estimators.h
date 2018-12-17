@@ -46,17 +46,24 @@ public:
    * Constructor.  Defaults to H2 seminorm; changes to error_norm are
    * ignored.
    */
-  LaplacianErrorEstimator() :
-    JumpErrorEstimator()
-  { error_norm = H2_SEMINORM; }
+  LaplacianErrorEstimator();
+
 
   /**
-   * Destructor.
+   * This class cannot be (default) copy constructed/assigned because
+   * its base class has unique_ptr members.
    */
-  ~LaplacianErrorEstimator() {}
+  LaplacianErrorEstimator (const LaplacianErrorEstimator &) = delete;
+  LaplacianErrorEstimator & operator= (const LaplacianErrorEstimator &) = delete;
 
-  virtual ErrorEstimatorType type() const libmesh_override
-  { return LAPLACIAN;}
+  /**
+   * Defaulted move ctor, move assignment operator, and destructor.
+   */
+  LaplacianErrorEstimator (LaplacianErrorEstimator &&) = default;
+  LaplacianErrorEstimator & operator= (LaplacianErrorEstimator &&) = default;
+  virtual ~LaplacianErrorEstimator() = default;
+
+  virtual ErrorEstimatorType type() const override;
 
 protected:
 
@@ -64,13 +71,13 @@ protected:
    * An initialization function, for requesting specific data from the FE
    * objects
    */
-  virtual void init_context(FEMContext & c) libmesh_override;
+  virtual void init_context(FEMContext & c) override;
 
   /**
    * The function which calculates a laplacian jump based error
    * term on an internal side
    */
-  virtual void internal_side_integration() libmesh_override;
+  virtual void internal_side_integration() override;
 };
 
 

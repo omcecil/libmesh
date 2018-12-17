@@ -20,8 +20,6 @@
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 
-// C++ includes
-
 // Local includes cont'd
 #include "libmesh/cell_inf_hex8.h"
 #include "libmesh/edge_edge2.h"
@@ -29,14 +27,23 @@
 #include "libmesh/face_quad4.h"
 #include "libmesh/face_inf_quad4.h"
 #include "libmesh/side.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
 
 
 // ------------------------------------------------------------
-// InfHex8 class member functions
-const unsigned int InfHex8::side_nodes_map[5][4] =
+// InfHex8 class static member initializations
+const int InfHex8::num_nodes;
+const int InfHex8::num_sides;
+const int InfHex8::num_edges;
+const int InfHex8::num_children;
+const int InfHex8::nodes_per_side;
+const int InfHex8::nodes_per_edge;
+
+const unsigned int InfHex8::side_nodes_map[InfHex8::num_sides][InfHex8::nodes_per_side] =
   {
     { 0, 1, 2, 3}, // Side 0
     { 0, 1, 4, 5}, // Side 1
@@ -45,7 +52,7 @@ const unsigned int InfHex8::side_nodes_map[5][4] =
     { 3, 0, 7, 4}  // Side 4
   };
 
-const unsigned int InfHex8::edge_nodes_map[8][2] =
+const unsigned int InfHex8::edge_nodes_map[InfHex8::num_edges][InfHex8::nodes_per_edge] =
   {
     {0, 1}, // Edge 0
     {1, 2}, // Edge 1
@@ -84,21 +91,35 @@ bool InfHex8::is_node_on_side(const unsigned int n,
                               const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 4; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned>
+InfHex8::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
 bool InfHex8::is_node_on_edge(const unsigned int n,
                               const unsigned int e) const
 {
   libmesh_assert_less (e, n_edges());
-  for (unsigned int i = 0; i != 2; ++i)
-    if (edge_nodes_map[e][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(edge_nodes_map[e]),
+                   std::end(edge_nodes_map[e]),
+                   n) != std::end(edge_nodes_map[e]);
 }
+
+
+
+Order InfHex8::default_order() const
+{
+  return FIRST;
+}
+
+
 
 std::unique_ptr<Elem> InfHex8::build_side_ptr (const unsigned int i,
                                                bool proxy)
@@ -164,6 +185,14 @@ std::unique_ptr<Elem> InfHex8::build_side_ptr (const unsigned int i,
 }
 
 
+void InfHex8::build_side_ptr (std::unique_ptr<Elem> & side,
+                              const unsigned int i)
+{
+  this->side_ptr(side, i);
+}
+
+
+
 std::unique_ptr<Elem> InfHex8::build_edge_ptr (const unsigned int i)
 {
   libmesh_assert_less (i, this->n_edges());
@@ -209,7 +238,7 @@ void InfHex8::connectivity(const unsigned int libmesh_dbg_var(sc),
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float InfHex8::_embedding_matrix[4][8][8] =
+const float InfHex8::_embedding_matrix[InfHex8::num_children][InfHex8::num_nodes][InfHex8::num_nodes] =
   {
     // embedding matrix for child 0
     {

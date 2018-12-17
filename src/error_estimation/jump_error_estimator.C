@@ -35,9 +35,9 @@
 #include "libmesh/mesh_base.h"
 #include "libmesh/quadrature_gauss.h"
 #include "libmesh/system.h"
-
 #include "libmesh/dense_vector.h"
 #include "libmesh/numeric_vector.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -153,7 +153,7 @@ void JumpErrorEstimator::estimate_error (const System & system,
         continue;
 
       // FIXME: Need to generalize this to vector-valued elements. [PB]
-      FEBase * side_fe = libmesh_nullptr;
+      FEBase * side_fe = nullptr;
 
       const std::set<unsigned char> & elem_dims =
         fine_context->elem_dimensions();
@@ -201,7 +201,7 @@ void JumpErrorEstimator::estimate_error (const System & system,
           // Loop over the neighbors of the parent
           for (auto n_p : parent->side_index_range())
             {
-              if (parent->neighbor_ptr(n_p) != libmesh_nullptr) // parent has a neighbor here
+              if (parent->neighbor_ptr(n_p) != nullptr) // parent has a neighbor here
                 {
                   // Find the active neighbors in this direction
                   std::vector<const Elem *> active_neighbors;
@@ -209,8 +209,9 @@ void JumpErrorEstimator::estimate_error (const System & system,
                     active_family_tree_by_neighbor(active_neighbors,
                                                    parent);
                   // Compute the flux to each active neighbor
-                  for (unsigned int a=0;
-                       a != active_neighbors.size(); ++a)
+                  for (std::size_t a=0,
+                        n_active_neighbors = active_neighbors.size();
+                       a != n_active_neighbors; ++a)
                     {
                       const Elem * f = active_neighbors[a];
                       // FIXME - what about when f->level <
@@ -257,7 +258,7 @@ void JumpErrorEstimator::estimate_error (const System & system,
                     (fine_context->get_elem_solution().size(),
                      Uparent.size());
                   fine_context->get_elem_solution() = Uparent;
-                  fine_context->side = n_p;
+                  fine_context->side = cast_int<unsigned char>(n_p);
                   fine_context->side_fe_reinit();
 
                   // If we find a boundary flux for any variable,
@@ -292,14 +293,14 @@ void JumpErrorEstimator::estimate_error (const System & system,
       // Loop over the neighbors of element e
       for (auto n_e : e->side_index_range())
         {
-          if ((e->neighbor_ptr(n_e) != libmesh_nullptr) ||
+          if ((e->neighbor_ptr(n_e) != nullptr) ||
               integrate_boundary_sides)
             {
-              fine_context->side = n_e;
+              fine_context->side = cast_int<unsigned char>(n_e);
               fine_context->side_fe_reinit();
             }
 
-          if (e->neighbor_ptr(n_e) != libmesh_nullptr) // e is not on the boundary
+          if (e->neighbor_ptr(n_e) != nullptr) // e is not on the boundary
             {
               const Elem * f           = e->neighbor_ptr(n_e);
               const dof_id_type f_id = f->id();
@@ -335,7 +336,7 @@ void JumpErrorEstimator::estimate_error (const System & system,
                         this->coarse_n_flux_faces_increment();
                     }
                 } // end if (case1 || case2)
-            } // if (e->neighbor(n_e) != libmesh_nullptr)
+            } // if (e->neighbor(n_e) != nullptr)
 
           // Otherwise, e is on the boundary.  If it happens to
           // be on a Dirichlet boundary, we need not do anything.
@@ -361,7 +362,7 @@ void JumpErrorEstimator::estimate_error (const System & system,
 
               if (scale_by_n_flux_faces && found_boundary_flux)
                 n_flux_faces[fine_context->get_elem().id()]++;
-            } // end if (e->neighbor_ptr(n_e) == libmesh_nullptr)
+            } // end if (e->neighbor_ptr(n_e) == nullptr)
         } // end loop over neighbors
     } // End loop over active local elements
 
@@ -378,7 +379,7 @@ void JumpErrorEstimator::estimate_error (const System & system,
   this->reduce_error(error_per_cell, system.comm());
 
   // Compute the square-root of each component.
-  for (std::size_t i=0; i<error_per_cell.size(); i++)
+  for (auto i : index_range(error_per_cell))
     if (error_per_cell[i] != 0.)
       error_per_cell[i] = std::sqrt(error_per_cell[i]);
 
@@ -391,17 +392,16 @@ void JumpErrorEstimator::estimate_error (const System & system,
       // Sanity check: Make sure the number of flux faces is
       // always an integer value
 #ifdef DEBUG
-      for (std::size_t i=0; i<n_flux_faces.size(); ++i)
-        libmesh_assert_equal_to (n_flux_faces[i], static_cast<float>(static_cast<unsigned int>(n_flux_faces[i])) );
+      for (const auto & val : n_flux_faces)
+        libmesh_assert_equal_to (val, static_cast<float>(static_cast<unsigned int>(val)));
 #endif
 
       // Scale the error by the number of flux faces for each element
-      for (std::size_t i=0; i<n_flux_faces.size(); ++i)
+      for (auto i : index_range(n_flux_faces))
         {
           if (n_flux_faces[i] == 0.0) // inactive or non-local element
             continue;
 
-          //libMesh::out << "Element " << i << " has " << n_flux_faces[i] << " flux faces." << std::endl;
           error_per_cell[i] /= static_cast<ErrorVectorReal>(n_flux_faces[i]);
         }
     }
@@ -425,17 +425,17 @@ JumpErrorEstimator::reinit_sides ()
 {
   fine_context->side_fe_reinit();
 
-  unsigned int dim = fine_context->get_elem().dim();
+  unsigned short dim = fine_context->get_elem().dim();
   libmesh_assert_equal_to(dim, coarse_context->get_elem().dim());
 
-  FEBase * fe_fine = libmesh_nullptr;
+  FEBase * fe_fine = nullptr;
   fine_context->get_side_fe( 0, fe_fine, dim );
 
   // Get the physical locations of the fine element quadrature points
   std::vector<Point> qface_point = fe_fine->get_xyz();
 
   // Find the master quadrature point locations on the coarse element
-  FEBase * fe_coarse = libmesh_nullptr;
+  FEBase * fe_coarse = nullptr;
   coarse_context->get_side_fe( 0, fe_coarse, dim );
 
   std::vector<Point> qp_coarse;
@@ -463,7 +463,7 @@ float JumpErrorEstimator::coarse_n_flux_faces_increment ()
 {
   // Keep track of the number of internal flux sides found on each
   // element
-  unsigned int dim = coarse_context->get_elem().dim();
+  unsigned short dim = coarse_context->get_elem().dim();
 
   const unsigned int divisor =
     1 << (dim-1)*(fine_context->get_elem().level() -

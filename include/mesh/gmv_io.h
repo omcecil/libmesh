@@ -24,7 +24,15 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/mesh_output.h"
 #include "libmesh/mesh_input.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ElemType : int;
+}
+#else
 #include "libmesh/enum_elem_type.h"
+#endif
 
 // C++ includes
 #include <map>
@@ -65,12 +73,12 @@ public:
   /**
    * This method implements writing a mesh to a specified file.
    */
-  virtual void write (const std::string &) libmesh_override;
+  virtual void write (const std::string &) override;
 
   /**
    * This method implements reading a mesh from a specified file.
    */
-  virtual void read (const std::string & mesh_file) libmesh_override;
+  virtual void read (const std::string & mesh_file) override;
 
   /**
    * Bring in base class functionality for name resolution and to
@@ -84,7 +92,7 @@ public:
    */
   virtual void write_nodal_data (const std::string &,
                                  const std::vector<Number> &,
-                                 const std::vector<std::string> &) libmesh_override;
+                                 const std::vector<std::string> &) override;
 
   /**
    * Flag indicating whether or not to write a binary file.  While
@@ -131,7 +139,7 @@ public:
   void write_discontinuous_gmv (const std::string & name,
                                 const EquationSystems & es,
                                 const bool write_partitioning,
-                                const std::set<std::string> * system_names=libmesh_nullptr) const;
+                                const std::set<std::string> * system_names=nullptr) const;
 
 
   /**
@@ -141,8 +149,8 @@ public:
    * (without subcells).
    */
   void write_ascii_new_impl (const std::string &,
-                             const std::vector<Number> * = libmesh_nullptr,
-                             const std::vector<std::string> * = libmesh_nullptr);
+                             const std::vector<Number> * = nullptr,
+                             const std::vector<std::string> * = nullptr);
 
   /**
    * Takes a vector of cell-centered data to be plotted.
@@ -173,8 +181,8 @@ private:
    * (using subcells) which was the default in libMesh-0.4.3-rc2.
    */
   void write_ascii_old_impl (const std::string &,
-                             const std::vector<Number> * = libmesh_nullptr,
-                             const std::vector<std::string> * = libmesh_nullptr);
+                             const std::vector<Number> * = nullptr,
+                             const std::vector<std::string> * = nullptr);
 
   /**
    * This method implements writing a mesh with nodal data to a
@@ -182,8 +190,8 @@ private:
    * provided.
    */
   void write_binary (const std::string &,
-                     const std::vector<Number> * = libmesh_nullptr,
-                     const std::vector<std::string> * = libmesh_nullptr);
+                     const std::vector<Number> * = nullptr,
+                     const std::vector<std::string> * = nullptr);
 
   /**
    * Flag to write binary data.

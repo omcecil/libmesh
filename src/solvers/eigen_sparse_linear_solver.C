@@ -22,16 +22,18 @@
 #ifdef LIBMESH_HAVE_EIGEN
 
 
-// C++ includes
-
 // Local Includes
 #include "libmesh/eigen_sparse_linear_solver.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/solver_configuration.h"
+#include "libmesh/enum_preconditioner_type.h"
+#include "libmesh/enum_solver_type.h"
 
 // GMRES is an "unsupported" iterative solver in Eigen.
+#include "libmesh/ignore_warnings.h"
 #include <unsupported/Eigen/IterativeSolvers>
+#include "libmesh/restore_warnings.h"
 
 namespace libMesh
 {
@@ -142,8 +144,7 @@ EigenSparseLinearSolver<T>::solve (SparseMatrix<T> & matrix_in,
         // solver.
         if (this->_solver_configuration)
           {
-            std::map<std::string, int>::iterator it =
-              this->_solver_configuration->int_valued_data.find("gmres_restart");
+            auto it = this->_solver_configuration->int_valued_data.find("gmres_restart");
 
             if (it != this->_solver_configuration->int_valued_data.end())
               solver.set_restart(it->second);
@@ -290,7 +291,7 @@ void EigenSparseLinearSolver<T>::set_eigen_preconditioner_type ()
   // switch (this->_preconditioner_type)
   //   {
   //   case IDENTITY_PRECOND:
-  //     _precond_type = libmesh_nullptr; return;
+  //     _precond_type = nullptr; return;
 
   //   case ILU_PRECOND:
   //     _precond_type = ILUPrecond; return;
@@ -316,8 +317,7 @@ void EigenSparseLinearSolver<T>::set_eigen_preconditioner_type ()
 template <typename T>
 LinearConvergenceReason EigenSparseLinearSolver<T>::get_converged_reason() const
 {
-  std::map<Eigen::ComputationInfo, LinearConvergenceReason>::iterator it =
-    _convergence_reasons.find(_comp_info);
+  auto it = _convergence_reasons.find(_comp_info);
 
   // If later versions of Eigen start returning new enumerations,
   // we'll need to add them to the map...

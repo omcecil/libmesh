@@ -15,12 +15,12 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-// C++ includes
-
 // Local includes
 #include "libmesh/side.h"
 #include "libmesh/edge_edge3.h"
 #include "libmesh/face_quad8.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -30,7 +30,12 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // Quad8 class static member initializations
-const unsigned int Quad8::side_nodes_map[4][3] =
+const int Quad8::num_nodes;
+const int Quad8::num_sides;
+const int Quad8::num_children;
+const int Quad8::nodes_per_side;
+
+const unsigned int Quad8::side_nodes_map[Quad8::num_sides][Quad8::nodes_per_side] =
   {
     {0, 1, 4}, // Side 0
     {1, 2, 5}, // Side 1
@@ -41,7 +46,7 @@ const unsigned int Quad8::side_nodes_map[4][3] =
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Quad8::_embedding_matrix[4][8][8] =
+const float Quad8::_embedding_matrix[Quad8::num_children][Quad8::num_nodes][Quad8::num_nodes] =
   {
     // embedding matrix for child 0
     {
@@ -126,13 +131,17 @@ bool Quad8::is_node_on_side(const unsigned int n,
                             const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 3; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
 }
 
-
+std::vector<unsigned>
+Quad8::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
+}
 
 bool Quad8::has_affine_map() const
 {
@@ -150,6 +159,13 @@ bool Quad8::has_affine_map() const
       !v.relative_fuzzy_equals(this->point(5) - this->point(1)))
     return false;
   return true;
+}
+
+
+
+Order Quad8::default_order() const
+{
+  return SECOND;
 }
 
 
@@ -191,7 +207,7 @@ unsigned int Quad8::which_node_am_i(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
-  libmesh_assert_less (side_node, 3);
+  libmesh_assert_less (side_node, Quad8::nodes_per_side);
 
   return Quad8::side_nodes_map[side][side_node];
 }
@@ -217,6 +233,14 @@ std::unique_ptr<Elem> Quad8::build_side_ptr (const unsigned int i,
 
       return edge;
     }
+}
+
+
+
+void Quad8::build_side_ptr (std::unique_ptr<Elem> & side,
+                            const unsigned int i)
+{
+  this->simple_build_side_ptr<Quad8>(side, i, EDGE3);
 }
 
 

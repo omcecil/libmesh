@@ -24,13 +24,21 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/enum_parallel_type.h"
-#include "libmesh/enum_solver_package.h"
 #include "libmesh/id_types.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h"
 #include "libmesh/parallel_object.h"
 #include "libmesh/dense_subvector.h"
 #include "libmesh/dense_vector.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum SolverPackage : int;
+}
+#else
+#include "libmesh/enum_solver_package.h"
+#endif
 
 // C++ includes
 #include <cstddef>
@@ -49,11 +57,16 @@ template <typename T> class DenseSubVector;
 template <typename T> class SparseMatrix;
 template <typename T> class ShellMatrix;
 
-
 /**
- * Numeric vector. Provides a uniform interface
- * to vector storage schemes for different linear
- * algebra libraries.
+ * \brief Provides a uniform interface to vector storage schemes for different
+ * linear algebra libraries.
+ *
+ * \note This class is the abstract base class for different implementations
+ * of numeric vectors.  Most of the time you should use a System object to
+ * create numeric vectors.  If this is not desired, you can instantiate one of
+ * the derived classes (PetscVector, EigenSparseVector, etc.) or use the
+ * NumericVector::build method. When creating the vector yourself, make sure
+ * that you initialize the vector properly (NumericVector::init).
  *
  * \author Benjamin S. Kirk
  * \date 2003
@@ -99,13 +112,26 @@ public:
                  const std::vector<numeric_index_type> & ghost,
                  const ParallelType ptype = AUTOMATIC);
 
-public:
+  /**
+   * This _looks_ like a copy assignment operator, but note that,
+   * unlike normal copy assignment operators, it is pure virtual. This
+   * function should be overridden in derived classes so that they can
+   * be copied correctly via references to the base class. This design
+   * usually isn't a good idea in general, but in this context it
+   * works because we usually don't have a mix of different kinds of
+   * NumericVectors active in the library at a single time.
+   *
+   * \returns A reference to *this as the base type.
+   */
+  virtual NumericVector<T> & operator= (const NumericVector<T> & v) = 0;
 
   /**
-   * Destructor, deallocates memory. Made virtual to allow
-   * for derived classes to behave properly.
+   * The 5 special functions can be defaulted for this class, as it
+   * does not manage any memory itself.
    */
-  virtual ~NumericVector ();
+  NumericVector (NumericVector &&) = default;
+  NumericVector (const NumericVector &) = default;
+  NumericVector & operator= (NumericVector &&) = default;
 
   /**
    * Builds a \p NumericVector on the processors in communicator
@@ -171,36 +197,36 @@ public:
   virtual std::unique_ptr<NumericVector<T>> clone () const = 0;
 
   /**
-   * Change the dimension of the vector to \p N. The reserved memory
-   * for this vector remains unchanged if possible.  If \p N==0, all
+   * Change the dimension of the vector to \p n. The reserved memory
+   * for this vector remains unchanged if possible.  If \p n==0, all
    * memory is freed. Therefore, if you want to resize the vector and
    * release the memory not needed, you have to first call \p init(0)
-   * and then \p init(N). This behaviour is analogous to that of the
+   * and then \p init(n). This behaviour is analogous to that of the
    * STL containers.
    *
    * On \p fast==false, the vector is filled by zeros.
    */
-  virtual void init (const numeric_index_type,
-                     const numeric_index_type,
-                     const bool = false,
-                     const ParallelType = AUTOMATIC) = 0;
+  virtual void init (const numeric_index_type n,
+                     const numeric_index_type n_local,
+                     const bool fast = false,
+                     const ParallelType ptype = AUTOMATIC) = 0;
 
   /**
    * Call \p init() with n_local = N.
    */
-  virtual void init (const numeric_index_type,
-                     const bool = false,
-                     const ParallelType = AUTOMATIC) = 0;
+  virtual void init (const numeric_index_type n,
+                     const bool fast = false,
+                     const ParallelType ptype = AUTOMATIC) = 0;
 
   /**
    * Create a vector that holds tha local indices plus those specified
    * in the \p ghost argument.
    */
-  virtual void init (const numeric_index_type /*N*/,
-                     const numeric_index_type /*n_local*/,
-                     const std::vector<numeric_index_type> & /*ghost*/,
-                     const bool /*fast*/ = false,
-                     const ParallelType = AUTOMATIC) = 0;
+  virtual void init (const numeric_index_type n,
+                     const numeric_index_type n_local,
+                     const std::vector<numeric_index_type> & ghost,
+                     const bool fast = false,
+                     const ParallelType ptype = AUTOMATIC) = 0;
 
   /**
    * Creates a vector that has the same dimension and storage type as
@@ -215,13 +241,6 @@ public:
    * \returns A reference to *this.
    */
   virtual NumericVector<T> & operator= (const T s) = 0;
-
-  /**
-   * Sets (*this)(i) = v(i) for each entry of the vector.
-   *
-   * \returns A reference to *this as the base type.
-   */
-  virtual NumericVector<T> & operator= (const NumericVector<T> & v) = 0;
 
   /**
    * Sets (*this)(i) = v(i) for each entry of the vector.
@@ -386,7 +405,7 @@ public:
    *
    * \returns A reference to *this.
    */
-  virtual NumericVector<T> & operator /= (NumericVector<T> & /*v*/) = 0;
+  virtual NumericVector<T> & operator /= (const NumericVector<T> & /*v*/) = 0;
 
   /**
    * Computes the pointwise reciprocal,
@@ -774,15 +793,6 @@ NumericVector<T>::NumericVector (const Parallel::Communicator & comm_in,
 
 template <typename T>
 inline
-NumericVector<T>::~NumericVector ()
-{
-  clear ();
-}
-
-
-
-template <typename T>
-inline
 void NumericVector<T>::clear ()
 {
   _is_closed      = false;
@@ -815,7 +825,7 @@ void NumericVector<T>::get(const std::vector<numeric_index_type> & index,
   if (!num)
     return;
 
-  this->get(index, &values[0]);
+  this->get(index, values.data());
 }
 
 
@@ -827,7 +837,7 @@ void NumericVector<T>::add_vector(const std::vector<T> & v,
 {
   libmesh_assert(v.size() == dof_indices.size());
   if (!v.empty())
-    this->add_vector(&v[0], dof_indices);
+    this->add_vector(v.data(), dof_indices);
 }
 
 
@@ -851,7 +861,7 @@ void NumericVector<T>::insert(const std::vector<T> & v,
 {
   libmesh_assert(v.size() == dof_indices.size());
   if (!v.empty())
-    this->insert(&v[0], dof_indices);
+    this->insert(v.data(), dof_indices);
 }
 
 

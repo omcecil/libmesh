@@ -193,8 +193,8 @@ Node * ReplicatedMesh::node_ptr (const dof_id_type i)
 const Node * ReplicatedMesh::query_node_ptr (const dof_id_type i) const
 {
   if (i >= this->n_nodes())
-    return libmesh_nullptr;
-  libmesh_assert (_nodes[i] == libmesh_nullptr ||
+    return nullptr;
+  libmesh_assert (_nodes[i] == nullptr ||
                   _nodes[i]->id() == i); // This will change soon
 
   return _nodes[i];
@@ -206,8 +206,8 @@ const Node * ReplicatedMesh::query_node_ptr (const dof_id_type i) const
 Node * ReplicatedMesh::query_node_ptr (const dof_id_type i)
 {
   if (i >= this->n_nodes())
-    return libmesh_nullptr;
-  libmesh_assert (_nodes[i] == libmesh_nullptr ||
+    return nullptr;
+  libmesh_assert (_nodes[i] == nullptr ||
                   _nodes[i]->id() == i); // This will change soon
 
   return _nodes[i];
@@ -243,8 +243,8 @@ Elem * ReplicatedMesh::elem_ptr (const dof_id_type i)
 const Elem * ReplicatedMesh::query_elem_ptr (const dof_id_type i) const
 {
   if (i >= this->n_elem())
-    return libmesh_nullptr;
-  libmesh_assert (_elements[i] == libmesh_nullptr ||
+    return nullptr;
+  libmesh_assert (_elements[i] == nullptr ||
                   _elements[i]->id() == i); // This will change soon
 
   return _elements[i];
@@ -256,8 +256,8 @@ const Elem * ReplicatedMesh::query_elem_ptr (const dof_id_type i) const
 Elem * ReplicatedMesh::query_elem_ptr (const dof_id_type i)
 {
   if (i >= this->n_elem())
-    return libmesh_nullptr;
-  libmesh_assert (_elements[i] == libmesh_nullptr ||
+    return nullptr;
+  libmesh_assert (_elements[i] == nullptr ||
                   _elements[i]->id() == i); // This will change soon
 
   return _elements[i];
@@ -292,7 +292,7 @@ Elem * ReplicatedMesh::add_elem (Elem * e)
     }
   else
     {
-      _elements.resize(id+1, libmesh_nullptr);
+      _elements.resize(id+1, nullptr);
     }
 
   _elements[id] = e;
@@ -362,8 +362,8 @@ void ReplicatedMesh::delete_elem(Elem * e)
   // delete the element
   delete e;
 
-  // explicitly NULL the pointer
-  *pos = libmesh_nullptr;
+  // explicitly zero the pointer
+  *pos = nullptr;
 }
 
 
@@ -378,7 +378,7 @@ void ReplicatedMesh::renumber_elem(const dof_id_type old_id,
   el->set_id(new_id);
   libmesh_assert (!_elements[new_id]);
   _elements[new_id] = el;
-  _elements[old_id] = libmesh_nullptr;
+  _elements[old_id] = nullptr;
 }
 
 
@@ -393,7 +393,7 @@ Node * ReplicatedMesh::add_point (const Point & p,
   //   n->processor_id() = proc_id;
   //   _nodes.push_back (n);
 
-  Node * n = libmesh_nullptr;
+  Node * n = nullptr;
 
   // If the user requests a valid id, either
   // provide the existing node or resize the container
@@ -404,7 +404,7 @@ Node * ReplicatedMesh::add_point (const Point & p,
     else
       _nodes.resize(id+1);
   else
-    _nodes.push_back (static_cast<Node *>(libmesh_nullptr));
+    _nodes.push_back (static_cast<Node *>(nullptr));
 
   // if the node already exists, then assign new (x,y,z) values
   if (n)
@@ -428,7 +428,7 @@ Node * ReplicatedMesh::add_point (const Point & p,
         _nodes[id] = n;
     }
 
-  // better not pass back a NULL pointer.
+  // better not pass back a nullptr.
   libmesh_assert (n);
 
   return n;
@@ -459,7 +459,7 @@ Node * ReplicatedMesh::add_node (Node * n)
 Node * ReplicatedMesh::insert_node(Node * n)
 {
   if (!n)
-    libmesh_error_msg("Error, attempting to insert NULL node.");
+    libmesh_error_msg("Error, attempting to insert nullptr node.");
 
   if (n->id() == DofObject::invalid_id)
     libmesh_error_msg("Error, cannot insert node with invalid id.");
@@ -472,7 +472,7 @@ Node * ReplicatedMesh::insert_node(Node * n)
       // redundant insert is done, but when that happens we ought to
       // always be able to make the code more efficient by avoiding
       // the redundant insert, so let's keep screaming "Error" here.
-      if (_nodes[ n->id() ] != libmesh_nullptr)
+      if (_nodes[ n->id() ] != nullptr)
         libmesh_error_msg("Error, cannot insert node on top of existing node.");
     }
   else
@@ -532,8 +532,8 @@ void ReplicatedMesh::delete_node(Node * n)
   // delete the node
   delete n;
 
-  // explicitly NULL the pointer
-  *pos = libmesh_nullptr;
+  // explicitly zero the pointer
+  *pos = nullptr;
 }
 
 
@@ -548,7 +548,7 @@ void ReplicatedMesh::renumber_node(const dof_id_type old_id,
   nd->set_id(new_id);
   libmesh_assert (!_nodes[new_id]);
   _nodes[new_id] = nd;
-  _nodes[old_id] = libmesh_nullptr;
+  _nodes[old_id] = nullptr;
 }
 
 
@@ -614,7 +614,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
   std::unordered_set<Node *> connected_nodes;
 
   // Loop over the elements.  Note that there may
-  // be NULLs in the _elements vector from the coarsening
+  // be nullptrs in the _elements vector from the coarsening
   // process.  Pack the elements in to a contiguous array
   // and then trim any excess.
   {
@@ -623,7 +623,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
     const std::vector<Elem *>::iterator end = _elements.end();
 
     for (; in != end; ++in)
-      if (*in != libmesh_nullptr)
+      if (*in != nullptr)
         {
           Elem * el = *in;
 
@@ -664,7 +664,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
                               _nodes[dst_idx] );
 
                     // Set proper indices where that makes sense
-                    if (_nodes[src_idx] != libmesh_nullptr)
+                    if (_nodes[src_idx] != nullptr)
                       _nodes[src_idx]->set_id (src_idx);
                     _nodes[dst_idx]->set_id (dst_idx);
                   }
@@ -672,7 +672,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
         }
 
     // Erase any additional storage. These elements have been
-    // copied into NULL voids by the procedure above, and are
+    // copied into nullptr voids by the procedure above, and are
     // thus repeated and unnecessary.
     _elements.erase (out_iter, end);
   }
@@ -681,7 +681,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
   if (_skip_renumber_nodes_and_elements)
     {
       // Loop over the nodes.  Note that there may
-      // be NULLs in the _nodes vector from the coarsening
+      // be nullptrs in the _nodes vector from the coarsening
       // process.  Pack the nodes in to a contiguous array
       // and then trim any excess.
 
@@ -690,7 +690,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
       const std::vector<Node *>::iterator end = _nodes.end();
 
       for (; in != end; ++in)
-        if (*in != libmesh_nullptr)
+        if (*in != nullptr)
           {
             // This is a reference so that if we change the pointer it will change in the vector
             Node * & nd = *in;
@@ -710,7 +710,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
 
                 // delete the node
                 delete nd;
-                nd = libmesh_nullptr;
+                nd = nullptr;
               }
           }
 
@@ -734,7 +734,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
           {
             // Mesh modification code might have already deleted some
             // nodes
-            if (node == libmesh_nullptr)
+            if (node == nullptr)
               continue;
 
             // remove any boundary information associated with
@@ -743,7 +743,7 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
 
             // delete the node
             delete node;
-            node = libmesh_nullptr;
+            node = nullptr;
           }
 
         _nodes.erase (nd, end);
@@ -762,12 +762,12 @@ void ReplicatedMesh::fix_broken_node_and_element_numbering ()
 {
   // Nodes first
   for (std::size_t n=0; n<this->_nodes.size(); n++)
-    if (this->_nodes[n] != libmesh_nullptr)
+    if (this->_nodes[n] != nullptr)
       this->_nodes[n]->set_id() = cast_int<dof_id_type>(n);
 
   // Elements next
   for (std::size_t e=0; e<this->_elements.size(); e++)
-    if (this->_elements[e] != libmesh_nullptr)
+    if (this->_elements[e] != nullptr)
       this->_elements[e]->set_id() = cast_int<dof_id_type>(e);
 }
 
@@ -801,7 +801,7 @@ void ReplicatedMesh::stitch_surfaces (boundary_id_type boundary_id_1,
                                       bool use_binary_search,
                                       bool enforce_all_nodes_match_on_boundaries)
 {
-  stitching_helper(libmesh_nullptr,
+  stitching_helper(nullptr,
                    boundary_id_1,
                    boundary_id_2,
                    tol,
@@ -832,7 +832,7 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
   // Mapping between all side keys in this mesh and elements+side numbers relevant to the boundary in this mesh as well.
   map_type side_to_elem_map;
 
-  // If there is only one mesh (i.e. other_mesh==NULL), then loop over this mesh twice
+  // If there is only one mesh (i.e. other_mesh == nullptr), then loop over this mesh twice
   if (!other_mesh)
     {
       other_mesh = this;
@@ -851,6 +851,10 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
 
       // Loop below fills in these sets for the two meshes.
       std::set<dof_id_type> this_boundary_node_ids, other_boundary_node_ids;
+
+      // Pull objects out of the loop to reduce heap operations
+      std::unique_ptr<Elem> side;
+
       {
         // Make temporary fixed-size arrays for loop
         boundary_id_type id_array[2]         = {this_mesh_boundary_id, other_mesh_boundary_id};
@@ -864,18 +868,13 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
             // nodeset.
             if (mesh_array[i]->get_boundary_info().n_nodeset_conds() > 0)
               {
-                std::vector<numeric_index_type> node_id_list;
-                std::vector<boundary_id_type> bc_id_list;
-
-                // Get the list of nodes with associated boundary IDs
-                mesh_array[i]->get_boundary_info().build_node_list(node_id_list, bc_id_list);
-
-                for (std::size_t node_index=0; node_index<bc_id_list.size(); node_index++)
+                // build_node_list() returns a vector of (node-id, bc-id) tuples
+                for (const auto & t : mesh_array[i]->get_boundary_info().build_node_list())
                   {
-                    boundary_id_type node_bc_id = bc_id_list[node_index];
+                    boundary_id_type node_bc_id = std::get<1>(t);
                     if (node_bc_id == id_array[i])
                       {
-                        dof_id_type this_node_id = node_id_list[node_index];
+                        dof_id_type this_node_id = std::get<0>(t);
                         set_array[i]->insert( this_node_id );
 
                         // We need to set h_min to some value. It's too expensive to
@@ -896,14 +895,14 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
               {
                 // Now check whether elem has a face on the specified boundary
                 for (auto side_id : el->side_index_range())
-                  if (el->neighbor_ptr(side_id) == libmesh_nullptr)
+                  if (el->neighbor_ptr(side_id) == nullptr)
                     {
                       // Get *all* boundary IDs on this side, not just the first one!
                       mesh_array[i]->get_boundary_info().boundary_ids (el, side_id, bc_ids);
 
                       if (std::find(bc_ids.begin(), bc_ids.end(), id_array[i]) != bc_ids.end())
                         {
-                          std::unique_ptr<Elem> side (el->build_side_ptr(side_id));
+                          el->build_side_ptr(side, side_id);
                           for (auto & n : side->node_ref_range())
                             set_array[i]->insert(n.id());
 
@@ -916,7 +915,7 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
                               key_type key = el->key(side_id);
                               val_type val;
                               val.first = el;
-                              val.second = side_id;
+                              val.second = cast_int<unsigned char>(side_id);
 
                               key_val_pair kvp;
                               kvp.first = key;
@@ -1134,7 +1133,7 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
     0;
 #endif
 
-  // If other_mesh!=NULL, then we have to do a bunch of work
+  // If other_mesh != nullptr, then we have to do a bunch of work
   // in order to copy it to this mesh
   if (this!=other_mesh)
     {
@@ -1160,56 +1159,25 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
       BoundaryInfo & boundary = this->get_boundary_info();
       const BoundaryInfo & other_boundary = other_mesh->get_boundary_info();
 
-      {
-        std::vector<dof_id_type>      node_id_list;
-        std::vector<boundary_id_type> bc_id_list;
+      for (const auto & t : other_boundary.build_node_list())
+        boundary.add_node(std::get<0>(t) + node_delta,
+                          std::get<1>(t));
 
-        other_boundary.build_node_list(node_id_list, bc_id_list);
-        for (std::size_t i=0; i != node_id_list.size(); ++i)
-          {
-            const dof_id_type our_id = node_id_list[i] + node_delta;
-            boundary.add_node(our_id, bc_id_list[i]);
-          }
-      }
+      for (const auto & t : other_boundary.build_side_list())
+        boundary.add_side(std::get<0>(t) + elem_delta,
+                          std::get<1>(t),
+                          std::get<2>(t));
 
-      {
-        std::vector<dof_id_type>        elem_id_list;
-        std::vector<unsigned short int> side_list;
-        std::vector<boundary_id_type>   bc_id_list;
+      for (const auto & t : other_boundary.build_edge_list())
+        boundary.add_edge(std::get<0>(t) + elem_delta,
+                          std::get<1>(t),
+                          std::get<2>(t));
 
-        other_boundary.build_side_list(elem_id_list, side_list, bc_id_list);
-        for (std::size_t i=0; i != elem_id_list.size(); ++i)
-          {
-            const dof_id_type our_id = elem_id_list[i] + elem_delta;
-            boundary.add_side(our_id, side_list[i], bc_id_list[i]);
-          }
-      }
+      for (const auto & t : other_boundary.build_shellface_list())
+        boundary.add_shellface(std::get<0>(t) + elem_delta,
+                               std::get<1>(t),
+                               std::get<2>(t));
 
-      {
-        std::vector<dof_id_type>        elem_id_list;
-        std::vector<unsigned short int> edge_list;
-        std::vector<boundary_id_type>   bc_id_list;
-
-        other_boundary.build_edge_list(elem_id_list, edge_list, bc_id_list);
-        for (std::size_t i=0; i != elem_id_list.size(); ++i)
-          {
-            const dof_id_type our_id = elem_id_list[i] + elem_delta;
-            boundary.add_edge(our_id, edge_list[i], bc_id_list[i]);
-          }
-      }
-
-      {
-        std::vector<dof_id_type>        elem_id_list;
-        std::vector<unsigned short int> shellface_list;
-        std::vector<boundary_id_type>   bc_id_list;
-
-        other_boundary.build_shellface_list(elem_id_list, shellface_list, bc_id_list);
-        for (std::size_t i=0; i != elem_id_list.size(); ++i)
-          {
-            const dof_id_type our_id = elem_id_list[i] + elem_delta;
-            boundary.add_shellface(our_id, shellface_list[i], bc_id_list[i]);
-          }
-      }
     } // end if (other_mesh)
 
   // Finally, we need to "merge" the overlapping nodes
@@ -1219,11 +1187,11 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
   // Then we iterate over node_to_node_map and delete the
   // duplicate nodes that came from other_mesh.
 
-  // Container to catch boundary IDs passed back from BoundaryInfo.
-  std::vector<boundary_id_type> bc_ids;
-
   {
     LOG_SCOPE("stitch_meshes node updates", "ReplicatedMesh");
+
+    // Container to catch boundary IDs passed back from BoundaryInfo.
+    std::vector<boundary_id_type> bc_ids;
 
     for (const auto & pr : node_to_elems_map)
       {
@@ -1269,11 +1237,14 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
   // and fix their lists of neighbors.
   // This is done according to the following steps:
   //   1. Loop over all copied elements adjacent to the boundary using node_to_elems_map (trying to avoid duplicates)
-  //   2. Look at all their sides with a NULL neighbor and update them using side_to_elem_map if necessary
+  //   2. Look at all their sides with a nullptr neighbor and update them using side_to_elem_map if necessary
   //   3. Update the corresponding side in side_to_elem_map as well
   if (skip_find_neighbors)
     {
       LOG_SCOPE("stitch_meshes neighbor fixes", "ReplicatedMesh");
+
+      // Pull objects out of the loop to reduce heap operations
+      std::unique_ptr<Elem> my_side, their_side;
 
       std::set<dof_id_type> fixed_elems;
       for (const auto & pr : node_to_elems_map)
@@ -1288,17 +1259,15 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
                   fixed_elems.insert(elem_id);
                   for (auto s : el->side_index_range())
                     {
-                      if (el->neighbor_ptr(s) == libmesh_nullptr)
+                      if (el->neighbor_ptr(s) == nullptr)
                         {
                           key_type key = el->key(s);
-                          typedef map_type::iterator key_val_it_type;
-                          std::pair<key_val_it_type, key_val_it_type>
-                            bounds = side_to_elem_map.equal_range(key);
+                          auto bounds = side_to_elem_map.equal_range(key);
 
                           if (bounds.first != bounds.second)
                             {
                               // Get the side for this element
-                              const std::unique_ptr<Elem> my_side(el->side_ptr(s));
+                              el->side_ptr(my_side, s);
 
                               // Look at all the entries with an equivalent key
                               while (bounds.first != bounds.second)
@@ -1308,7 +1277,7 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
 
                                   // Get the side for the neighboring element
                                   const unsigned int ns = bounds.first->second.second;
-                                  const std::unique_ptr<Elem> their_side(neighbor->side_ptr(ns));
+                                  neighbor->side_ptr(their_side, ns);
                                   //libmesh_assert(my_side.get());
                                   //libmesh_assert(their_side.get());
 
@@ -1346,6 +1315,13 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
                                         {
                                           neighbor->set_neighbor(ns,el);
                                         }
+                                      // It's OK to invalidate the
+                                      // bounds.first iterator here,
+                                      // as we are immediately going
+                                      // to break out of this while
+                                      // loop. bounds.first will
+                                      // therefore not be used for
+                                      // anything else.
                                       side_to_elem_map.erase (bounds.first);
                                       break;
                                     }
@@ -1373,7 +1349,7 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
 
       for (auto & el : element_ptr_range())
         for (auto side_id : el->side_index_range())
-          if (el->neighbor_ptr(side_id) != libmesh_nullptr)
+          if (el->neighbor_ptr(side_id) != nullptr)
             {
               // Completely remove the side from the boundary_info object if it has either
               // this_mesh_boundary_id or other_mesh_boundary_id.

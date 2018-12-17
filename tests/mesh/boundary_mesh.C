@@ -32,7 +32,9 @@ class BoundaryMeshTest : public CppUnit::TestCase {
 public:
   CPPUNIT_TEST_SUITE( BoundaryMeshTest );
 
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -82,21 +84,13 @@ protected:
     // and we will create an internal sideset along the border between
     // subdomains 1 and 2.
 
-    for (MeshBase::element_iterator
-           elem_it = _mesh->active_elements_begin(),
-           elem_end = _mesh->active_elements_end();
-         elem_it != elem_end; ++elem_it)
+    for (auto & elem : _mesh->active_element_ptr_range())
       {
-        Elem * elem = *elem_it;
-        if (elem)
-          {
-            const Point c = elem->centroid();
-            if (c(0) < 0.6 &&
-                c(1) < 0.4)
-              elem->subdomain_id() = 1;
-            else
-              elem->subdomain_id() = 2;
-          }
+        const Point c = elem->centroid();
+        if (c(0) < 0.6 && c(1) < 0.4)
+          elem->subdomain_id() = 1;
+        else
+          elem->subdomain_id() = 2;
       }
 
     // Get the border of the square
@@ -124,32 +118,22 @@ protected:
     // should not be overlapped elems in the BoundaryMesh.
     BoundaryInfo & bi = _mesh->get_boundary_info();
 
-    for (MeshBase::element_iterator
-           elem_it = _mesh->active_elements_begin(),
-           elem_end = _mesh->active_elements_end();
-         elem_it != elem_end; ++elem_it)
+    for (auto & elem : _mesh->active_element_ptr_range())
       {
-        Elem * elem = *elem_it;
-        if (elem)
+        const Point c = elem->centroid();
+        if (c(0) < 0.6 && c(1) < 0.4)
           {
-            const Point c = elem->centroid();
-            if (c(0) < 0.6 &&
-                c(1) < 0.4)
-              {
-                if (c(0) > 0.4)
-                  bi.add_side(elem, 1, bid);
-                if (c(1) > 0.3)
-                  bi.add_side(elem, 2, bid);
-              }
-            else
-              {
-                if (c(0) < 0.75 &&
-                    c(1) < 0.4)
-                  bi.add_side(elem, 3, bid);
-                if (c(0) < 0.6 &&
-                    c(1) < 0.5)
-                  bi.add_side(elem, 0, bid);
-              }
+            if (c(0) > 0.4)
+              bi.add_side(elem, 1, bid);
+            if (c(1) > 0.3)
+              bi.add_side(elem, 2, bid);
+          }
+        else
+          {
+            if (c(0) < 0.75 && c(1) < 0.4)
+              bi.add_side(elem, 3, bid);
+            if (c(0) < 0.6 && c(1) < 0.5)
+              bi.add_side(elem, 0, bid);
           }
       }
 
@@ -169,7 +153,9 @@ protected:
 public:
   void setUp()
   {
+#if LIBMESH_DIM > 1
     this->build_mesh();
+#endif
   }
 
   void testMesh()
@@ -213,15 +199,9 @@ public:
   void sanityCheck()
   {
     // Sanity check all the elements
-    MeshBase::const_element_iterator elem_it =
-      _mesh->active_elements_begin();
-    const MeshBase::const_element_iterator elem_end =
-      _mesh->active_elements_end();
-    for (; elem_it != elem_end; ++elem_it)
+    for (const auto & elem : _mesh->active_element_ptr_range())
       {
-        const Elem * elem = *elem_it;
-
-        const Elem * pip = elem->interior_parent();
+        const Elem * pip = elem->dim() < 2 ? elem->interior_parent() : nullptr;
 
         // On a DistributedMesh we might not be able to see the
         // interior_parent of a non-local element
@@ -249,14 +229,8 @@ public:
           }
       }
 
-    MeshBase::const_element_iterator left_bdy_elem_it =
-      _left_boundary_mesh->active_elements_begin();
-    const MeshBase::const_element_iterator left_bdy_elem_end =
-      _left_boundary_mesh->active_elements_end();
-    for (; left_bdy_elem_it != left_bdy_elem_end; ++left_bdy_elem_it)
+    for (const auto & elem : _left_boundary_mesh->active_element_ptr_range())
       {
-        const Elem * elem = *left_bdy_elem_it;
-
         CPPUNIT_ASSERT_EQUAL(elem->type(), EDGE3);
 
         const Elem * pip = elem->interior_parent();
@@ -279,15 +253,8 @@ public:
                                      TOLERANCE*TOLERANCE);
       }
 
-
-    MeshBase::const_element_iterator all_bdy_elem_it =
-      _left_boundary_mesh->active_elements_begin();
-    const MeshBase::const_element_iterator all_bdy_elem_end =
-      _left_boundary_mesh->active_elements_end();
-    for (; all_bdy_elem_it != all_bdy_elem_end; ++all_bdy_elem_it)
+    for (const auto & elem : _left_boundary_mesh->active_element_ptr_range())
       {
-        const Elem * elem = *all_bdy_elem_it;
-
         CPPUNIT_ASSERT_EQUAL(elem->type(), EDGE3);
 
         const Elem * pip = elem->interior_parent();
@@ -306,16 +273,9 @@ public:
         CPPUNIT_ASSERT_EQUAL(pip->level(), elem->level());
       }
 
-
     // Sanity check for the internal sideset mesh.
-    MeshBase::const_element_iterator
-      internal_elem_it = _internal_boundary_mesh->active_elements_begin(),
-      internal_elem_end = _internal_boundary_mesh->active_elements_end();
-
-    for (; internal_elem_it != internal_elem_end; ++internal_elem_it)
+    for (const auto & elem : _internal_boundary_mesh->active_element_ptr_range())
       {
-        const Elem * elem = *internal_elem_it;
-
         CPPUNIT_ASSERT_EQUAL(elem->type(), EDGE3);
 
         // All of the elements in the internal sideset mesh should
@@ -342,7 +302,9 @@ class BoundaryRefinedMeshTest : public BoundaryMeshTest {
 public:
   CPPUNIT_TEST_SUITE( BoundaryRefinedMeshTest );
 
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -351,6 +313,7 @@ public:
 
   void setUp()
   {
+#if LIBMESH_DIM > 1
     this->build_mesh();
 
     // Need to refine interior mesh before separate boundary meshes,
@@ -358,6 +321,7 @@ public:
     MeshRefinement(*_mesh).uniformly_refine(1);
     MeshRefinement(*_left_boundary_mesh).uniformly_refine(1);
     MeshRefinement(*_all_boundary_mesh).uniformly_refine(1);
+#endif
   }
 
   void testMesh()

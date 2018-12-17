@@ -93,7 +93,7 @@ void ExodusII_IO::write_discontinuous_exodusII(const std::string & name,
   std::vector<std::string> solution_names;
   std::vector<Number>      v;
 
-  es.build_variable_names  (solution_names, libmesh_nullptr, system_names);
+  es.build_variable_names  (solution_names, nullptr, system_names);
   es.build_discontinuous_solution_vector (v, system_names);
 
   this->write_nodal_data_discontinuous(name, v, solution_names);
@@ -318,7 +318,7 @@ void ExodusII_IO::read (const std::string & fname)
             = sideset_name;
       }
 
-    for (std::size_t e=0; e<exio_helper->elem_list.size(); e++)
+    for (auto e : index_range(exio_helper->elem_list))
       {
         // The numbers in the Exodus file sidesets should be thought
         // of as (1-based) indices into the elem_num_map array.  So,
@@ -337,7 +337,7 @@ void ExodusII_IO::read (const std::string & fname)
 
         // Map the zero-based Exodus side numbering to the libmesh side numbering
         unsigned int raw_side_index = exio_helper->side_list[e]-1;
-        unsigned int side_index_offset = conv.get_shellface_index_offset();
+        std::size_t side_index_offset = conv.get_shellface_index_offset();
 
         if (raw_side_index < side_index_offset)
           {
@@ -391,12 +391,12 @@ void ExodusII_IO::read (const std::string & fname)
 
         exio_helper->read_nodeset(nodeset);
 
-        for (std::size_t node=0; node<exio_helper->node_list.size(); node++)
+        for (const auto & exodus_id : exio_helper->node_list)
           {
             // As before, the entries in 'node_list' are 1-based
             // indices into the node_num_map array, so we have to map
             // them.  See comment above.
-            int libmesh_node_id = exio_helper->node_num_map[exio_helper->node_list[node] - 1] - 1;
+            int libmesh_node_id = exio_helper->node_num_map[exodus_id - 1] - 1;
             mesh.get_boundary_info().add_node(cast_int<dof_id_type>(libmesh_node_id),
                                               nodeset_id);
           }
@@ -488,7 +488,9 @@ void ExodusII_IO::copy_nodal_solution(System & system,
 
   const unsigned int var_num = system.variable_number(system_var_name);
 
-  for (std::size_t i=0; i<exio_helper->nodal_var_values.size(); ++i)
+  for (dof_id_type i=0,
+       n_nodal = cast_int<dof_id_type>(exio_helper->nodal_var_values.size());
+       i != n_nodal; ++i)
     {
       const Node * node = MeshInput<MeshBase>::mesh().query_node_ptr(i);
 
@@ -569,7 +571,7 @@ void ExodusII_IO::read_global_variable(std::vector<std::string> global_var_names
                                        unsigned int timestep,
                                        std::vector<Real> & global_values)
 {
-  unsigned int size = global_var_names.size();
+  std::size_t size = global_var_names.size();
   if (size == 0)
     libmesh_error_msg("ERROR, empty list of global variables to read from the Exodus file.");
 
@@ -580,7 +582,7 @@ void ExodusII_IO::read_global_variable(std::vector<std::string> global_var_names
   std::vector<std::string> global_var_names_exodus = exio_helper->global_var_names;
 
   global_values.clear();
-  for (unsigned int i = 0; i < size; ++i)
+  for (std::size_t i = 0; i != size; ++i)
     {
       // for each global variable in global_var_names, look the corresponding one in global_var_names_from_exodus
       // and fill global_values accordingly
@@ -626,15 +628,14 @@ void ExodusII_IO::write_element_data (const EquationSystems & es)
 
       // Filter that list against the _output_variables list.  Note: if names is still empty after
       // all this filtering, all the monomial variables will be gathered
-      std::vector<std::string>::iterator it = monomials.begin();
-      for (; it!=monomials.end(); ++it)
-        if (std::find(_output_variables.begin(), _output_variables.end(), *it) != _output_variables.end())
-          names.push_back(*it);
+      for (const auto & var : monomials)
+        if (std::find(_output_variables.begin(), _output_variables.end(), var) != _output_variables.end())
+          names.push_back(var);
     }
 
   // If we pass in a list of names to "get_solution" it'll filter the variables coming back
   std::vector<Number> soln;
-  es.get_solution(soln, names);
+  es.build_elemental_solution_vector(soln, names);
 
   // Also, store the list of subdomains on which each variable is active
   std::vector<std::set<subdomain_id_type>> vars_active_subdomains;
@@ -765,22 +766,17 @@ void ExodusII_IO::write_nodal_data (const std::string & fname,
       // order of [num_vars * node_id + var_id]. We now copy the
       // proper solution values contiguously into "cur_soln",
       // removing the gaps.
-      {
-        MeshBase::const_node_iterator it = mesh.nodes_begin();
-        const MeshBase::const_node_iterator end = mesh.nodes_end();
-        for (; it != end; ++it)
-          {
-            const Node * node = *it;
-            dof_id_type idx = node->id()*num_vars + c;
+      for (const auto & node : mesh.node_ptr_range())
+        {
+          dof_id_type idx = node->id()*num_vars + c;
 #ifdef LIBMESH_USE_REAL_NUMBERS
-            cur_soln.push_back(soln[idx]);
+          cur_soln.push_back(soln[idx]);
 #else
-            real_parts.push_back(soln[idx].real());
-            imag_parts.push_back(soln[idx].imag());
-            magnitudes.push_back(std::abs(soln[idx]));
+          real_parts.push_back(soln[idx].real());
+          imag_parts.push_back(soln[idx].imag());
+          magnitudes.push_back(std::abs(soln[idx]));
 #endif
-          }
-      }
+        }
 
       // Finally, actually call the Exodus API to write to file.
 #ifdef LIBMESH_USE_REAL_NUMBERS
@@ -896,9 +892,8 @@ void ExodusII_IO::write (const std::string & fname)
   // data, while "appending" is really intended to add data to an
   // existing file.  If we're verbose, print a message to this effect.
   if (_append && _verbose)
-    libMesh::out << "Warning: Appending in ExodusII_IO::write() does not make sense.\n"
-                 << "Creating a new file instead!"
-                 << std::endl;
+    libmesh_warning("Warning: Appending in ExodusII_IO::write() does not make sense.\n"
+                    "Creating a new file instead!");
 
   exio_helper->create(fname);
   exio_helper->initialize(fname,mesh);
@@ -908,11 +903,8 @@ void ExodusII_IO::write (const std::string & fname)
   exio_helper->write_nodesets(mesh);
 
   if ((mesh.get_boundary_info().n_edge_conds() > 0) && _verbose)
-    {
-      libMesh::out << "Warning: Mesh contains edge boundary IDs, but these "
-                   << "are not supported by the ExodusII format."
-                   << std::endl;
-    }
+    libmesh_warning("Warning: Mesh contains edge boundary IDs, but these "
+                    "are not supported by the ExodusII format.");
 }
 
 
@@ -1012,11 +1004,8 @@ void ExodusII_IO::write_nodal_data_common(std::string fname,
           exio_helper->write_nodesets(mesh);
 
           if ((mesh.get_boundary_info().n_edge_conds() > 0) && _verbose)
-            {
-              libMesh::out << "Warning: Mesh contains edge boundary IDs, but these "
-                           << "are not supported by the ExodusII format."
-                           << std::endl;
-            }
+            libmesh_warning("Warning: Mesh contains edge boundary IDs, but these "
+                            "are not supported by the ExodusII format.");
 
           exio_helper->initialize_nodal_variables(names);
         }
@@ -1044,6 +1033,16 @@ const std::vector<std::string> & ExodusII_IO::get_elem_var_names()
 {
   exio_helper->read_var_names(ExodusII_IO_Helper::ELEMENTAL);
   return exio_helper->elem_var_names;
+}
+
+ExodusII_IO_Helper & ExodusII_IO::get_exio_helper()
+{
+  // Provide a warning when accessing the helper object
+  // since it is a non-public API and is likely to see
+  // future API changes
+  libmesh_experimental();
+
+  return *exio_helper;
 }
 
 

@@ -32,6 +32,7 @@
 #include "libmesh/boundary_info.h"
 #include "libmesh/mesh_triangle_holes.h"
 #include "libmesh/mesh_triangle_wrapper.h"
+#include "libmesh/enum_elem_type.h"
 
 namespace libMesh
 {
@@ -42,7 +43,7 @@ namespace libMesh
 // Constructor
 TriangleInterface::TriangleInterface(UnstructuredMesh & mesh)
   : _mesh(mesh),
-    _holes(libmesh_nullptr),
+    _holes(nullptr),
     _elem_type(TRI3),
     _desired_area(0.1),
     _minimum_angle(20.0),
@@ -59,7 +60,7 @@ TriangleInterface::TriangleInterface(UnstructuredMesh & mesh)
 void TriangleInterface::triangulate()
 {
   // Will the triangulation have holes?
-  const bool have_holes = ((_holes != libmesh_nullptr) && (!_holes->empty()));
+  const bool have_holes = ((_holes != nullptr) && (!_holes->empty()));
 
   // If the initial PSLG is really simple, e.g. an L-shaped domain or
   // a square/rectangle, the resulting triangulation may be very
@@ -101,7 +102,7 @@ void TriangleInterface::triangulate()
   // Regardless of whether we added additional points, the set of points to
   // triangulate is now sitting in the mesh.
 
-  // If the holes vector is non-NULL (and non-empty) we need to determine
+  // If the holes vector is non-nullptr (and non-empty) we need to determine
   // the number of additional points which the holes will add to the
   // triangulation.
   unsigned int n_hole_points = 0;
@@ -238,7 +239,7 @@ void TriangleInterface::triangulate()
   // p ~ Triangulates a Planar Straight Line Graph
   //     If the `p' switch is used, `segmentlist' must point to a list of
   //     segments, `numberofsegments' must be properly set, and
-  //     `segmentmarkerlist' must either be set to NULL (in which case all
+  //     `segmentmarkerlist' must either be set to nullptr (in which case all
   //     markers default to zero), or must point to a list of markers.
   // D ~ Conforming Delaunay: use this switch if you want all triangles
   //     in the mesh to be Delaunay, and not just constrained Delaunay
@@ -317,7 +318,7 @@ void TriangleInterface::triangulate()
   TriangleWrapper::triangulate(const_cast<char *>(flags.str().c_str()),
                                &initial,
                                &final,
-                               libmesh_nullptr); // voronoi ouput -- not used
+                               nullptr); // voronoi ouput -- not used
 
 
   // Send the information computed by Triangle to the Mesh.

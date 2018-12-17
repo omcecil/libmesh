@@ -27,6 +27,7 @@
 // C++ includes
 #include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
 #include <cmath>
+#include <tuple>
 
 namespace libMesh
 {
@@ -38,9 +39,7 @@ template <unsigned int N, typename T> class TypeNTensor;
 
 /**
  * This class defines a tensor in \p LIBMESH_DIM dimensional space of
- * type T.  T may either be Real or Complex.  The default constructor
- * for this class is protected, suggesting that you should not
- * instantiate one of these directly.
+ * type T.  T may either be Real or Complex.
  *
  * \author Roy Stogner
  * \date 2004
@@ -51,14 +50,14 @@ class TypeTensor
   template <typename T2>
   friend class TypeTensor;
 
-protected:
-
+public:
   /**
    * Empty constructor. Gives the tensor 0 in \p LIBMESH_DIM
    * dimensions.
    */
   TypeTensor  ();
 
+protected:
   /**
    * Constructor-from-T.  By default sets higher dimensional entries
    * to 0.  This is a poor constructor for 2D tensors - if the default
@@ -115,6 +114,11 @@ public:
    * Helper typedef for C++98 generic programming.
    */
   typedef T value_type;
+
+  /**
+   * Helper typedef for generic index programming
+   */
+  typedef std::tuple<unsigned int, unsigned int> index_type;
 
   /**
    * Copy-constructor.
@@ -240,18 +244,25 @@ public:
    * \returns A copy of the result, this tensor is unchanged.
    */
   template <typename Scalar>
-  typename boostcopy::enable_if_c<
+  auto
+  operator * (const Scalar scalar) const -> typename boostcopy::enable_if_c<
     ScalarTraits<Scalar>::value,
-    TypeTensor<typename CompareTypes<T, Scalar>::supertype>>::type
-  operator * (const Scalar) const;
+    TypeTensor<decltype(T() * scalar)>>::type;
 
   /**
    * Multiply this tensor by a scalar value in place.
    *
    * \returns A reference to *this.
    */
-  template <typename Scalar>
-  const TypeTensor<T> & operator *= (const Scalar);
+  template <typename Scalar, typename boostcopy::enable_if_c<
+                               ScalarTraits<Scalar>::value, int>::type = 0>
+  const TypeTensor<T> & operator *= (const Scalar factor)
+    {
+      for (unsigned int i=0; i<LIBMESH_DIM*LIBMESH_DIM; i++)
+        _coords[i] *= factor;
+
+      return *this;
+    }
 
   /**
    * Divide each entry of this tensor by a scalar value.
@@ -281,11 +292,21 @@ public:
   TypeTensor<T> operator * (const TypeTensor<T2> &) const;
 
   /**
-   * Multiply 2 tensors together, i.e. dyadic product,
+   * Multiply this tensor by a tensor value in place
+   *
+   * \returns A reference to *this
+   */
+  template <typename T2>
+  const TypeTensor<T> & operator *= (const TypeTensor<T2> &);
+
+  /**
+   * Multiply 2 tensors together to return a scalar, i.e.
    * \f$ \sum_{ij} A_{ij} B_{ij} \f$
    * The tensors may contain different numeric types.
+   * Also known as the "double inner product" or "double dot product"
+   * of tensors.
    *
-   * \returns A copy of the result, this tensor is unchanged.
+   * \returns The scalar-valued result, this tensor is unchanged.
    */
   template <typename T2>
   typename CompareTypes<T,T2>::supertype
@@ -519,6 +540,10 @@ TypeTensor<T>::TypeTensor (const T xx,
   _coords[1] = xy;
   _coords[2] = yx;
   _coords[3] = yy;
+#elif LIBMESH_DIM == 1
+  libmesh_assert_equal_to (xy, 0);
+  libmesh_assert_equal_to (yx, 0);
+  libmesh_assert_equal_to (yy, 0);
 #endif
 
 #if LIBMESH_DIM == 3
@@ -530,6 +555,12 @@ TypeTensor<T>::TypeTensor (const T xx,
   _coords[6] = zx;
   _coords[7] = zy;
   _coords[8] = zz;
+#else
+  libmesh_assert_equal_to (xz, 0);
+  libmesh_assert_equal_to (yz, 0);
+  libmesh_assert_equal_to (zx, 0);
+  libmesh_assert_equal_to (zy, 0);
+  libmesh_assert_equal_to (zz, 0);
 #endif
 }
 
@@ -887,12 +918,12 @@ TypeTensor<T> TypeTensor<T>::operator - () const
 template <typename T>
 template <typename Scalar>
 inline
-typename boostcopy::enable_if_c<
+auto
+TypeTensor<T>::operator * (const Scalar factor) const -> typename boostcopy::enable_if_c<
   ScalarTraits<Scalar>::value,
-  TypeTensor<typename CompareTypes<T, Scalar>::supertype>>::type
-TypeTensor<T>::operator * (const Scalar factor) const
+  TypeTensor<decltype(T() * factor)>>::type
 {
-  typedef typename CompareTypes<T, Scalar>::supertype TS;
+  typedef decltype((*this)(0, 0) * factor) TS;
 
 
 #if LIBMESH_DIM == 1
@@ -931,22 +962,6 @@ operator * (const Scalar factor,
 {
   return t * factor;
 }
-
-
-
-template <typename T>
-template <typename Scalar>
-inline
-const TypeTensor<T> & TypeTensor<T>::operator *= (const Scalar factor)
-{
-  for (unsigned int i=0; i<LIBMESH_DIM*LIBMESH_DIM; i++)
-    _coords[i] *= factor;
-
-  return *this;
-}
-
-
-
 
 template <typename T>
 template <typename Scalar>
@@ -1162,6 +1177,20 @@ TypeTensor<T> TypeTensor<T>::operator * (const TypeTensor<T2> & p) const
   return returnval;
 }
 
+template <typename T>
+template <typename T2>
+inline
+const TypeTensor<T> & TypeTensor<T>::operator *= (const TypeTensor<T2> & p)
+{
+  TypeTensor<T> temp;
+  for (unsigned int i=0; i<LIBMESH_DIM; i++)
+    for (unsigned int j=0; j<LIBMESH_DIM; j++)
+      for (unsigned int k=0; k<LIBMESH_DIM; k++)
+        temp(i,j) += (*this)(i,k)*p(k,j);
+
+  this->assign(temp);
+  return *this;
+}
 
 
 /**

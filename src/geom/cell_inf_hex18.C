@@ -20,8 +20,6 @@
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 
-// C++ includes
-
 // Local includes cont'd
 #include "libmesh/cell_inf_hex18.h"
 #include "libmesh/edge_edge3.h"
@@ -29,6 +27,8 @@
 #include "libmesh/face_quad9.h"
 #include "libmesh/face_inf_quad6.h"
 #include "libmesh/side.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -36,7 +36,14 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // InfHex18 class static member initializations
-const unsigned int InfHex18::side_nodes_map[5][9] =
+const int InfHex18::num_nodes;
+const int InfHex18::num_sides;
+const int InfHex18::num_edges;
+const int InfHex18::num_children;
+const int InfHex18::nodes_per_side;
+const int InfHex18::nodes_per_edge;
+
+const unsigned int InfHex18::side_nodes_map[InfHex18::num_sides][InfHex18::nodes_per_side] =
   {
     { 0, 1, 2, 3, 8, 9, 10, 11, 16},   // Side 0
     { 0, 1, 4, 5, 8, 12, 99, 99, 99},  // Side 1
@@ -45,7 +52,7 @@ const unsigned int InfHex18::side_nodes_map[5][9] =
     { 3, 0, 7, 4, 11, 15, 99, 99, 99}  // Side 4
   };
 
-const unsigned int InfHex18::edge_nodes_map[8][3] =
+const unsigned int InfHex18::edge_nodes_map[InfHex18::num_edges][InfHex18::nodes_per_edge] =
   {
     {0, 1,  8}, // Edge 0
     {1, 2,  9}, // Edge 1
@@ -59,6 +66,11 @@ const unsigned int InfHex18::edge_nodes_map[8][3] =
 
 // ------------------------------------------------------------
 // InfHex18 class member functions
+
+Order InfHex18::default_order() const
+{
+  return SECOND;
+}
 
 bool InfHex18::is_vertex(const unsigned int i) const
 {
@@ -87,20 +99,26 @@ bool InfHex18::is_node_on_side(const unsigned int n,
                                const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 9; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned>
+InfHex18::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  auto trim = (s == 0) ? 0 : 3;
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s]) - trim};
 }
 
 bool InfHex18::is_node_on_edge(const unsigned int n,
                                const unsigned int e) const
 {
   libmesh_assert_less (e, n_edges());
-  for (unsigned int i = 0; i != 3; ++i)
-    if (edge_nodes_map[e][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(edge_nodes_map[e]),
+                   std::end(edge_nodes_map[e]),
+                   n) != std::end(edge_nodes_map[e]);
 }
 
 
@@ -206,6 +224,52 @@ std::unique_ptr<Elem> InfHex18::build_side_ptr (const unsigned int i,
 
       return face;
     }
+}
+
+
+
+void InfHex18::build_side_ptr (std::unique_ptr<Elem> & side,
+                               const unsigned int i)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  // Think of a unit cube: (-1,1) x (-1,1) x (1,1)
+  switch (i)
+    {
+      // the base face
+    case 0:
+      {
+        if (!side.get() || side->type() != QUAD9)
+          {
+            side = this->build_side_ptr(i, false);
+            return;
+          }
+        break;
+      }
+
+      // connecting to another infinite element
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      {
+        if (!side.get() || side->type() != INFQUAD6)
+          {
+            side = this->build_side_ptr(i, false);
+            return;
+          }
+        break;
+      }
+
+    default:
+      libmesh_error_msg("Invalid side i = " << i);
+    }
+
+  side->subdomain_id() = this->subdomain_id();
+
+  // Set the nodes
+  for (auto n : side->node_index_range())
+    side->set_node(n) = this->node_ptr(InfHex18::side_nodes_map[i][n]);
 }
 
 
@@ -385,7 +449,7 @@ InfHex18::second_order_child_vertex (const unsigned int n) const
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float InfHex18::_embedding_matrix[4][18][18] =
+const float InfHex18::_embedding_matrix[InfHex18::num_children][InfHex18::num_nodes][InfHex18::num_nodes] =
   {
     // embedding matrix for child 0
     {

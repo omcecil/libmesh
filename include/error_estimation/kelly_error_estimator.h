@@ -34,10 +34,6 @@ namespace libMesh
 // Forward Declarations
 class Point;
 
-
-
-
-
 /**
  * This class implements the Kelly error indicator
  * which is based on the flux jumps between elements.
@@ -66,18 +62,24 @@ public:
 
   /**
    * Constructor.  Responsible for initializing the _bc_function function
-   * pointer to libmesh_nullptr.  Defaults to H1 seminorm; changes to system norm
+   * pointer to nullptr.  Defaults to H1 seminorm; changes to system norm
    * are ignored.
    */
-  KellyErrorEstimator() :
-    JumpErrorEstimator(),
-    _bc_function(libmesh_nullptr)
-  { error_norm = H1_SEMINORM; }
+  KellyErrorEstimator();
 
   /**
-   * Destructor.
+   * This class cannot be (default) copy constructed/assigned because
+   * its base class has unique_ptr members.
    */
-  ~KellyErrorEstimator() {}
+  KellyErrorEstimator (const KellyErrorEstimator &) = delete;
+  KellyErrorEstimator & operator= (const KellyErrorEstimator &) = delete;
+
+  /**
+   * Defaulted move ctor, move assignment operator, and destructor.
+   */
+  KellyErrorEstimator (KellyErrorEstimator &&) = default;
+  KellyErrorEstimator & operator= (KellyErrorEstimator &&) = default;
+  virtual ~KellyErrorEstimator() = default;
 
   /**
    * Register a user function to use in computing the flux BCs.
@@ -86,8 +88,7 @@ public:
                                                           const Point & p,
                                                           const std::string & var_name));
 
-  virtual ErrorEstimatorType type() const libmesh_override
-  { return KELLY;}
+  virtual ErrorEstimatorType type() const override;
 
 protected:
 
@@ -95,13 +96,13 @@ protected:
    * An initialization function, for requesting specific data from the FE
    * objects.
    */
-  virtual void init_context(FEMContext & c) libmesh_override;
+  virtual void init_context(FEMContext & c) override;
 
   /**
    * The function which calculates a normal derivative jump based error
    * term on an internal side.
    */
-  virtual void internal_side_integration() libmesh_override;
+  virtual void internal_side_integration() override;
 
   /**
    * The function which calculates a normal derivative jump based error
@@ -110,7 +111,7 @@ protected:
    * \returns \p true if the flux bc function is in fact defined on
    * the current side.
    */
-  virtual bool boundary_side_integration() libmesh_override;
+  virtual bool boundary_side_integration() override;
 
   /**
    * Pointer to function that provides BC information.

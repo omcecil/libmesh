@@ -93,7 +93,11 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
 	$(top_srcdir)/m4/all_static.m4 \
 	$(top_srcdir)/m4/ax_boost_base.m4 \
+	$(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_compiler_vendor.m4 \
 	$(top_srcdir)/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/m4/ax_gcc_archflag.m4 \
+	$(top_srcdir)/m4/ax_gcc_x86_cpuid.m4 \
 	$(top_srcdir)/m4/ax_openmp.m4 $(top_srcdir)/m4/ax_pthread.m4 \
 	$(top_srcdir)/m4/ax_split_version.m4 \
 	$(top_srcdir)/m4/ax_tls.m4 $(top_srcdir)/m4/backtrace.m4 \
@@ -131,7 +135,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
 	$(top_srcdir)/m4/tetgen.m4 $(top_srcdir)/m4/threads.m4 \
 	$(top_srcdir)/m4/triangle.m4 $(top_srcdir)/m4/trilinos.m4 \
 	$(top_srcdir)/m4/unordered.m4 $(top_srcdir)/m4/vtk.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/xdr.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -225,6 +229,8 @@ am__relativize = \
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANY_PARANOID_FLAGS = @ANY_PARANOID_FLAGS@
+ANY_WERROR_FLAG = @ANY_WERROR_FLAG@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -401,6 +407,7 @@ PETSC_DIR = @PETSC_DIR@
 PETSC_FC_INCLUDES = @PETSC_FC_INCLUDES@
 PKG_CONFIG = @PKG_CONFIG@
 PROFILING_FLAGS = @PROFILING_FLAGS@
+PRTDIAG = @PRTDIAG@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -467,6 +474,7 @@ datarootdir = @datarootdir@
 docdir = @docdir@
 dvidir = @dvidir@
 enabledeprecated = @enabledeprecated@
+enablefwdenums = @enablefwdenums@
 enablelegacyincludepaths = @enablelegacyincludepaths@
 enablepetsc = @enablepetsc@
 enableuniqueptr = @enableuniqueptr@

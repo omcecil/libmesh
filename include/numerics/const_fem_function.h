@@ -46,7 +46,14 @@ class ConstFEMFunction : public FEMFunctionBase<Output>
 public:
   ConstFEMFunction (const Output c) : _c(c) {}
 
-  ~ConstFEMFunction() {}
+  /**
+   * The 5 special functions can be defaulted for this class.
+   */
+  ConstFEMFunction (ConstFEMFunction &&) = default;
+  ConstFEMFunction (const ConstFEMFunction &) = default;
+  ConstFEMFunction & operator= (const ConstFEMFunction &) = default;
+  ConstFEMFunction & operator= (ConstFEMFunction &&) = default;
+  virtual ~ConstFEMFunction () = default;
 
   virtual std::unique_ptr<FEMFunctionBase<Output>> clone () const
   {return libmesh_make_unique<ConstFEMFunction>(*this); }
@@ -61,7 +68,7 @@ public:
                            const Real,
                            DenseVector<Output> & output)
   {
-    for (std::size_t i = 0; i < output.size(); i++)
+    for (unsigned int i = 0; i < output.size(); i++)
       output(i) = _c;
   }
 

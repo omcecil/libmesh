@@ -17,14 +17,11 @@
 
 
 
-// C++ includes
-
-
 // Local Includes
 #include "libmesh/point_locator_base.h"
 #include "libmesh/point_locator_tree.h"
-
 #include "libmesh/elem.h"
+#include "libmesh/enum_point_locator_type.h"
 
 namespace libMesh
 {
@@ -122,7 +119,7 @@ locate_node(const Point & p,
           return elem->node_ptr(n);
     }
 
-  return libmesh_nullptr;
+  return nullptr;
 }
 
 } // namespace libMesh

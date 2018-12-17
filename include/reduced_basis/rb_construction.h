@@ -125,12 +125,12 @@ public:
    * Clear all the data structures associated with
    * the system.
    */
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
   /**
    * \returns A string indicating the type of the system.
    */
-  virtual std::string system_type () const libmesh_override;
+  virtual std::string system_type () const override;
 
   /**
    * Perform a "truth" solve, i.e. solve the finite element system at
@@ -157,6 +157,13 @@ public:
    * \returns The final maximum a posteriori error bound on the training set.
    */
   virtual Real train_reduced_basis(const bool resize_rb_eval_data=true);
+
+  /**
+   * This function computes one basis function for each rhs term. This is
+   * useful in some cases since we can avoid doing a full greedy if we know
+   * that we do not have any "left-hand side" parameters, for example.
+   */
+  void enrich_basis_from_rhs_terms(const bool resize_rb_eval_data=true);
 
   /**
    * (i) Compute the a posteriori error bound for each set of parameters
@@ -188,8 +195,8 @@ public:
   /**
    * Get/set the boolean to indicate if we normalize the RB error in the greedy.
    */
-  void set_normalize_rb_bound_in_greedy(bool normalize_rb_bound_in_greedy)
-  {this->normalize_rb_bound_in_greedy = normalize_rb_bound_in_greedy; }
+  void set_normalize_rb_bound_in_greedy(bool normalize_rb_bound_in_greedy_in)
+  {this->normalize_rb_bound_in_greedy = normalize_rb_bound_in_greedy_in; }
   bool get_normalize_rb_bound_in_greedy() { return normalize_rb_bound_in_greedy; }
 
   /**
@@ -198,20 +205,6 @@ public:
    */
   unsigned int get_Nmax() const    { return Nmax; }
   virtual void set_Nmax(unsigned int Nmax);
-
-  /**
-   * Set the quiet_mode flag. If quiet == false then
-   * we print out a lot of extra information
-   * during the Offline stage.
-   */
-  void set_quiet_mode(bool quiet_mode_in)
-  { this->quiet_mode = quiet_mode_in; }
-
-  /**
-   * Is the system in quiet mode?
-   */
-  bool is_quiet() const
-  { return this->quiet_mode; }
 
   /**
    * Load the i^th RB function into the RBConstruction
@@ -506,6 +499,15 @@ public:
   std::vector<Number> Fq_representor_innerprods;
 
   /**
+   * Boolean flag to indicate if we skip residual calculations
+   * in train_reduced_basis. This should only be used in
+   * special cases, e.g. when we know a priori that we want
+   * exactly one basis function and hence we do not need the
+   * residual based error indicator.
+   */
+  bool skip_residual_in_train_reduced_basis;
+
+  /**
    * Boolean flag to indicate whether we exit the greedy if
    * we select the same parameters twice in a row. In some
    * problems this indicates that the greedy has "saturated"
@@ -519,6 +521,14 @@ public:
    * on internal element boundaries in the assembly routines.
    */
   bool impose_internal_fluxes;
+
+  /**
+   * In some cases meshes are intentionally created with degenerate sides
+   * as a way to represent, say, triangles using a hex-only mesh. In this
+   * situation we should detect and skip any degenerate sides in order to
+   * prevent zero or negative element Jacobian errors.
+   */
+  bool skip_degenerate_sides;
 
   /**
    * Boolean flag to indicate whether we compute the RB_inner_product_matrix.
@@ -721,12 +731,6 @@ protected:
    * This defaults to 1 in the steady case.
    */
   unsigned int delta_N;
-
-  /**
-   * Flag to indicate whether we print out extra information during
-   * the Offline stage.
-   */
-  bool quiet_mode;
 
   /**
    * A boolean flag to indicate whether or not the output dual norms

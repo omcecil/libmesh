@@ -25,7 +25,15 @@
 
 // Local Includes
 #include "libmesh/libmesh_common.h" // Real
-#include "libmesh/enum_elem_type.h" // For ElemType declaration below
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ElemType : int;
+}
+#else
+#include "libmesh/enum_elem_type.h"
+#endif
 
 // C++ includes
 #include <cstddef>
@@ -60,7 +68,7 @@ enum IO_Type {
   BOTH   = 2};
 
 /**
- * Initializes the fields of t to NULL/0 as necessary.
+ * Initializes the fields of t to nullptr/0 as necessary.
  * This is helpful for preventing the access of uninitialized
  * memory when working with C, which has no constructors or
  * destructors.
@@ -71,7 +79,7 @@ void init(triangulateio & t);
  * Frees any memory which has been dynamically allocated by Triangle.
  *
  * \note Triangle does not free any memory itself.
- * \note It is always safe to call free on a NULL pointer.
+ * \note It is always safe to call free on a nullptr.
  * \note Triangle \e does shallow-copy (for example) the holelist
  * pointer from the input to output struct \e without performing a
  * deep copy of the holelist itself.  Therefore, double-free will

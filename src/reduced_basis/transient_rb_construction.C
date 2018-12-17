@@ -47,8 +47,10 @@
 // Need SLEPc to get the POD eigenvalues
 #if defined(LIBMESH_HAVE_SLEPC)
 // LAPACK include (via SLEPc)
+#include "libmesh/ignore_warnings.h"
 #include <petscsys.h>
 #include <slepcblaslapack.h>
+#include "libmesh/restore_warnings.h"
 #endif // LIBMESH_HAVE_SLEPC
 
 namespace libMesh
@@ -65,7 +67,7 @@ TransientRBConstruction::TransientRBConstruction (EquationSystems & es,
     init_filename(""),
     POD_tol(-1.),
     max_truth_solves(-1),
-    L2_assembly(libmesh_nullptr)
+    L2_assembly(nullptr)
 {
   // Indicate that we need to compute the RB
   // inner product matrix in this case
@@ -347,7 +349,7 @@ void TransientRBConstruction::assemble_L2_matrix(SparseMatrix<Number> * input_ma
   add_scaled_matrix_and_vector(1.,
                                L2_assembly,
                                input_matrix,
-                               libmesh_nullptr,
+                               nullptr,
                                false, /* symmetrize */
                                apply_dirichlet_bc);
 }
@@ -477,7 +479,7 @@ void TransientRBConstruction::assemble_Mq_matrix(unsigned int q, SparseMatrix<Nu
   add_scaled_matrix_and_vector(1.,
                                &trans_assembly_expansion.get_M_assembly(q),
                                input_matrix,
-                               libmesh_nullptr,
+                               nullptr,
                                false, /* symmetrize */
                                apply_dirichlet_bc);
 }
@@ -763,7 +765,7 @@ void TransientRBConstruction::enrich_RB_space()
   // With the "method of snapshots", the size of
   // the eigenproblem is determined by the number
   // of time-steps (rather than the number of spatial dofs).
-  PetscBLASInt eigen_size = temporal_data.size();
+  PetscBLASInt eigen_size = cast_int<PetscBLASInt>(temporal_data.size());
   PetscBLASInt LDA = eigen_size; // The leading order of correlation_matrix
   std::vector<Number> correlation_matrix(LDA*eigen_size);
 
@@ -818,9 +820,9 @@ void TransientRBConstruction::enrich_RB_space()
 #ifdef LIBMESH_USE_REAL_NUMBERS // Use real numbers
   // Call the eigensolver for symmetric eigenvalue problems.
   // NOTE: evals in W are in ascending order
-  LAPACKsyevr_(&JOBZ, &RANGE, &UPLO, &eigen_size, &correlation_matrix[0],
-               &LDA, &VL, &VU, &IL, &IU, &ABSTOL, &M, &W[0], &Z[0], &LDZ,
-               &ISUPPZ[0], &WORK[0], &LWORK, &IWORK[0], &LIWORK, &INFO );
+  LAPACKsyevr_(&JOBZ, &RANGE, &UPLO, &eigen_size, correlation_matrix.data(),
+               &LDA, &VL, &VU, &IL, &IU, &ABSTOL, &M, W.data(), Z.data(), &LDZ,
+               ISUPPZ.data(), WORK.data(), &LWORK, IWORK.data(), &LIWORK, &INFO );
 #elif LIBMESH_USE_COMPLEX_NUMBERS // Use complex numbers
   // Need some extra data in the complex case
 
@@ -830,9 +832,9 @@ void TransientRBConstruction::enrich_RB_space()
 
   // Call the eigensolver for symmetric eigenvalue problems.
   // NOTE: evals in W are in ascending order
-  LAPACKsyevr_(&JOBZ, &RANGE, &UPLO, &eigen_size, &correlation_matrix[0],
-               &LDA, &VL, &VU, &IL, &IU, &ABSTOL, &M, &W[0], &Z[0], &LDZ,
-               &ISUPPZ[0], &WORK[0], &LWORK, &RWORK[0], &LRWORK, &IWORK[0],
+  LAPACKsyevr_(&JOBZ, &RANGE, &UPLO, &eigen_size, correlation_matrix.data(),
+               &LDA, &VL, &VU, &IL, &IU, &ABSTOL, &M, W.data(), Z.data(), &LDZ,
+               ISUPPZ.data(), WORK.data(), &LWORK, RWORK.data(), &LRWORK, IWORK.data(),
                &LIWORK, &INFO );
 #else
 #error libMesh does not yet support quaternions!
@@ -1367,7 +1369,7 @@ void TransientRBConstruction::read_riesz_representors_from_files(const std::stri
   for (std::size_t i=0; i<trans_rb_eval.M_q_representor.size(); ++i)
     for (std::size_t j=0; j<trans_rb_eval.M_q_representor[i].size(); ++j)
       {
-        if (trans_rb_eval.M_q_representor[i][j] != libmesh_nullptr)
+        if (trans_rb_eval.M_q_representor[i][j] != nullptr)
           libmesh_error_msg("Error, must delete existing M_q_representor before reading in from file.");
       }
 

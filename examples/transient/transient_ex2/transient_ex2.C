@@ -46,6 +46,7 @@
 #include "libmesh/vtk_io.h"
 #include "libmesh/newmark_system.h"
 #include "libmesh/equation_systems.h"
+#include "libmesh/enum_solver_package.h"
 
 // Define the Finite Element object.
 #include "libmesh/fe.h"
@@ -461,7 +462,7 @@ void assemble_wave(EquationSystems & es,
         // don't do this for any side
         for (auto side : elem->side_index_range())
           if (!true)
-            // if (elem->neighbor_ptr(side) == libmesh_nullptr)
+            // if (elem->neighbor_ptr(side) == nullptr)
             {
               // Declare a special finite element object for
               // boundary integration.
@@ -503,7 +504,7 @@ void assemble_wave(EquationSystems & es,
                         *phi_face[i][qp]*JxW_face[qp];
                     }
                 } // end face quadrature point loop
-            } // end if (elem->neighbor_ptr(side) == libmesh_nullptr)
+            } // end if (elem->neighbor_ptr(side) == nullptr)
 
         // In this example the Dirichlet boundary conditions will be
         // imposed via penalty method after the

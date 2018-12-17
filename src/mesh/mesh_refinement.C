@@ -51,37 +51,37 @@
 
 
 // Anonymous namespace for helper functions
-namespace {
-
-using namespace libMesh;
-
-struct SyncCoarsenInactive
-{
-  bool operator() (const Elem * elem) const {
-    // If we're not an ancestor, there's no chance our coarsening
-    // settings need to be changed.
-    if (!elem->ancestor())
-      return false;
-
-    // If we don't have any remote children, we already know enough to
-    // determine the correct refinement flag ourselves.
-    //
-    // If we know we have a child that isn't being coarsened, that
-    // also forces a specific flag.
-    //
-    // Either way there's nothing we need to communicate.
-    bool found_remote_child = false;
-    for (auto & child : elem->child_ref_range())
-      {
-        if (child.refinement_flag() != Elem::COARSEN)
-          return false;
-        if (&child == remote_elem)
-          found_remote_child = true;
-      }
-    return found_remote_child;
-  }
-};
-}
+// namespace {
+//
+// using namespace libMesh;
+//
+// struct SyncCoarsenInactive
+// {
+//   bool operator() (const Elem * elem) const {
+//     // If we're not an ancestor, there's no chance our coarsening
+//     // settings need to be changed.
+//     if (!elem->ancestor())
+//       return false;
+//
+//     // If we don't have any remote children, we already know enough to
+//     // determine the correct refinement flag ourselves.
+//     //
+//     // If we know we have a child that isn't being coarsened, that
+//     // also forces a specific flag.
+//     //
+//     // Either way there's nothing we need to communicate.
+//     bool found_remote_child = false;
+//     for (auto & child : elem->child_ref_range())
+//       {
+//         if (child.refinement_flag() != Elem::COARSEN)
+//           return false;
+//         if (&child == remote_elem)
+//           found_remote_child = true;
+//       }
+//     return found_remote_child;
+//   }
+// };
+// }
 
 
 
@@ -108,7 +108,7 @@ MeshRefinement::MeshRefinement (MeshBase & m) :
   _underrefined_boundary_limit(0),
   _enforce_mismatch_limit_prior_to_refinement(false)
 #ifdef LIBMESH_ENABLE_PERIODIC
-  , _periodic_boundaries(libmesh_nullptr)
+  , _periodic_boundaries(nullptr)
 #endif
 {
 }
@@ -210,28 +210,7 @@ Node * MeshRefinement::add_node(Elem & parent,
 Elem * MeshRefinement::add_elem (Elem * elem)
 {
   libmesh_assert(elem);
-
-
-  //   // If the unused_elements has any iterators from
-  //   // old elements, take the first one
-  //   if (!_unused_elements.empty())
-  //     {
-  //       std::vector<Elem *>::iterator it = _unused_elements.front();
-
-  //       *it = elem;
-
-  //       _unused_elements.pop_front();
-  //     }
-
-  //   // Otherwise, use the conventional add method
-  //   else
-  //     {
-  //       _mesh.add_elem (elem);
-  //     }
-
-  // The _unused_elements optimization has been turned off.
   _mesh.add_elem (elem);
-
   return elem;
 }
 
@@ -392,8 +371,8 @@ bool MeshRefinement::test_level_one (bool libmesh_dbg_var(libmesh_assert_pass))
   bool failure = false;
 
 #ifndef NDEBUG
-  Elem * failed_elem = libmesh_nullptr;
-  Elem * failed_neighbor = libmesh_nullptr;
+  Elem * failed_elem = nullptr;
+  Elem * failed_neighbor = nullptr;
 #endif // !NDEBUG
 
   for (auto & elem : _mesh.active_local_element_ptr_range())
@@ -453,7 +432,7 @@ bool MeshRefinement::test_unflagged (bool libmesh_dbg_var(libmesh_assert_pass))
   bool found_flag = false;
 
 #ifndef NDEBUG
-  Elem * failed_elem = libmesh_nullptr;
+  Elem * failed_elem = nullptr;
 #endif
 
   // Search for local flags
@@ -897,7 +876,7 @@ bool MeshRefinement::make_coarsening_compatible()
                       const Elem * neighbor =
                         topological_neighbor(elem, point_locator.get(), n);
 
-                      if (neighbor != libmesh_nullptr &&      // I have a
+                      if (neighbor != nullptr &&      // I have a
                           neighbor != remote_elem) // neighbor here
                         {
                           if (neighbor->active()) // and it is active
@@ -933,7 +912,7 @@ bool MeshRefinement::make_coarsening_compatible()
                       const Elem * neighbor =
                         topological_neighbor(elem, point_locator.get(), n);
 
-                      if (neighbor != libmesh_nullptr &&      // I have a
+                      if (neighbor != nullptr &&      // I have a
                           neighbor != remote_elem) // neighbor here
                         {
                           if (neighbor->active()) // and it is active
@@ -1229,7 +1208,7 @@ bool MeshRefinement::make_refinement_compatible()
                       Elem * neighbor =
                         topological_neighbor(elem, point_locator.get(), side);
 
-                      if (neighbor != libmesh_nullptr        && // I have a
+                      if (neighbor != nullptr        && // I have a
                           neighbor != remote_elem && // neighbor here
                           neighbor->active()) // and it is active
                         {
@@ -1287,7 +1266,7 @@ bool MeshRefinement::make_refinement_compatible()
                       Elem * neighbor =
                         topological_neighbor(elem, point_locator.get(), side);
 
-                      if (neighbor != libmesh_nullptr &&      // I have a
+                      if (neighbor != nullptr &&      // I have a
                           neighbor != remote_elem) // neighbor here
                         {
                           if (neighbor->active()) // and it is active

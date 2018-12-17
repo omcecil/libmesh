@@ -49,17 +49,17 @@ public:
   /**
    * Constructor.  Sets the most common default parameter values.
    */
-  UniformRefinementEstimator() :
-    ErrorEstimator(),
-    number_h_refinements(1),
-    number_p_refinements(0)
-  { error_norm = H1; }
+  UniformRefinementEstimator();
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~UniformRefinementEstimator() {}
-
+  UniformRefinementEstimator (const UniformRefinementEstimator &) = default;
+  UniformRefinementEstimator (UniformRefinementEstimator &&) = default;
+  UniformRefinementEstimator & operator= (const UniformRefinementEstimator &) = default;
+  UniformRefinementEstimator & operator= (UniformRefinementEstimator &&) = default;
+  virtual ~UniformRefinementEstimator() = default;
 
   /**
    * This function does uniform refinements and a
@@ -79,8 +79,8 @@ public:
    */
   virtual void estimate_error (const System & system,
                                ErrorVector & error_per_cell,
-                               const NumericVector<Number> * solution_vector = libmesh_nullptr,
-                               bool estimate_parent_error = false) libmesh_override;
+                               const NumericVector<Number> * solution_vector = nullptr,
+                               bool estimate_parent_error = false) override;
 
   /**
    * Currently this function ignores the error_norm member variable,
@@ -92,8 +92,8 @@ public:
   virtual void estimate_errors (const EquationSystems & equation_systems,
                                 ErrorVector & error_per_cell,
                                 const std::map<const System *, SystemNorm> & error_norms,
-                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = libmesh_nullptr,
-                                bool estimate_parent_error = false) libmesh_override;
+                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = nullptr,
+                                bool estimate_parent_error = false) override;
 
   /**
    * Currently this function ignores the component_scale member variable,
@@ -105,11 +105,10 @@ public:
    */
   virtual void estimate_errors (const EquationSystems & equation_systems,
                                 ErrorMap & errors_per_cell,
-                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = libmesh_nullptr,
-                                bool estimate_parent_error = false) libmesh_override;
+                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = nullptr,
+                                bool estimate_parent_error = false) override;
 
-  virtual ErrorEstimatorType type() const libmesh_override
-  { return UNIFORM_REFINEMENT;}
+  virtual ErrorEstimatorType type() const override;
 
   /**
    * How many h refinements to perform to get the fine grid
@@ -131,7 +130,7 @@ protected:
                                 ErrorVector * error_per_cell,
                                 std::map<std::pair<const System *, unsigned int>, ErrorVector *> * errors_per_cell,
                                 const std::map<const System *, SystemNorm > * error_norms,
-                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = libmesh_nullptr,
+                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = nullptr,
                                 bool estimate_parent_error = false);
 };
 

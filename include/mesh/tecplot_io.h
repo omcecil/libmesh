@@ -58,7 +58,7 @@ public:
   /**
    * This method implements writing a mesh to a specified file.
    */
-  virtual void write (const std::string &) libmesh_override;
+  virtual void write (const std::string &) override;
 
   /**
    * Bring in base class functionality for name resolution and to
@@ -72,7 +72,7 @@ public:
    */
   virtual void write_nodal_data (const std::string &,
                                  const std::vector<Number> &,
-                                 const std::vector<std::string> &) libmesh_override;
+                                 const std::vector<std::string> &) override;
 
   /**
    * Flag indicating whether or not to write a binary file
@@ -114,8 +114,8 @@ private:
    * provided.  This will write an ASCII file.
    */
   void write_ascii (const std::string &,
-                    const std::vector<Number> * = libmesh_nullptr,
-                    const std::vector<std::string> * = libmesh_nullptr);
+                    const std::vector<Number> * = nullptr,
+                    const std::vector<std::string> * = nullptr);
 
   /**
    * This method implements writing a mesh with nodal data to a
@@ -125,8 +125,8 @@ private:
    * an ASCII file will be created.
    */
   void write_binary (const std::string &,
-                     const std::vector<Number> * = libmesh_nullptr,
-                     const std::vector<std::string> * = libmesh_nullptr);
+                     const std::vector<Number> * = nullptr,
+                     const std::vector<std::string> * = nullptr);
 
   /**
    * Determines the logical spatial dimension of the elements in the

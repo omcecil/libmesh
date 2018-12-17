@@ -23,7 +23,6 @@
 // Local Includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/auto_ptr.h" // deprecated
-#include "libmesh/enum_order.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h" // libMesh::invalid_uint
 #include "libmesh/variable.h"
@@ -34,6 +33,15 @@
 #include "libmesh/sparsity_pattern.h"
 #include "libmesh/parallel_object.h"
 #include "libmesh/point.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum Order : int;
+}
+#else
+#include "libmesh/enum_order.h"
+#endif
 
 // C++ Includes
 #include <algorithm>
@@ -249,6 +257,27 @@ public:
   void clear_sparsity();
 
   /**
+   * Remove any default ghosting functor(s).  User-added ghosting
+   * functors will be unaffected.
+   *
+   * Unless user-added equivalent ghosting functors exist, removing
+   * the default coupling functor is only safe for explicit solves,
+   * and removing the default algebraic ghosting functor is only safe
+   * for codes where no evaluations on neighbor cells (e.g. no jump
+   * error estimators) are done.
+   *
+   * Defaults can be restored manually via add_default_ghosting(), or
+   * automatically if clear() returns the DofMap to a default state.
+   */
+  void remove_default_ghosting();
+
+  /**
+   * Add the default functor(s) for coupling and algebraic ghosting.
+   * User-added ghosting functors will be unaffected.
+   */
+  void add_default_ghosting();
+
+  /**
    * Adds a functor which can specify coupling requirements for
    * creation of sparse matrices.
    * Degree of freedom pairs which match the elements and variables
@@ -261,12 +290,24 @@ public:
    * GhostingFunctor memory must be managed by the code which calls
    * this function; the GhostingFunctor lifetime is expected to extend
    * until either the functor is removed or the DofMap is destructed.
+   *
+   * When \p to_mesh is true, the \p coupling_functor is also added to
+   * our associated mesh, to ensure that coupled elements do not get
+   * lost during mesh distribution.  (if coupled elements were
+   * *already* lost there's no getting them back after the fact,
+   * sorry)
+   *
+   * If \p to_mesh is false, no change to mesh ghosting is made;
+   * the Mesh must already have ghosting functor(s) specifying a
+   * superset of \p coupling_functor or this is a horrible bug.
    */
-  void add_coupling_functor(GhostingFunctor & coupling_functor);
+  void add_coupling_functor(GhostingFunctor & coupling_functor,
+                            bool to_mesh = true);
 
   /**
    * Removes a functor which was previously added to the set of
-   * coupling functors.
+   * coupling functors, from both this DofMap and from the underlying
+   * mesh.
    */
   void remove_coupling_functor(GhostingFunctor & coupling_functor);
 
@@ -292,19 +333,33 @@ public:
    * for use with distributed vectors.  Degrees of freedom on other
    * processors which match the elements and variables returned by
    * these functors will be added to the send_list, and the elements
-   * on other processors will be ghosted on a distributed mesh.
+   * on other processors will be ghosted on a distributed mesh, so
+   * that the elements can always be found and the solutions on them
+   * will always be evaluable.
    *
    * GhostingFunctor memory must be managed by the code which calls
    * this function; the GhostingFunctor lifetime is expected to extend
    * until either the functor is removed or the DofMap is destructed.
+   *
+   * When \p to_mesh is true, the \p coupling_functor is also added to
+   * our associated mesh, to ensure that evaluable elements do not get
+   * lost during mesh distribution.  (if evaluable elements were
+   * *already* lost there's no getting them back after the fact,
+   * sorry)
+   *
+   * If \p to_mesh is false, no change to mesh ghosting is made;
+   * the Mesh must already have ghosting functor(s) specifying a
+   * superset of \p evaluable_functor or this is a horrible bug.
    */
-  void add_algebraic_ghosting_functor(GhostingFunctor & ghosting_functor);
+  void add_algebraic_ghosting_functor(GhostingFunctor & evaluable_functor,
+                                      bool to_mesh = true);
 
   /**
    * Removes a functor which was previously added to the set of
-   * algebraic ghosting functors.
+   * algebraic ghosting functors, from both this DofMap and from the
+   * underlying mesh.
    */
-  void remove_algebraic_ghosting_functor(GhostingFunctor & ghosting_functor);
+  void remove_algebraic_ghosting_functor(GhostingFunctor & evaluable_functor);
 
   /**
    * Beginning of range of algebraic ghosting functors
@@ -352,7 +407,7 @@ public:
                                                    std::vector<dof_id_type> & n_nz,
                                                    std::vector<dof_id_type> & n_oz,
                                                    void *),
-                                      void * context = libmesh_nullptr)
+                                      void * context = nullptr)
   { _extra_sparsity_function = func; _extra_sparsity_context = context; }
 
   /**
@@ -372,7 +427,7 @@ public:
    * send_list with extra entries.
    */
   void attach_extra_send_list_function(void (*func)(std::vector<dof_id_type> &, void *),
-                                       void * context = libmesh_nullptr)
+                                       void * context = nullptr)
   { _extra_send_list_function = func; _extra_send_list_context = context; }
 
   /**
@@ -596,7 +651,7 @@ public:
   { std::vector<dof_id_type>::const_iterator ub =
       std::upper_bound(_end_df.begin(), _end_df.end(), dof);
     libmesh_assert (ub != _end_df.end());
-    return (ub - _end_df.begin());
+    return cast_int<processor_id_type>(ub - _end_df.begin());
   }
 
 #ifdef LIBMESH_ENABLE_AMR
@@ -675,6 +730,13 @@ public:
    * don't cache enough information for O(1) right now.
    */
   bool all_semilocal_indices (const std::vector<dof_id_type> & dof_indices) const;
+
+  /**
+   * \returns \p true if degree of freedom index \p dof_index
+   * is a local index.
+   */
+  bool local_index (dof_id_type dof_index) const
+  { return (dof_index >= this->first_dof()) && (dof_index < this->end_dof()); }
 
   /**
    * \returns \p true iff our solutions can be locally evaluated on
@@ -927,10 +989,10 @@ public:
    * entry is the maximum absolute error on a constrained DoF and whose second
    * entry is the maximum relative error.  Useful for debugging purposes.
    *
-   * If \p v == libmesh_nullptr, the system solution vector is tested.
+   * If \p v == nullptr, the system solution vector is tested.
    */
   std::pair<Real, Real> max_constraint_error(const System & system,
-                                             NumericVector<Number> * v = libmesh_nullptr) const;
+                                             NumericVector<Number> * v = nullptr) const;
 
 #endif // LIBMESH_ENABLE_CONSTRAINTS
 
@@ -1074,7 +1136,7 @@ public:
    * solver's solutions do not satisfy your DoF constraints to a tight enough
    * tolerance.
    *
-   * If \p v == libmesh_nullptr, the system solution vector is constrained
+   * If \p v == nullptr, the system solution vector is constrained
    *
    * If \p homogeneous == true, heterogeneous constraints are enforced
    * as if they were homogeneous.  This might be appropriate for e.g. a
@@ -1082,7 +1144,7 @@ public:
    * heterogeneously-constrained solutions.
    */
   void enforce_constraints_exactly (const System & system,
-                                    NumericVector<Number> * v = libmesh_nullptr,
+                                    NumericVector<Number> * v = nullptr,
                                     bool homogeneous = false) const;
 
   /**
@@ -1226,7 +1288,8 @@ public:
   void reinit (MeshBase & mesh);
 
   /**
-   * Free all memory associated with the object, but keep the mesh pointer.
+   * Free all new memory associated with the object, but restore its
+   * original state, with the mesh pointer and any default ghosting.
    */
   void clear ();
 
@@ -1264,19 +1327,24 @@ private:
 
   /**
    * Helper function that gets the dof indices on the current element
-   * for a non-SCALAR type variable.
+   * for a non-SCALAR type variable, where the variable is identified
+   * by its variable group number \p vg and its offset \p vig from the
+   * first variable in that group.
    *
    * In DEBUG mode, the tot_size parameter will add up the total
-   * number of dof indices that should have been added to di.
+   * number of dof indices that should have been added to di, and v
+   * will be the variable number corresponding to vg and vig.
    */
   void _dof_indices (const Elem & elem,
                      int p_level,
                      std::vector<dof_id_type> & di,
-                     const unsigned int v,
+                     const unsigned int vg,
+                     const unsigned int vig,
                      const Node * const * nodes,
                      unsigned int       n_nodes
 #ifdef DEBUG
                      ,
+                     const unsigned int v,
                      std::size_t & tot_size
 #endif
                      ) const;
@@ -1430,9 +1498,14 @@ private:
   std::vector<Variable> _variables;
 
   /**
-   * The finite element type for each variable.
+   * The finite element type for each variable group.
    */
   std::vector<VariableGroup> _variable_groups;
+
+  /**
+   * The variable group number for each variable.
+   */
+  std::vector<unsigned int> _variable_group_numbers;
 
   /**
    * The number of the system we manage DOFs for.

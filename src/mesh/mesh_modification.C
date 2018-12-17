@@ -39,7 +39,6 @@
 #include "libmesh/remote_elem.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/unstructured_mesh.h"
-#include "libmesh/partitioner.h"
 
 namespace
 {
@@ -73,12 +72,11 @@ void MeshTools::Modification::distort (MeshBase & mesh,
 
   LOG_SCOPE("distort()", "MeshTools::Modification");
 
-  // First find nodes on the boundary and flag them
-  // so that we don't move them
-  // on_boundary holds false (not on boundary) and true (on boundary)
-  std::vector<bool> on_boundary (mesh.max_node_id(), false);
-
-  if (!perturb_boundary) MeshTools::find_boundary_nodes (mesh, on_boundary);
+  // If we are not perturbing boundary nodes, make a
+  // quickly-searchable list of node ids we can check against.
+  std::unordered_set<dof_id_type> boundary_node_ids;
+  if (!perturb_boundary)
+    boundary_node_ids = MeshTools::find_boundary_nodes (mesh);
 
   // Now calculate the minimum distance to
   // neighboring nodes for each node.
@@ -90,7 +88,6 @@ void MeshTools::Modification::distort (MeshBase & mesh,
     for (auto & n : elem->node_ref_range())
       hmin[n.id()] = std::min(hmin[n.id()],
                               static_cast<float>(elem->hmin()));
-
 
   // Now actually move the nodes
   {
@@ -108,18 +105,12 @@ void MeshTools::Modification::distort (MeshBase & mesh,
     // [Note: Testing for (in)equality might be wrong
     // (different types, namely float and double)]
     for (unsigned int n=0; n<mesh.max_node_id(); n++)
-      if (!on_boundary[n] && (hmin[n] < 1.e20) )
+      if ((perturb_boundary || !boundary_node_ids.count(n)) && hmin[n] < 1.e20)
         {
           // the direction, random but unit normalized
-
-          Point dir( static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX),
-                     (mesh.mesh_dimension() > 1) ?
-                     static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX)
-                     : 0.,
-                     ((mesh.mesh_dimension() == 3) ?
-                      static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX)
-                      : 0.)
-                     );
+          Point dir (static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX),
+                     (mesh.mesh_dimension() > 1) ? static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX) : 0.,
+                     ((mesh.mesh_dimension() == 3) ? static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX) : 0.));
 
           dir(0) = (dir(0)-.5)*2.;
           if (mesh.mesh_dimension() > 1)
@@ -277,476 +268,6 @@ void MeshTools::Modification::scale (MeshBase & mesh,
 
 
 
-
-// ------------------------------------------------------------
-// UnstructuredMesh class member functions for mesh modification
-void UnstructuredMesh::all_first_order ()
-{
-  /*
-   * when the mesh is not prepared,
-   * at least renumber the nodes and
-   * elements, so that the node ids
-   * are correct
-   */
-  if (!this->_is_prepared)
-    this->renumber_nodes_and_elements ();
-
-  START_LOG("all_first_order()", "Mesh");
-
-  /**
-   * Prepare to identify (and then delete) a bunch of no-longer-used nodes.
-   */
-  std::vector<bool> node_touched_by_me(this->max_node_id(), false);
-
-  // Loop over the high-ordered elements.
-  // First make sure they _are_ indeed high-order, and then replace
-  // them with an equivalent first-order element.
-  for (auto & so_elem : element_ptr_range())
-    {
-      libmesh_assert(so_elem);
-
-      /*
-       * build the first-order equivalent, add to
-       * the new_elements list.
-       */
-      Elem * lo_elem = Elem::build
-        (Elem::first_order_equivalent_type
-         (so_elem->type()), so_elem->parent()).release();
-
-      const unsigned short n_sides = so_elem->n_sides();
-
-      for (unsigned short s=0; s != n_sides; ++s)
-        if (so_elem->neighbor_ptr(s) == remote_elem)
-          lo_elem->set_neighbor(s, const_cast<RemoteElem *>(remote_elem));
-
-#ifdef LIBMESH_ENABLE_AMR
-      /*
-       * Reset the parent links of any child elements
-       */
-      if (so_elem->has_children())
-        for (unsigned int c = 0, nc = so_elem->n_children(); c != nc; ++c)
-          {
-            Elem * child = so_elem->child_ptr(c);
-            child->set_parent(lo_elem);
-            lo_elem->add_child(child, c);
-          }
-
-      /*
-       * Reset the child link of any parent element
-       */
-      if (so_elem->parent())
-        {
-          unsigned int c =
-            so_elem->parent()->which_child_am_i(so_elem);
-          lo_elem->parent()->replace_child(lo_elem, c);
-        }
-
-      /*
-       * Copy as much data to the new element as makes sense
-       */
-      lo_elem->set_p_level(so_elem->p_level());
-      lo_elem->set_refinement_flag(so_elem->refinement_flag());
-      lo_elem->set_p_refinement_flag(so_elem->p_refinement_flag());
-#endif
-
-      libmesh_assert_equal_to (lo_elem->n_vertices(), so_elem->n_vertices());
-
-      /*
-       * By definition the vertices of the linear and
-       * second order element are identically numbered.
-       * transfer these.
-       */
-      for (unsigned int v=0; v < so_elem->n_vertices(); v++)
-        {
-          lo_elem->set_node(v) = so_elem->node_ptr(v);
-          node_touched_by_me[lo_elem->node_id(v)] = true;
-        }
-
-      /*
-       * find_neighbors relies on remote_elem neighbor links being
-       * properly maintained.
-       */
-      for (unsigned short s=0; s != n_sides; s++)
-        {
-          if (so_elem->neighbor_ptr(s) == remote_elem)
-            lo_elem->set_neighbor(s, const_cast<RemoteElem*>(remote_elem));
-        }
-
-      /**
-       * If the second order element had any boundary conditions they
-       * should be transferred to the first-order element.  The old
-       * boundary conditions will be removed from the BoundaryInfo
-       * data structure by insert_elem.
-       */
-      this->get_boundary_info().copy_boundary_ids
-        (this->get_boundary_info(), so_elem, lo_elem);
-
-      /*
-       * The new first-order element is ready.
-       * Inserting it into the mesh will replace and delete
-       * the second-order element.
-       */
-      lo_elem->set_id(so_elem->id());
-#ifdef LIBMESH_ENABLE_UNIQUE_ID
-      lo_elem->set_unique_id() = so_elem->unique_id();
-#endif
-      lo_elem->processor_id() = so_elem->processor_id();
-      lo_elem->subdomain_id() = so_elem->subdomain_id();
-      this->insert_elem(lo_elem);
-    }
-
-  const MeshBase::node_iterator nd_end = this->nodes_end();
-  MeshBase::node_iterator nd = this->nodes_begin();
-  while (nd != nd_end)
-    {
-      Node * the_node = *nd;
-      ++nd;
-      if (!node_touched_by_me[the_node->id()])
-        this->delete_node(the_node);
-    }
-
-  // If crazy people applied boundary info to non-vertices and then
-  // deleted those non-vertices, we should make sure their boundary id
-  // caches are correct.
-  this->get_boundary_info().regenerate_id_sets();
-
-  STOP_LOG("all_first_order()", "Mesh");
-
-  // On hanging nodes that used to also be second order nodes, we
-  // might now have an invalid nodal processor_id()
-  Partitioner::set_node_processor_ids(*this);
-
-  // delete or renumber nodes if desired
-  this->prepare_for_use();
-}
-
-
-
-void UnstructuredMesh::all_second_order (const bool full_ordered)
-{
-  // This function must be run on all processors at once
-  parallel_object_only();
-
-  /*
-   * when the mesh is not prepared,
-   * at least renumber the nodes and
-   * elements, so that the node ids
-   * are correct
-   */
-  if (!this->_is_prepared)
-    this->renumber_nodes_and_elements ();
-
-  /*
-   * If the mesh is empty
-   * then we have nothing to do
-   */
-  if (!this->n_elem())
-    return;
-
-  /*
-   * If the mesh is already second order
-   * then we have nothing to do.
-   * We have to test for this in a round-about way to avoid
-   * a bug on distributed parallel meshes with more processors
-   * than elements.
-   */
-  bool already_second_order = false;
-  if (this->elements_begin() != this->elements_end() &&
-      (*(this->elements_begin()))->default_order() != FIRST)
-    already_second_order = true;
-  this->comm().max(already_second_order);
-  if (already_second_order)
-    return;
-
-  START_LOG("all_second_order()", "Mesh");
-
-  /*
-   * this map helps in identifying second order
-   * nodes.  Namely, a second-order node:
-   * - edge node
-   * - face node
-   * - bubble node
-   * is uniquely defined through a set of adjacent
-   * vertices.  This set of adjacent vertices is
-   * used to identify already added higher-order
-   * nodes.  We are safe to use node id's since we
-   * make sure that these are correctly numbered.
-   */
-  std::map<std::vector<dof_id_type>, Node *> adj_vertices_to_so_nodes;
-
-  /*
-   * for speed-up of the \p add_point() method, we
-   * can reserve memory.  Guess the number of additional
-   * nodes for different dimensions
-   */
-  switch (this->mesh_dimension())
-    {
-    case 1:
-      /*
-       * in 1D, there can only be order-increase from Edge2
-       * to Edge3.  Something like 1/2 of n_nodes() have
-       * to be added
-       */
-      this->reserve_nodes(static_cast<unsigned int>
-                          (1.5*static_cast<double>(this->n_nodes())));
-      break;
-
-    case 2:
-      /*
-       * in 2D, either refine from Tri3 to Tri6 (double the nodes)
-       * or from Quad4 to Quad8 (again, double) or Quad9 (2.25 that much)
-       */
-      this->reserve_nodes(static_cast<unsigned int>
-                          (2*static_cast<double>(this->n_nodes())));
-      break;
-
-
-    case 3:
-      /*
-       * in 3D, either refine from Tet4 to Tet10 (factor = 2.5) up to
-       * Hex8 to Hex27 (something  > 3).  Since in 3D there _are_ already
-       * quite some nodes, and since we do not want to overburden the memory by
-       * a too conservative guess, use the lower bound
-       */
-      this->reserve_nodes(static_cast<unsigned int>
-                          (2.5*static_cast<double>(this->n_nodes())));
-      break;
-
-    default:
-      // Hm?
-      libmesh_error_msg("Unknown mesh dimension " << this->mesh_dimension());
-    }
-
-
-
-  /*
-   * form a vector that will hold the node id's of
-   * the vertices that are adjacent to the son-th
-   * second-order node.  Pull this outside of the
-   * loop so that silly compilers don't repeatedly
-   * create and destroy the vector.
-   */
-  std::vector<dof_id_type> adjacent_vertices_ids;
-
-  /**
-   * Loop over the low-ordered elements in the _elements vector.
-   * First make sure they _are_ indeed low-order, and then replace
-   * them with an equivalent second-order element.  Don't
-   * forget to delete the low-order element, or else it will leak!
-   */
-  element_iterator
-    it = elements_begin(),
-    endit = elements_end();
-
-  for (; it != endit; ++it)
-    {
-      // the linear-order element
-      Elem * lo_elem = *it;
-
-      libmesh_assert(lo_elem);
-
-      // make sure it is linear order
-      if (lo_elem->default_order() != FIRST)
-        libmesh_error_msg("ERROR: This is not a linear element: type=" << lo_elem->type());
-
-      // this does _not_ work for refined elements
-      libmesh_assert_equal_to (lo_elem->level (), 0);
-
-      /*
-       * build the second-order equivalent, add to
-       * the new_elements list.  Note that this here
-       * is the only point where \p full_ordered
-       * is necessary.  The remaining code works well
-       * for either type of second-order equivalent, e.g.
-       * Hex20 or Hex27, as equivalents for Hex8
-       */
-      Elem * so_elem =
-        Elem::build (Elem::second_order_equivalent_type(lo_elem->type(),
-                                                        full_ordered) ).release();
-
-      libmesh_assert_equal_to (lo_elem->n_vertices(), so_elem->n_vertices());
-
-
-      /*
-       * By definition the vertices of the linear and
-       * second order element are identically numbered.
-       * transfer these.
-       */
-      for (unsigned int v=0; v < lo_elem->n_vertices(); v++)
-        so_elem->set_node(v) = lo_elem->node_ptr(v);
-
-      /*
-       * Now handle the additional mid-side nodes.  This
-       * is simply handled through a map that remembers
-       * the already-added nodes.  This map maps the global
-       * ids of the vertices (that uniquely define this
-       * higher-order node) to the new node.
-       * Notation: son = second-order node
-       */
-      const unsigned int son_begin = so_elem->n_vertices();
-      const unsigned int son_end   = so_elem->n_nodes();
-
-
-      for (unsigned int son=son_begin; son<son_end; son++)
-        {
-          const unsigned int n_adjacent_vertices =
-            so_elem->n_second_order_adjacent_vertices(son);
-
-          adjacent_vertices_ids.resize(n_adjacent_vertices);
-
-          for (unsigned int v=0; v<n_adjacent_vertices; v++)
-            adjacent_vertices_ids[v] =
-              so_elem->node_id( so_elem->second_order_adjacent_vertex(son,v) );
-
-          /*
-           * \p adjacent_vertices_ids is now in order of the current
-           * side.  sort it, so that comparisons  with the
-           * \p adjacent_vertices_ids created through other elements'
-           * sides can match
-           */
-          std::sort(adjacent_vertices_ids.begin(),
-                    adjacent_vertices_ids.end());
-
-
-          // does this set of vertices already has a mid-node added?
-          std::pair<std::map<std::vector<dof_id_type>, Node *>::iterator,
-                    std::map<std::vector<dof_id_type>, Node *>::iterator>
-            pos = adj_vertices_to_so_nodes.equal_range (adjacent_vertices_ids);
-
-          // no, not added yet
-          if (pos.first == pos.second)
-            {
-              /*
-               * for this set of vertices, there is no
-               * second_order node yet.  Add it.
-               *
-               * compute the location of the new node as
-               * the average over the adjacent vertices.
-               */
-              Point new_location = this->point(adjacent_vertices_ids[0]);
-              for (unsigned int v=1; v<n_adjacent_vertices; v++)
-                new_location += this->point(adjacent_vertices_ids[v]);
-
-              new_location /= static_cast<Real>(n_adjacent_vertices);
-
-              /* Add the new point to the mesh.
-               * If we are on a serialized mesh, then we're doing this
-               * all in sync, and the node processor_id will be
-               * consistent between processors.
-               * If we are on a distributed mesh, we can fix
-               * inconsistent processor ids later, but only if every
-               * processor gives new nodes a *locally* consistent
-               * processor id, so we'll give the new node the
-               * processor id of an adjacent element for now and then
-               * we'll update that later if appropriate.
-               */
-              Node * so_node = this->add_point
-                (new_location, DofObject::invalid_id,
-                 lo_elem->processor_id());
-
-              /*
-               * insert the new node with its defining vertex
-               * set into the map, and relocate pos to this
-               * new entry, so that the so_elem can use
-               * \p pos for inserting the node
-               */
-              adj_vertices_to_so_nodes.insert(pos.first,
-                                              std::make_pair(adjacent_vertices_ids,
-                                                             so_node));
-
-              so_elem->set_node(son) = so_node;
-            }
-          // yes, already added.
-          else
-            {
-              Node * so_node = pos.first->second;
-              libmesh_assert(so_node);
-
-              so_elem->set_node(son) = so_node;
-
-              // We need to ensure that the processor who should own a
-              // node *knows* they own the node.  And because
-              // Node::choose_processor_id() may depend on Node id,
-              // which may not yet be authoritative, we still have to
-              // use a dumb-but-id-independent partitioning heuristic.
-              processor_id_type chosen_pid =
-                std::min (so_node->processor_id(),
-                          lo_elem->processor_id());
-
-              // Plus, if we just discovered that we own this node,
-              // then on a distributed mesh we need to make sure to
-              // give it a valid id, not just a placeholder id!
-              if (!this->is_replicated() &&
-                  so_node->processor_id() != this->processor_id() &&
-                  chosen_pid == this->processor_id())
-                this->own_node(*so_node);
-
-              so_node->processor_id() = chosen_pid;
-            }
-        }
-
-      /*
-       * find_neighbors relies on remote_elem neighbor links being
-       * properly maintained.
-       */
-      for (auto s : lo_elem->side_index_range())
-        {
-          if (lo_elem->neighbor_ptr(s) == remote_elem)
-            so_elem->set_neighbor(s, const_cast<RemoteElem*>(remote_elem));
-        }
-
-      /**
-       * If the linear element had any boundary conditions they
-       * should be transferred to the second-order element.  The old
-       * boundary conditions will be removed from the BoundaryInfo
-       * data structure by insert_elem.
-       *
-       * Also, prepare_for_use() will reconstruct most of our neighbor
-       * links, but if we have any remote_elem links in a distributed
-       * mesh, they need to be preserved.  We do that in the same loop
-       * here.
-       */
-      this->get_boundary_info().copy_boundary_ids
-        (this->get_boundary_info(), lo_elem, so_elem);
-
-      /*
-       * The new second-order element is ready.
-       * Inserting it into the mesh will replace and delete
-       * the first-order element.
-       */
-      so_elem->set_id(lo_elem->id());
-#ifdef LIBMESH_ENABLE_UNIQUE_ID
-      so_elem->set_unique_id() = lo_elem->unique_id();
-#endif
-      so_elem->processor_id() = lo_elem->processor_id();
-      so_elem->subdomain_id() = lo_elem->subdomain_id();
-      this->insert_elem(so_elem);
-    }
-
-  // we can clear the map
-  adj_vertices_to_so_nodes.clear();
-
-
-  STOP_LOG("all_second_order()", "Mesh");
-
-  // On a DistributedMesh our ghost node processor ids may be bad,
-  // the ids of nodes touching remote elements may be inconsistent,
-  // unique_ids of newly added non-local nodes remain unset, and our
-  // partitioning of new nodes may not be well balanced.
-  //
-  // make_nodes_parallel_consistent() will fix all this.
-  if (!this->is_serial())
-    MeshCommunication().make_nodes_parallel_consistent (*this);
-
-  // renumber nodes, elements etc
-  this->prepare_for_use(/*skip_renumber =*/ false);
-}
-
-
-
-
-
-
 void MeshTools::Modification::all_tri (MeshBase & mesh)
 {
   // The number of elements in the original mesh before any additions
@@ -812,7 +333,7 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
         Elem * subelem[6];
 
         for (unsigned int i = 0; i != max_subelems; ++i)
-          subelem[i] = libmesh_nullptr;
+          subelem[i] = nullptr;
 
         switch (etype)
           {
@@ -1441,7 +962,9 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
                     // Make a sorted list of node ids for elem->side(sn)
                     std::unique_ptr<Elem> elem_side = elem->build_side_ptr(sn);
                     std::vector<dof_id_type> elem_side_nodes(elem_side->n_nodes());
-                    for (std::size_t esn=0; esn<elem_side_nodes.size(); ++esn)
+                    for (unsigned int esn=0,
+                         n_esn = cast_int<unsigned int>(elem_side_nodes.size());
+                         esn != n_esn; ++esn)
                       elem_side_nodes[esn] = elem_side->node_id(esn);
                     std::sort(elem_side_nodes.begin(), elem_side_nodes.end());
 
@@ -1459,7 +982,9 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
                               // a Hex20 or Prism15's QUAD8 face may be split into two Tri6 faces, and the
                               // original face will not contain the mid-edge node.
                               std::vector<dof_id_type> subside_nodes(subside_elem->n_vertices());
-                              for (std::size_t ssn=0; ssn<subside_nodes.size(); ++ssn)
+                              for (unsigned int ssn=0,
+                                   n_ssn = cast_int<unsigned int>(subside_nodes.size());
+                                   ssn != n_ssn; ++ssn)
                                 subside_nodes[ssn] = subside_elem->node_id(ssn);
                               std::sort(subside_nodes.begin(), subside_nodes.end());
 
@@ -1588,13 +1113,12 @@ void MeshTools::Modification::smooth (MeshBase & mesh,
   libmesh_assert_equal_to (mesh.mesh_dimension(), 2);
 
   /*
-   * find the boundary nodes
+   * Create a quickly-searchable list of boundary nodes.
    */
-  std::vector<bool>  on_boundary;
-  MeshTools::find_boundary_nodes(mesh, on_boundary);
+  std::unordered_set<dof_id_type> boundary_node_ids =
+    MeshTools::find_boundary_nodes (mesh);
 
   for (unsigned int iter=0; iter<n_iterations; iter++)
-
     {
       /*
        * loop over the mesh refinement level
@@ -1629,7 +1153,7 @@ void MeshTools::Modification::smooth (MeshBase & mesh,
                          * id is greater than its neighbor's.
                          * Sides get only built once.
                          */
-                        if ((elem->neighbor_ptr(s) != libmesh_nullptr) &&
+                        if ((elem->neighbor_ptr(s) != nullptr) &&
                             (elem->id() > elem->neighbor_ptr(s)->id()))
                           {
                             std::unique_ptr<const Elem> side(elem->build_side_ptr(s));
@@ -1701,7 +1225,7 @@ void MeshTools::Modification::smooth (MeshBase & mesh,
              * finally reposition the vertex nodes
              */
             for (unsigned int nid=0; nid<mesh.n_nodes(); ++nid)
-              if (!on_boundary[nid] && weight[nid] > 0.)
+              if (!boundary_node_ids.count(nid) && weight[nid] > 0.)
                 mesh.node_ref(nid) = new_positions[nid]/weight[nid];
           }
 
@@ -1831,8 +1355,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
       libmesh_assert_equal_to (orig_id, added_elem->id());
 
       // Avoid compiler warnings in opt mode.
-      libmesh_ignore(added_elem);
-      libmesh_ignore(orig_id);
+      libmesh_ignore(added_elem, orig_id);
     }
 
   // Finally, also add back the saved boundary information
@@ -1862,20 +1385,15 @@ void MeshTools::Modification::change_boundary_id (MeshBase & mesh,
   BoundaryInfo & bi = mesh.get_boundary_info();
 
   {
-    // Build a list of all nodes that have boundary IDs
-    std::vector<dof_id_type> node_list;
-    std::vector<boundary_id_type> bc_id_list;
-    bi.build_node_list (node_list, bc_id_list);
-
     // Temporary vector to hold ids
     std::vector<boundary_id_type> bndry_ids;
 
-    // For each node with the old_id...
-    for (std::size_t idx=0; idx<node_list.size(); ++idx)
-      if (bc_id_list[idx] == old_id)
+    // build_node_list returns a vector of (node, bc) tuples.
+    for (const auto & t : bi.build_node_list())
+      if (std::get<1>(t) == old_id)
         {
           // Get the node in question
-          const Node * node = mesh.node_ptr(node_list[idx]);
+          const Node * node = mesh.node_ptr(std::get<0>(t));
 
           // Get all the current IDs for this node.
           bi.boundary_ids(node, bndry_ids);
@@ -1892,24 +1410,18 @@ void MeshTools::Modification::change_boundary_id (MeshBase & mesh,
   }
 
   {
-    // Build a list of all edges that have boundary IDs
-    std::vector<dof_id_type> elem_list;
-    std::vector<unsigned short int> edge_list;
-    std::vector<boundary_id_type> bc_id_list;
-    bi.build_edge_list (elem_list, edge_list, bc_id_list);
-
     // Temporary vector to hold ids
     std::vector<boundary_id_type> bndry_ids;
 
-    // For each edge with the old_id...
-    for (std::size_t idx=0; idx<elem_list.size(); ++idx)
-      if (bc_id_list[idx] == old_id)
+    // build_edge_list returns a vector of (elem, side, bc) tuples.
+    for (const auto & t : bi.build_edge_list())
+      if (std::get<2>(t) == old_id)
         {
           // Get the elem in question
-          const Elem * elem = mesh.elem_ptr(elem_list[idx]);
+          const Elem * elem = mesh.elem_ptr(std::get<0>(t));
 
           // The edge of the elem in question
-          unsigned short int edge = edge_list[idx];
+          unsigned short int edge = std::get<1>(t);
 
           // Get all the current IDs for the edge in question.
           bi.edge_boundary_ids(elem, edge, bndry_ids);
@@ -1926,24 +1438,18 @@ void MeshTools::Modification::change_boundary_id (MeshBase & mesh,
   }
 
   {
-    // Build a list of all shell-faces that have boundary IDs
-    std::vector<dof_id_type> elem_list;
-    std::vector<unsigned short int> shellface_list;
-    std::vector<boundary_id_type> bc_id_list;
-    bi.build_shellface_list (elem_list, shellface_list, bc_id_list);
-
     // Temporary vector to hold ids
     std::vector<boundary_id_type> bndry_ids;
 
-    // For each shellface with the old_id...
-    for (std::size_t idx=0; idx<elem_list.size(); ++idx)
-      if (bc_id_list[idx] == old_id)
+    // build_shellface_list returns a vector of (elem, side, bc) tuples.
+    for (const auto & t : bi.build_shellface_list())
+      if (std::get<2>(t) == old_id)
         {
           // Get the elem in question
-          const Elem * elem = mesh.elem_ptr(elem_list[idx]);
+          const Elem * elem = mesh.elem_ptr(std::get<0>(t));
 
           // The shellface of the elem in question
-          unsigned short int shellface = shellface_list[idx];
+          unsigned short int shellface = std::get<1>(t);
 
           // Get all the current IDs for the shellface in question.
           bi.shellface_boundary_ids(elem, shellface, bndry_ids);
@@ -1960,24 +1466,18 @@ void MeshTools::Modification::change_boundary_id (MeshBase & mesh,
   }
 
   {
-    // Build a list of all sides that have boundary IDs
-    std::vector<dof_id_type> elem_list;
-    std::vector<unsigned short int> side_list;
-    std::vector<boundary_id_type> bc_id_list;
-    bi.build_side_list (elem_list, side_list, bc_id_list);
-
     // Temporary vector to hold ids
     std::vector<boundary_id_type> bndry_ids;
 
-    // For each side with the old_id...
-    for (std::size_t idx=0; idx<elem_list.size(); ++idx)
-      if (bc_id_list[idx] == old_id)
+    // build_side_list returns a vector of (elem, side, bc) tuples.
+    for (const auto & t : bi.build_side_list())
+      if (std::get<2>(t) == old_id)
         {
           // Get the elem in question
-          const Elem * elem = mesh.elem_ptr(elem_list[idx]);
+          const Elem * elem = mesh.elem_ptr(std::get<0>(t));
 
           // The side of the elem in question
-          unsigned short int side = side_list[idx];
+          unsigned short int side = std::get<1>(t);
 
           // Get all the current IDs for the side in question.
           bi.boundary_ids(elem, side, bndry_ids);

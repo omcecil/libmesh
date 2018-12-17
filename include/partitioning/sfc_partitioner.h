@@ -51,11 +51,21 @@ public:
   {}
 
   /**
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this class.
+   */
+  SFCPartitioner (const SFCPartitioner &) = default;
+  SFCPartitioner (SFCPartitioner &&) = default;
+  SFCPartitioner & operator= (const SFCPartitioner &) = default;
+  SFCPartitioner & operator= (SFCPartitioner &&) = default;
+  virtual ~SFCPartitioner() = default;
+
+  /**
    * \returns A copy of this partitioner wrapped in a smart pointer.
    */
-  virtual std::unique_ptr<Partitioner> clone () const libmesh_override
+  virtual std::unique_ptr<Partitioner> clone () const override
   {
-    return libmesh_make_unique<SFCPartitioner>();
+    return libmesh_make_unique<SFCPartitioner>(*this);
   }
 
   /**
@@ -76,7 +86,7 @@ public:
   virtual void partition_range(MeshBase & mesh,
                                MeshBase::element_iterator it,
                                MeshBase::element_iterator end,
-                               const unsigned int n) libmesh_override;
+                               const unsigned int n) override;
 
 protected:
 
@@ -84,7 +94,7 @@ protected:
    * Partition the \p MeshBase into \p n subdomains.
    */
   virtual void _do_partition (MeshBase & mesh,
-                              const unsigned int n) libmesh_override;
+                              const unsigned int n) override;
 
 
 private:

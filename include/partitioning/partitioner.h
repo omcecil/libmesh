@@ -28,6 +28,8 @@
 // C++ Includes
 #include <cstddef>
 #include <memory>
+#include <unordered_map>
+#include <queue>
 
 namespace libMesh
 {
@@ -52,12 +54,17 @@ public:
   /**
    * Constructor.
    */
-  Partitioner () : _weights(libmesh_nullptr) {}
+  Partitioner () : _weights(nullptr) {}
 
   /**
-   * Destructor. Virtual so that we can derive from this class.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this class.
    */
-  virtual ~Partitioner() {}
+  Partitioner (const Partitioner &) = default;
+  Partitioner (Partitioner &&) = default;
+  Partitioner & operator= (const Partitioner &) = default;
+  Partitioner & operator= (Partitioner &&) = default;
+  virtual ~Partitioner() = default;
 
   /**
    * \returns A copy of this partitioner wrapped in a smart pointer.
@@ -163,6 +170,32 @@ public:
   static void set_node_processor_ids(MeshBase & mesh);
 
   /**
+   * On the partitioning interface, a surface is shared by two and only two processors.
+   * Try to find which pair of processors corresponds to which surfaces, and store their
+   * nodes.
+   */
+  static void processor_pairs_to_interface_nodes(MeshBase & mesh, std::map<std::pair<processor_id_type, processor_id_type>, std::set<dof_id_type>> & processor_pair_to_nodes);
+
+  /**
+  * Nodes on the partitioning interface is linearly assigned to
+  * each pair of processors
+  */
+  static void set_interface_node_processor_ids_linear(MeshBase & mesh);
+
+  /**
+  * Nodes on the partitioning interface is clustered into two groups BFS (Breadth First Search)scheme
+  * for per pair of processors
+  */
+  static void set_interface_node_processor_ids_BFS(MeshBase & mesh);
+
+
+  /**
+  * Nodes on the partitioning interface is partitioned into two groups using a PETSc partitioner
+  * for each pair of processors
+  */
+  static void set_interface_node_processor_ids_petscpartitioner(MeshBase & mesh);
+
+  /**
    * Attach weights that can be used for partitioning.  This ErrorVector should be
    * _exactly_ the same on every processor and should have mesh->max_elem_id()
    * entries.
@@ -211,9 +244,51 @@ protected:
   static const dof_id_type communication_blocksize;
 
   /**
+   * Construct contiguous global indices for the current partitioning. The global indices
+   * are ordered part-by-part
+   */
+   virtual void _find_global_index_by_pid_map(const MeshBase & mesh);
+
+
+   /**
+    * Build a dual graph for partitioner
+    *
+    */
+  virtual void build_graph(const MeshBase & mesh);
+
+  /**
+   * Assign the computed partitioning to the mesh.
+   */
+  void assign_partitioning (const MeshBase & mesh, const std::vector<dof_id_type> & parts);
+
+  /**
    * The weights that might be used for partitioning.
    */
   ErrorVector * _weights;
+
+  /**
+   * Maps active element ids into a contiguous range, as needed by parallel partitioner.
+   */
+  std::unordered_map<dof_id_type, dof_id_type> _global_index_by_pid_map;
+
+  /**
+   * The number of active elements on each processor.
+   *
+   * \note ParMETIS requires that each processor have some active
+   * elements; it will abort if any processor passes a nullptr _part
+   * array.
+   */
+  std::vector<dof_id_type> _n_active_elem_on_proc;
+
+  /**
+   * A dual graph corresponds to the mesh, and it is typically used
+   * in paritioner. A vertex represents an element, and its neighbors are the
+   * element neighbors.
+   */
+  std::vector<std::vector<dof_id_type>> _dual_graph;
+
+
+  std::vector<Elem *> _local_id_to_elem;
 };
 
 } // namespace libMesh

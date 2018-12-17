@@ -17,17 +17,6 @@
 
 #include "libmesh/checkpoint_io.h"
 
-// C++ includes
-#include <iostream>
-#include <iomanip>
-#include <cstdio>
-#include <unistd.h>
-#include <vector>
-#include <string>
-#include <cstring>
-#include <fstream>
-#include <sstream> // for ostringstream
-
 // Local includes
 #include "libmesh/boundary_info.h"
 #include "libmesh/distributed_mesh.h"
@@ -45,34 +34,49 @@
 #include "libmesh/xdr_io.h"
 #include "libmesh/xdr_cxx.h"
 #include "libmesh/utility.h"
+#include "libmesh/int_range.h"
+
+// C++ includes
+#include <iostream>
+#include <iomanip>
+#include <cstdio>
+#include <unistd.h>
+#include <vector>
+#include <string>
+#include <cstring>
+#include <fstream>
+#include <sstream> // for ostringstream
+#include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
 // chunking computes the number of chunks and first-chunk-offset when splitting a mesh
 // into nsplits pieces using size procs for the given MPI rank.  The number of chunks and offset
 // are stored in nchunks and first_chunk respectively.
-void chunking(libMesh::processor_id_type size, libMesh::processor_id_type rank, unsigned int nsplits,
+void chunking(libMesh::processor_id_type size, libMesh::processor_id_type rank, libMesh::processor_id_type nsplits,
               libMesh::processor_id_type & nchunks, libMesh::processor_id_type & first_chunk)
 {
   if (nsplits % size == 0) // the chunks divide evenly over the processors
     {
       nchunks = nsplits / size;
-      first_chunk = nchunks * rank;
+      first_chunk = libMesh::cast_int<libMesh::processor_id_type>(nchunks * rank);
       return;
     }
 
-  int nextra = nsplits % size;
+  libMesh::processor_id_type nextra = nsplits % size;
   if (rank < nextra) // leftover chunks cause an extra chunk to be added to this processor
     {
-      nchunks = nsplits / size + 1;
-      first_chunk = nchunks * rank;
+      nchunks = libMesh::cast_int<libMesh::processor_id_type>(nsplits / size + 1);
+      first_chunk = libMesh::cast_int<libMesh::processor_id_type>(nchunks * rank);
     }
   else // no extra chunks, but first chunk is offset by extras on earlier ranks
     {
       nchunks = nsplits / size;
       // account for the case where nchunks is zero where we want max int
-      first_chunk = std::max((int)((nchunks + 1) * (nsplits % size) + nchunks * (rank - nsplits % size)),
-                             (1 - (int)nchunks) * std::numeric_limits<int>::max());
+      first_chunk = libMesh::cast_int<libMesh::processor_id_type>
+        (std::max((int)((nchunks + 1) * (nsplits % size) + nchunks * (rank - nsplits % size)),
+         (1 - (int)nchunks) * std::numeric_limits<int>::max()));
     }
 }
 
@@ -127,7 +131,7 @@ void make_dir(const std::string & input_name, libMesh::processor_id_type n_procs
 namespace libMesh
 {
 
-std::unique_ptr<CheckpointIO> split_mesh(MeshBase & mesh, unsigned int nsplits)
+std::unique_ptr<CheckpointIO> split_mesh(MeshBase & mesh, processor_id_type nsplits)
 {
   // There is currently an issue with DofObjects not being properly
   // reset if the mesh is not first repartitioned onto 1 processor
@@ -143,7 +147,7 @@ std::unique_ptr<CheckpointIO> split_mesh(MeshBase & mesh, unsigned int nsplits)
 
   auto cpr = libmesh_make_unique<CheckpointIO>(mesh);
   cpr->current_processor_ids().clear();
-  for (unsigned int i = my_first_chunk; i < my_first_chunk + my_num_chunks; i++)
+  for (processor_id_type i = my_first_chunk; i < my_first_chunk + my_num_chunks; i++)
     cpr->current_processor_ids().push_back(i);
   cpr->current_n_processors() = nsplits;
   cpr->parallel() = true;
@@ -195,8 +199,8 @@ processor_id_type CheckpointIO::select_split_config(const std::string & input_na
           {
             // otherwise fall back to a serial/single-split mesh
             header_name = header_file(input_name, 1);
-            std::ifstream in (header_name.c_str());
-            if (!in.good())
+            std::ifstream in2 (header_name.c_str());
+            if (!in2.good())
               {
                 libmesh_error_msg("ERROR: cannot locate header file for input '" << input_name << "'");
               }
@@ -235,7 +239,7 @@ processor_id_type CheckpointIO::select_split_config(const std::string & input_na
 
   if (!input_n_procs)
     input_n_procs = 1;
-  return input_n_procs;
+  return cast_int<processor_id_type>(input_n_procs);
 }
 
 void CheckpointIO::cleanup(const std::string & input_name, processor_id_type n_procs)
@@ -248,7 +252,7 @@ void CheckpointIO::cleanup(const std::string & input_name, processor_id_type n_p
   for (processor_id_type i = 0; i < n_procs; i++)
     {
       auto split = split_file(input_name, n_procs, i);
-      auto ret = std::remove(split.c_str());
+      ret = std::remove(split.c_str());
       if (ret != 0)
         libmesh_warning("Failed to clean up checkpoint split file '" << split << "': " << std::strerror(ret));
     }
@@ -298,7 +302,7 @@ void CheckpointIO::write (const std::string & name)
       // Write out the max mesh dimension for backwards compatibility
       // with code that sets it independently of element dimensions
       {
-        uint16_t mesh_dimension = mesh.mesh_dimension();
+        uint16_t mesh_dimension = cast_int<uint16_t>(mesh.mesh_dimension());
         io.data(mesh_dimension, "# dimensions");
       }
 
@@ -331,9 +335,23 @@ void CheckpointIO::write (const std::string & name)
   // processor.
   std::vector<processor_id_type> ids_to_write;
 
+  // We're going to sort elements by pid in one pass, to avoid sending
+  // predicated iterators through the whole mesh N_p times
+  std::unordered_map<processor_id_type, std::vector<Elem *>> elements_on_pid;
+
   if (_parallel)
     {
       ids_to_write = _my_processor_ids;
+      for (processor_id_type p : ids_to_write)
+        elements_on_pid[p].clear();
+      auto eop_end = elements_on_pid.end();
+      for (auto & elem : mesh.element_ptr_range())
+        {
+          const processor_id_type p = elem->processor_id();
+          auto eop_it = elements_on_pid.find(p);
+          if (eop_it != eop_end)
+            eop_it->second.push_back(elem);
+        }
     }
   else if (mesh.is_serial())
     {
@@ -347,6 +365,14 @@ void CheckpointIO::write (const std::string & name)
     {
       libmesh_error_msg("Cannot write serial checkpoint from distributed mesh");
     }
+
+  // Call build_side_list() and build_node_list() just *once* to avoid
+  // redundant expensive sorts during mesh splitting.
+  const BoundaryInfo & boundary_info = mesh.get_boundary_info();
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
+    bc_triples = boundary_info.build_side_list();
+  std::vector<std::tuple<dof_id_type, boundary_id_type>>
+    bc_tuples = boundary_info.build_node_list();
 
   for (const auto & my_pid : ids_to_write)
     {
@@ -374,11 +400,33 @@ void CheckpointIO::write (const std::string & name)
       // lists.
       else
         {
-          query_ghosting_functors(mesh, my_pid, false, elements);
-          query_ghosting_functors(mesh, DofObject::invalid_processor_id, false, elements);
-          connect_children(mesh, my_pid, elements);
-          connect_children(mesh, DofObject::invalid_processor_id, elements);
-          connect_families(elements);
+          for (processor_id_type p : {my_pid, DofObject::invalid_processor_id})
+            {
+              const auto elements_vec_it = elements_on_pid.find(p);
+              if (elements_vec_it != elements_on_pid.end())
+                {
+                  const auto & p_elements = elements_vec_it->second;
+                  Elem * const * elempp = p_elements.data();
+                  Elem * const * elemend = elempp + p_elements.size();
+
+                  const MeshBase::const_element_iterator
+                    pid_elements_begin = MeshBase::const_element_iterator
+                      (elempp, elemend, Predicates::NotNull<Elem * const *>()),
+                    pid_elements_end = MeshBase::const_element_iterator
+                      (elemend, elemend, Predicates::NotNull<Elem * const *>()),
+                    active_pid_elements_begin = MeshBase::const_element_iterator
+                      (elempp, elemend, Predicates::Active<Elem * const *>()),
+                    active_pid_elements_end = MeshBase::const_element_iterator
+                      (elemend, elemend, Predicates::Active<Elem * const *>());
+
+                  query_ghosting_functors
+                    (mesh, p, active_pid_elements_begin,
+                     active_pid_elements_end, elements);
+                  connect_children(mesh, pid_elements_begin,
+                                   pid_elements_end, elements);
+                }
+              connect_families(elements);
+            }
         }
 
       std::set<const Node *> connected_nodes;
@@ -394,10 +442,10 @@ void CheckpointIO::write (const std::string & name)
       this->write_remote_elem (io, elements);
 
       // write the boundary condition information
-      this->write_bcs (io, elements);
+      this->write_bcs (io, elements, bc_triples);
 
       // write the nodeset information
-      this->write_nodesets (io, connected_nodes);
+      this->write_nodesets (io, connected_nodes, bc_tuples);
 
       // close it up
       io.close();
@@ -458,7 +506,7 @@ void CheckpointIO::write_nodes (Xdr & io,
       id_pid[0] = node->id();
       id_pid[1] = node->processor_id();
 
-      io.data_stream(&id_pid[0], 2, 2);
+      io.data_stream(id_pid.data(), 2, 2);
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
       largest_id_type unique_id = node->unique_id();
@@ -476,7 +524,7 @@ void CheckpointIO::write_nodes (Xdr & io,
       coords[2] = (*node)(2);
 #endif
 
-      io.data_stream(&coords[0], LIBMESH_DIM, 3);
+      io.data_stream(coords.data(), LIBMESH_DIM, 3);
     }
 }
 
@@ -506,7 +554,7 @@ void CheckpointIO::write_connectivity (Xdr & io,
       elem_data[3] = elem->subdomain_id();
 
 #ifdef LIBMESH_ENABLE_AMR
-      if (elem->parent() != libmesh_nullptr)
+      if (elem->parent() != nullptr)
         {
           elem_data[4] = elem->parent()->id();
           elem_data[5] = elem->parent()->which_child_am_i(elem);
@@ -514,8 +562,8 @@ void CheckpointIO::write_connectivity (Xdr & io,
       else
 #endif
         {
-          elem_data[4] = DofObject::invalid_processor_id;
-          elem_data[5] = DofObject::invalid_processor_id;
+          elem_data[4] = static_cast<largest_id_type>(-1);
+          elem_data[5] = static_cast<largest_id_type>(-1);
         }
 
       conn_data.resize(n_nodes);
@@ -523,7 +571,7 @@ void CheckpointIO::write_connectivity (Xdr & io,
       for (unsigned int i=0; i<n_nodes; i++)
         conn_data[i] = elem->node_id(i);
 
-      io.data_stream(&elem_data[0],
+      io.data_stream(elem_data.data(),
                      cast_int<unsigned int>(elem_data.size()),
                      cast_int<unsigned int>(elem_data.size()));
 
@@ -534,7 +582,7 @@ void CheckpointIO::write_connectivity (Xdr & io,
 #endif
 
 #ifdef LIBMESH_ENABLE_AMR
-      uint16_t p_level = elem->p_level();
+      uint16_t p_level = cast_int<uint16_t>(elem->p_level());
       io.data(p_level, "# p_level");
 
       uint16_t rflag = elem->refinement_flag();
@@ -543,7 +591,7 @@ void CheckpointIO::write_connectivity (Xdr & io,
       uint16_t pflag = elem->p_refinement_flag();
       io.data(pflag, "# pflag");
 #endif
-      io.data_stream(&conn_data[0],
+      io.data_stream(conn_data.data(),
                      cast_int<unsigned int>(conn_data.size()),
                      cast_int<unsigned int>(conn_data.size()));
     }
@@ -575,8 +623,9 @@ void CheckpointIO::write_remote_elem (Xdr & io,
 #ifdef LIBMESH_ENABLE_AMR
       if (elem->has_children())
         {
-          const unsigned int nc = elem->n_children();
-          for (unsigned int c = 0; c != nc; ++c)
+          for (unsigned short c = 0,
+               nc = cast_int<unsigned short>(elem->n_children());
+               c != nc; ++c)
             {
               const Elem * child = elem->child_ptr(c);
               if (child == remote_elem ||
@@ -599,25 +648,13 @@ void CheckpointIO::write_remote_elem (Xdr & io,
 
 
 void CheckpointIO::write_bcs (Xdr & io,
-                              const std::set<const Elem *, CompareElemIdsByLevel> & elements) const
+                              const std::set<const Elem *, CompareElemIdsByLevel> & elements,
+                              const std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>> & bc_triples) const
 {
   libmesh_assert (io.writing());
 
-  // convenient reference to our mesh
-  const MeshBase & mesh = MeshOutput<MeshBase>::mesh();
-
-  // and our boundary info object
-  const BoundaryInfo & boundary_info = mesh.get_boundary_info();
-
-  std::vector<dof_id_type> full_element_id_list;
-  std::vector<uint16_t> full_side_list;
-  std::vector<boundary_id_type> full_bc_id_list;
-
-  boundary_info.build_side_list(full_element_id_list, full_side_list, full_bc_id_list);
-
-  std::size_t bc_size = full_element_id_list.size();
-  libmesh_assert_equal_to(bc_size, full_side_list.size());
-  libmesh_assert_equal_to(bc_size, full_bc_id_list.size());
+  // Build a list of (elem, side, bc) tuples.
+  std::size_t bc_size = bc_triples.size();
 
   std::vector<largest_id_type> element_id_list;
   std::vector<uint16_t> side_list;
@@ -627,12 +664,16 @@ void CheckpointIO::write_bcs (Xdr & io,
   side_list.reserve(bc_size);
   bc_id_list.reserve(bc_size);
 
-  for (std::size_t i = 0; i != bc_size; ++i)
-    if (elements.count(mesh.elem_ptr(full_element_id_list[i])))
+  std::unordered_set<dof_id_type> elems;
+  for (auto & e : elements)
+    elems.insert(e->id());
+
+  for (const auto & t : bc_triples)
+    if (elems.count(std::get<0>(t)))
       {
-        element_id_list.push_back(full_element_id_list[i]);
-        side_list.push_back(full_side_list[i]);
-        bc_id_list.push_back(full_bc_id_list[i]);
+        element_id_list.push_back(std::get<0>(t));
+        side_list.push_back(std::get<1>(t));
+        bc_id_list.push_back(std::get<2>(t));
       }
 
 
@@ -644,23 +685,16 @@ void CheckpointIO::write_bcs (Xdr & io,
 
 
 void CheckpointIO::write_nodesets (Xdr & io,
-                                   const std::set<const Node *> & nodeset) const
+                                   const std::set<const Node *> & nodeset,
+                                   const std::vector<std::tuple<dof_id_type, boundary_id_type>> & bc_tuples) const
 {
   libmesh_assert (io.writing());
 
   // convenient reference to our mesh
   const MeshBase & mesh = MeshOutput<MeshBase>::mesh();
 
-  // and our boundary info object
-  const BoundaryInfo & boundary_info = mesh.get_boundary_info();
-
-  std::vector<dof_id_type> full_node_id_list;
-  std::vector<boundary_id_type> full_bc_id_list;
-
-  boundary_info.build_node_list(full_node_id_list, full_bc_id_list);
-
-  std::size_t nodeset_size = full_node_id_list.size();
-  libmesh_assert_equal_to(nodeset_size, full_bc_id_list.size());
+  // Build a list of (node, bc) tuples
+  std::size_t nodeset_size = bc_tuples.size();
 
   std::vector<largest_id_type> node_id_list;
   std::vector<largest_id_type> bc_id_list;
@@ -668,11 +702,11 @@ void CheckpointIO::write_nodesets (Xdr & io,
   node_id_list.reserve(nodeset_size);
   bc_id_list.reserve(nodeset_size);
 
-  for (std::size_t i = 0; i != nodeset_size; ++i)
-    if (nodeset.count(mesh.node_ptr(full_node_id_list[i])))
+  for (const auto & t : bc_tuples)
+    if (nodeset.count(mesh.node_ptr(std::get<0>(t))))
       {
-        node_id_list.push_back(full_node_id_list[i]);
-        bc_id_list.push_back(full_bc_id_list[i]);
+        node_id_list.push_back(std::get<0>(t));
+        bc_id_list.push_back(std::get<1>(t));
       }
 
   io.data(node_id_list, "# node id list");
@@ -722,7 +756,7 @@ void CheckpointIO::read (const std::string & input_name)
   libmesh_assert(!mesh.n_elem());
 
   header_id_type data_size;
-  largest_id_type input_n_procs = select_split_config(input_name, data_size);
+  processor_id_type input_n_procs = select_split_config(input_name, data_size);
   auto header_name = header_file(input_name, input_n_procs);
   bool input_parallel = input_n_procs > 0;
 
@@ -742,7 +776,8 @@ void CheckpointIO::read (const std::string & input_name)
         (input_parallel && !mesh.is_replicated()) ?
         mesh.n_processors() : 1;
 
-      for (processor_id_type proc_id = begin_proc_id; proc_id < input_n_procs; proc_id += stride)
+      for (processor_id_type proc_id = begin_proc_id; proc_id < input_n_procs;
+           proc_id = cast_int<processor_id_type>(proc_id + stride))
         {
           auto file_name = split_file(input_name, input_n_procs, proc_id);
 
@@ -838,7 +873,7 @@ file_id_type CheckpointIO::read_header (const std::string & name)
 
   // broadcast data from processor 0, set values everywhere
   this->comm().broadcast(mesh_dimension);
-  mesh.set_mesh_dimension(mesh_dimension);
+  mesh.set_mesh_dimension(cast_int<unsigned char>(mesh_dimension));
 
   this->comm().broadcast(input_parallel);
 
@@ -903,7 +938,7 @@ void CheckpointIO::read_subdomain_names(Xdr & io)
       io.data(subdomain_ids);
       io.data(subdomain_names);
 
-      for (std::size_t i=0; i<subdomain_ids.size(); i++)
+      for (auto i : index_range(subdomain_ids))
         subdomain_map[cast_int<subdomain_id_type>(subdomain_ids[i])] =
           subdomain_names[i];
     }
@@ -928,14 +963,14 @@ void CheckpointIO::read_nodes (Xdr & io)
 
   for (unsigned int i=0; i<n_nodes_here; i++)
     {
-      io.data_stream(&id_pid[0], 2, 2);
+      io.data_stream(id_pid.data(), 2, 2);
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
       file_id_type unique_id = 0;
       io.data(unique_id, "# unique id");
 #endif
 
-      io.data_stream(&coords[0], LIBMESH_DIM, LIBMESH_DIM);
+      io.data_stream(coords.data(), LIBMESH_DIM, LIBMESH_DIM);
 
       Point p;
       p(0) = coords[0];
@@ -996,12 +1031,17 @@ void CheckpointIO::read_connectivity (Xdr & io)
   // Keep track of the highest dimensional element we've added to the mesh
   unsigned int highest_elem_dim = 1;
 
+  // RHS: Originally we used invalid_processor_id as a "no parent" tag
+  // number, because I'm an idiot.  Let's try to support broken files
+  // as much as possible.
+  bool file_is_broken = false;
+
   for (unsigned int i=0; i<n_elems_here; i++)
     {
       // id type pid subdomain_id parent_id
       std::vector<file_id_type> elem_data(6);
       io.data_stream
-        (&elem_data[0], cast_int<unsigned int>(elem_data.size()),
+        (elem_data.data(), cast_int<unsigned int>(elem_data.size()),
          cast_int<unsigned int>(elem_data.size()));
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
@@ -1023,7 +1063,7 @@ void CheckpointIO::read_connectivity (Xdr & io)
       // Snag the node ids this element was connected to
       std::vector<file_id_type> conn_data(n_nodes);
       io.data_stream
-        (&conn_data[0], cast_int<unsigned int>(conn_data.size()),
+        (conn_data.data(), cast_int<unsigned int>(conn_data.size()),
          cast_int<unsigned int>(conn_data.size()));
 
       const dof_id_type id                 =
@@ -1035,18 +1075,28 @@ void CheckpointIO::read_connectivity (Xdr & io)
         (elem_data[2] % mesh.n_processors());
       const subdomain_id_type subdomain_id =
         cast_int<subdomain_id_type>(elem_data[3]);
-      const dof_id_type parent_id          =
-        cast_int<dof_id_type>      (elem_data[4]);
-      const unsigned short int child_num   =
-        cast_int<dof_id_type>      (elem_data[5]);
 
+      // Old broken files used processsor_id_type(-1)...
+      // But we *know* our first element will be level 0
+      if (i == 0 && elem_data[4] == 65535)
+        file_is_broken = true;
+
+      // On a broken file we can't tell whether a parent of 65535 is a
+      // null parent or an actual parent of 65535.  Assuming the
+      // former will cause less breakage.
       Elem * parent =
-        (parent_id == DofObject::invalid_processor_id) ?
-        libmesh_nullptr : mesh.elem_ptr(parent_id);
+        (elem_data[4] == static_cast<largest_id_type>(-1) ||
+         (file_is_broken && elem_data[4] == 65535)) ?
+        nullptr : mesh.elem_ptr(cast_int<dof_id_type>(elem_data[4]));
+      const unsigned short int child_num   =
+        (elem_data[5] == static_cast<largest_id_type>(-1) ||
+         (file_is_broken && elem_data[5] == 65535)) ?
+        static_cast<unsigned short>(-1) :
+        cast_int<unsigned short>(elem_data[5]);
 
       if (!parent)
         libmesh_assert_equal_to
-          (child_num, DofObject::invalid_processor_id);
+          (child_num, static_cast<unsigned short>(-1));
 
       Elem * old_elem = mesh.query_elem_ptr(id);
 
@@ -1068,7 +1118,9 @@ void CheckpointIO::read_connectivity (Xdr & io)
 
           libmesh_assert_equal_to(old_elem->n_nodes(), conn_data.size());
 
-          for (std::size_t n=0; n != conn_data.size(); ++n)
+          for (unsigned int n=0,
+               n_conn = cast_int<unsigned int>(conn_data.size());
+               n != n_conn; n++)
             libmesh_assert_equal_to
               (old_elem->node_id(n),
                cast_int<dof_id_type>(conn_data[n]));
@@ -1107,7 +1159,9 @@ void CheckpointIO::read_connectivity (Xdr & io)
           libmesh_assert(elem->n_nodes() == conn_data.size());
 
           // Connect all the nodes to this element
-          for (std::size_t n=0; n<conn_data.size(); n++)
+          for (unsigned int n=0,
+               n_conn = cast_int<unsigned int>(conn_data.size());
+               n != n_conn; n++)
             elem->set_node(n) =
               mesh.node_ptr(cast_int<dof_id_type>(conn_data[n]));
 
@@ -1134,7 +1188,7 @@ void CheckpointIO::read_remote_elem (Xdr & io, bool libmesh_dbg_var(expect_all_r
 
   libmesh_assert_equal_to(elem_ids.size(), elem_sides.size());
 
-  for (std::size_t i=0; i != elem_ids.size(); ++i)
+  for (auto i : index_range(elem_ids))
     {
       Elem & elem = mesh.elem_ref(cast_int<dof_id_type>(elem_ids[i]));
       if (!elem.neighbor_ptr(elem_sides[i]))
@@ -1152,15 +1206,14 @@ void CheckpointIO::read_remote_elem (Xdr & io, bool libmesh_dbg_var(expect_all_r
   io.data(child_numbers, "# remote child_numbers");
 
 #ifdef LIBMESH_ENABLE_AMR
-  for (std::size_t i=0; i != parent_ids.size(); ++i)
+  for (auto i : index_range(parent_ids))
     {
       Elem & elem = mesh.elem_ref(cast_int<dof_id_type>(parent_ids[i]));
 
       // We'd like to assert that no child pointer already exists to
       // be overwritten by remote_elem, but Elem doesn't actually have
       // an API that will return a child pointer without asserting
-      // that it isn't NULL
-      //
+      // that it isn't nullptr.
       const Elem * child = elem.raw_child_ptr(child_numbers[i]);
 
       if (!child)
@@ -1191,10 +1244,10 @@ void CheckpointIO::read_bcs (Xdr & io)
   io.data(side_list, "# sides of elements for bcs");
   io.data(bc_id_list, "# bc ids");
 
-  for (std::size_t i=0; i<element_id_list.size(); i++)
+  for (auto i : index_range(element_id_list))
     boundary_info.add_side
       (cast_int<dof_id_type>(element_id_list[i]), side_list[i],
-       cast_int<dof_id_type>(bc_id_list[i]));
+       cast_int<boundary_id_type>(bc_id_list[i]));
 }
 
 
@@ -1214,7 +1267,7 @@ void CheckpointIO::read_nodesets (Xdr & io)
   io.data(node_id_list, "# node id list");
   io.data(bc_id_list, "# nodeset bc id list");
 
-  for (std::size_t i=0; i<node_id_list.size(); i++)
+  for (auto i : index_range(node_id_list))
     boundary_info.add_node
       (cast_int<dof_id_type>(node_id_list[i]),
        cast_int<boundary_id_type>(bc_id_list[i]));
@@ -1245,7 +1298,7 @@ void CheckpointIO::read_bc_names(Xdr & io, BoundaryInfo & info, bool is_sideset)
     }
 
   // Add them back into the map
-  for (std::size_t i=0; i<boundary_ids.size(); i++)
+  for (auto i : index_range(boundary_ids))
     boundary_map[cast_int<boundary_id_type>(boundary_ids[i])] =
       boundary_names[i];
 }

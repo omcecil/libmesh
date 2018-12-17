@@ -44,7 +44,7 @@ class CheckpointIO;
  * equal to the number of chunks.  This function supports MPI parallelism and can be used with
  * several MPI procs to speed up splitting.
  */
-std::unique_ptr<CheckpointIO> split_mesh(MeshBase & mesh, unsigned int nsplits);
+std::unique_ptr<CheckpointIO> split_mesh(MeshBase & mesh, processor_id_type nsplits);
 
 /**
  * The CheckpointIO class can be used to write simplified restart
@@ -99,7 +99,7 @@ public:
    * directory without the "-split[n]" suffix.  The number of splits will be determined
    * automatically by the number of processes being used for the mesh at the time of reading.
    */
-  virtual void read (const std::string & input_name) libmesh_override;
+  virtual void read (const std::string & input_name) override;
 
   /**
    * This method implements writing a mesh to a specified file.  If the mesh has been split
@@ -114,7 +114,7 @@ public:
    *
    * would create a directory named "foo.cpr-split42".
    */
-  virtual void write (const std::string & name) libmesh_override;
+  virtual void write (const std::string & name) override;
 
   /**
    * Used to remove a checkpoint directory and its corresponding files.  This effectively undoes
@@ -214,13 +214,15 @@ private:
    * Write the side boundary conditions for part of a mesh
    */
   void write_bcs (Xdr & io,
-                  const std::set<const Elem *, CompareElemIdsByLevel> & elements) const;
+                  const std::set<const Elem *, CompareElemIdsByLevel> & elements,
+                  const std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>> & bc_triples) const;
 
   /**
    * Write the nodal boundary conditions for part of a mesh
    */
   void write_nodesets (Xdr & io,
-                       const std::set<const Node *> & nodeset) const;
+                       const std::set<const Node *> & nodeset,
+                       const std::vector<std::tuple<dof_id_type, boundary_id_type>> & bc_tuples) const;
 
   /**
    * Write boundary names information (sideset and nodeset)

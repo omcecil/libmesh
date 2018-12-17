@@ -27,8 +27,9 @@
 
 // C++ includes
 #include <cstddef>
-#include <vector>
 #include <set>
+#include <unordered_map>
+#include <vector>
 
 namespace libMesh
 {
@@ -40,8 +41,8 @@ class Elem;
 
 /**
  * This class defines a node on a tree.  A tree node
- * contains a pointer to its parent (NULL if the node is
- * the root) and pointers to its children (NULL if the
+ * contains a pointer to its parent (nullptr if the node is
+ * the root) and pointers to its children (nullptr if the
  * node is active.
  *
  * \author Daniel Dreyer
@@ -54,12 +55,12 @@ class TreeNode
 public:
   /**
    * Constructor.  Takes a pointer to this node's
-   * parent.  The pointer should only be NULL
+   * parent.  The pointer should only be nullptr
    * for the top-level (root) node.
    */
   TreeNode (const MeshBase & m,
             unsigned int tbs,
-            const TreeNode<N> * p = libmesh_nullptr);
+            const TreeNode<N> * p = nullptr);
 
   /**
    * Destructor.  Deletes all children, if any.  Thus
@@ -72,7 +73,7 @@ public:
    * \returns \p true if this node is the root node, false
    * otherwise.
    */
-  bool is_root() const { return (parent == libmesh_nullptr); }
+  bool is_root() const { return (parent == nullptr); }
 
   /**
    * \returns \p true if this node is active (i.e. has no
@@ -142,6 +143,11 @@ public:
   void transform_nodes_to_elements (std::vector<std::vector<const Elem *>> & nodes_to_elem);
 
   /**
+   * Transforms node numbers to element pointers.
+   */
+  void transform_nodes_to_elements (std::unordered_map<dof_id_type, std::vector<const Elem *>> & nodes_to_elem);
+
+  /**
    * \returns The number of active bins below
    * (including) this element.
    */
@@ -152,7 +158,7 @@ public:
    * optionally restricted to a set of allowed subdomains.
    */
   const Elem * find_element (const Point & p,
-                             const std::set<subdomain_id_type> * allowed_subdomains = libmesh_nullptr,
+                             const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
                              Real relative_tol = TOLERANCE) const;
 
 
@@ -267,7 +273,7 @@ template <unsigned int N>
 inline
 unsigned int TreeNode<N>::level () const
 {
-  if (parent != libmesh_nullptr)
+  if (parent != nullptr)
     return parent->level()+1;
 
   // if we have no parent, we are a level-0 box

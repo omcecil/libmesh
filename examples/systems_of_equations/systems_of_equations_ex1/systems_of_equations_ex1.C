@@ -44,6 +44,7 @@
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_vector.h"
 #include "libmesh/linear_implicit_system.h"
+#include "libmesh/enum_solver_package.h"
 
 // For systems of equations the DenseSubMatrix
 // and DenseSubVector provide convenient ways for
@@ -354,7 +355,7 @@ void assemble_stokes (EquationSystems & es,
         // If the element has no neighbor on a side then that
         // side MUST live on a boundary of the domain.
         for (auto s : elem->side_index_range())
-          if (elem->neighbor_ptr(s) == libmesh_nullptr)
+          if (elem->neighbor_ptr(s) == nullptr)
             {
               std::unique_ptr<const Elem> side (elem->build_side_ptr(s));
 
@@ -393,7 +394,7 @@ void assemble_stokes (EquationSystems & es,
                         Fv(n) += penalty*v_value;
                       }
                 } // end face node loop
-            } // end if (elem->neighbor(side) == libmesh_nullptr)
+            } // end if (elem->neighbor(side) == nullptr)
       } // end boundary condition section
 
       // If this assembly program were to be used on an adaptive mesh,

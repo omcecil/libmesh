@@ -25,7 +25,15 @@
 // Local includes
 #include "libmesh/parallel_object.h"
 #include "libmesh/point.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ElemType : int;
+}
+#else
 #include "libmesh/enum_elem_type.h"
+#endif
 
 // C++ includes
 #include <iostream>
@@ -63,11 +71,13 @@
 #endif
 
 
+#include <libmesh/ignore_warnings.h>
 namespace exII {
 extern "C" {
 #include "exodusII.h" // defines MAX_LINE_LENGTH, MAX_STR_LENGTH used later
 }
 }
+#include <libmesh/restore_warnings.h>
 
 namespace libMesh
 {
@@ -297,8 +307,8 @@ public:
   /**
    * Sets up the nodal variables
    */
-  void initialize_element_variables(std::vector<std::string> names,
-                                    const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains);
+  virtual void initialize_element_variables(std::vector<std::string> names,
+                                            const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains);
 
   /**
    * Sets up the nodal variables
@@ -592,6 +602,19 @@ public:
   void read_var_names(ExodusVarType type);
 
 protected:
+  /**
+   * When appending: during initialization, check that variable names
+   * in the file match those you attempt to initialize with.
+   */
+  void check_existing_vars(ExodusVarType type, std::vector<std::string> & names, std::vector<std::string> & names_from_file);
+
+  /**
+   * Wraps calls to exII::ex_put_var_names() and exII::ex_put_var_param().
+   * The enumeration controls whether nodal, elemental, or global
+   * variable names are read and which class members are filled in.
+   */
+  void write_var_names(ExodusVarType type, std::vector<std::string> & names);
+
   // If true, whenever there is an I/O operation, only perform if if we are on processor 0.
   bool _run_only_on_proc0;
 
@@ -620,19 +643,6 @@ protected:
   bool _single_precision;
 
 private:
-
-  /**
-   * Wraps calls to exII::ex_put_var_names() and exII::ex_put_var_param().
-   * The enumeration controls whether nodal, elemental, or global
-   * variable names are read and which class members are filled in.
-   */
-  void write_var_names(ExodusVarType type, std::vector<std::string> & names);
-
-  /**
-   * When appending: during initialization, check that variable names
-   * in the file match those you attempt to initialize with.
-   */
-  void check_existing_vars(ExodusVarType type, std::vector<std::string> & names, std::vector<std::string> & names_from_file);
 
   /**
    * read_var_names() dispatches to this function.
@@ -682,9 +692,9 @@ public:
       side_map_size(sm_size),
       inverse_side_map(ism),
       inverse_side_map_size(ism_size),
-      shellface_map(libmesh_nullptr),
+      shellface_map(nullptr),
       shellface_map_size(0),
-      inverse_shellface_map(libmesh_nullptr),
+      inverse_shellface_map(nullptr),
       inverse_shellface_map_size(0),
       shellface_index_offset(0),
       canonical_type(ct),
@@ -725,7 +735,15 @@ public:
       shellface_index_offset(sfi_offset),
       canonical_type(ct),
       exodus_type(ex_type)
-  {}
+  {
+    // libmesh_ignore variables that are only used in asserts to avoid
+    // compiler warnings.
+    libmesh_ignore(node_map_size,
+                   inverse_node_map_size,
+                   inverse_side_map_size,
+                   shellface_map_size,
+                   inverse_shellface_map_size);
+  }
 
   /**
    * \returns The ith component of the node map for this element.
@@ -777,6 +795,16 @@ public:
 
   /**
    * \returns The ith component of the shellface map for this element.
+   * \note Nothing is currently using this.
+   */
+  int get_shellface_map(int i) const
+  {
+    libmesh_assert_less (static_cast<size_t>(i), shellface_map_size);
+    return shellface_map[i];
+  }
+
+  /**
+   * \returns The ith component of the inverse shellface map for this element.
    */
   int get_inverse_shellface_map(int i) const
   {
@@ -800,7 +828,7 @@ public:
   /**
    * \returns The shellface index offset.
    */
-  int get_shellface_index_offset() const { return shellface_index_offset; }
+  std::size_t get_shellface_index_offset() const { return shellface_index_offset; }
 
   /**
    * An invalid_id that can be returned to signal failure in case
@@ -815,7 +843,8 @@ private:
   const int * node_map;
 
   /**
-   * The size of the node map array, this helps with bounds checking...
+   * The size of the node map array, this helps with bounds checking
+   * and is only used in asserts.
    */
   size_t node_map_size;
 
@@ -827,7 +856,8 @@ private:
   const int * inverse_node_map;
 
   /**
-   * The size of the inverse node map array, this helps with bounds checking...
+   * The size of the inverse node map array, this helps with bounds
+   * checking and is only used in asserts.
    */
   size_t inverse_node_map_size;
 
@@ -847,17 +877,21 @@ private:
   const int * inverse_side_map;
 
   /**
-   * The size of the inverse side map array, this helps with bounds checking...
+   * The size of the inverse side map array, this helps with bounds
+   * checking and is only used in asserts.
    */
   size_t inverse_side_map_size;
 
   /**
-   * Pointer to the shellface map for this element.
+   * Pointer to the shellface map for this element. Only the inverse
+   * is actually used currently, this one is provided for completeness
+   * and libmesh_ingore()d to avoid warnings.
    */
   const int * shellface_map;
 
   /**
-   * The size of the shellface map array, this helps with bounds checking...
+   * The size of the shellface map array, this helps with bounds
+   * checking and is only used in asserts.
    */
   size_t shellface_map_size;
 
@@ -867,7 +901,8 @@ private:
   const int * inverse_shellface_map;
 
   /**
-   * The size of the inverse shellface map array, this helps with bounds checking...
+   * The size of the inverse shellface map array, this helps with
+   * bounds checking and is only used in asserts.
    */
   size_t inverse_shellface_map_size;
 
@@ -1213,7 +1248,7 @@ public:
   /**
    * Constructor.  Allocates enough storage to hold n_strings of
    * length string_length.  (Actually allocates string_length+1 characters
-   * per string to account for the trailing NULL character.)
+   * per string to account for the trailing '\0' character.)
    */
   explicit
   NamesData(size_t n_strings, size_t string_length);

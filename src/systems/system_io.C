@@ -100,7 +100,7 @@ public:
   void operator()()
   {
     if (_data.empty()) return;
-    _io.data_stream (&_data[0], cast_int<unsigned int>(_data.size()));
+    _io.data_stream (_data.data(), cast_int<unsigned int>(_data.size()));
   }
 };
 }
@@ -159,7 +159,7 @@ void System::read_header (Xdr & io,
   // This will be true if the version string contains " with infinite elements"
   const bool read_ifem_info =
     (version.rfind(" with infinite elements") < version.size()) ||
-    libMesh::on_command_line ("--read_ifem_systems");
+    libMesh::on_command_line ("--read-ifem-systems");
 
 
   {
@@ -692,8 +692,8 @@ void System::read_parallel_data (Xdr & io,
                           std::vector<dof_id_type> SCALAR_dofs;
                           dof_map.SCALAR_dof_indices(SCALAR_dofs, var);
 
-                          for (std::size_t i=0; i<SCALAR_dofs.size(); i++)
-                            pos->second->set(SCALAR_dofs[i], io_buffer[cnt++]);
+                          for (std::size_t sd=0; sd<SCALAR_dofs.size(); sd++)
+                            pos->second->set(SCALAR_dofs[sd], io_buffer[cnt++]);
                         }
                     }
                 }
@@ -780,7 +780,7 @@ void System::read_serialized_data (Xdr & io,
 
           // total_read_size +=
           this->read_serialized_vector<InValType>
-            (io, (read_additional_data && nvecs) ? pos->second : libmesh_nullptr);
+            (io, (read_additional_data && nvecs) ? pos->second : nullptr);
 
           // get the comment
           if (this->processor_id() == 0)
@@ -856,6 +856,8 @@ std::size_t System::read_serialized_blocked_dof_objects (const dof_id_type n_obj
   std::vector<std::vector<Number>>      recv_vals(num_blks); // The raw values for the local objects in all blocks
   std::vector<Parallel::Request>
     id_requests(num_blks), val_requests(num_blks);
+  std::vector<Parallel::MessageTag>
+    id_tags(num_blks), val_tags(num_blks);
 
   // ------------------------------------------------------
   // First pass - count the number of objects in each block
@@ -926,14 +928,14 @@ std::size_t System::read_serialized_blocked_dof_objects (const dof_id_type n_obj
             }
 
 #ifdef LIBMESH_HAVE_MPI
-      Parallel::MessageTag id_tag  = this->comm().get_unique_tag(100*num_blks + blk);
-      Parallel::MessageTag val_tag = this->comm().get_unique_tag(200*num_blks + blk);
+      id_tags[blk]  = this->comm().get_unique_tag(100*num_blks + blk);
+      val_tags[blk] = this->comm().get_unique_tag(200*num_blks + blk);
 
       // nonblocking send the data for this block
-      this->comm().send (0, ids,  id_requests[blk],  id_tag);
+      this->comm().send (0, ids,  id_requests[blk],  id_tags[blk]);
 
       // Go ahead and post the receive too
-      this->comm().receive (0, vals, val_requests[blk], val_tag);
+      this->comm().receive (0, vals, val_requests[blk], val_tags[blk]);
 #endif
     }
 
@@ -972,9 +974,6 @@ std::size_t System::read_serialized_blocked_dof_objects (const dof_id_type n_obj
           ThreadedIO<InValType> threaded_io(io, input_vals_tmp);
           Threads::Thread async_io(threaded_io);
 
-          Parallel::MessageTag id_tag  = this->comm().get_unique_tag(100*num_blks + blk);
-          Parallel::MessageTag val_tag = this->comm().get_unique_tag(200*num_blks + blk);
-
           // offset array. this will define where each object's values
           // map into the actual input_vals buffer.  this must get
           // 0-initialized because 0-component objects are not actually sent
@@ -990,10 +989,10 @@ std::size_t System::read_serialized_blocked_dof_objects (const dof_id_type n_obj
             {
 #ifdef LIBMESH_HAVE_MPI
               // blocking receive indices for this block, imposing no particular order on processor
-              Parallel::Status id_status (this->comm().probe (Parallel::any_source, id_tag));
+              Parallel::Status id_status (this->comm().probe (Parallel::any_source, id_tags[blk]));
               std::vector<dof_id_type> & ids (recv_ids[id_status.source()]);
               std::size_t & n_vals_proc (recv_vals_size[id_status.source()]);
-              this->comm().receive (id_status.source(), ids, id_tag);
+              this->comm().receive (id_status.source(), ids, id_tags[blk]);
 #else
               // straight copy without MPI
               std::vector<dof_id_type> & ids (recv_ids[0]);
@@ -1068,7 +1067,7 @@ std::size_t System::read_serialized_blocked_dof_objects (const dof_id_type n_obj
 
 #ifdef LIBMESH_HAVE_MPI
               // send the relevant values to this processor
-              this->comm().send (proc, vals, reply_requests[proc], val_tag);
+              this->comm().send (proc, vals, reply_requests[proc], val_tags[blk]);
 #else
               recv_vals[blk] = vals;
 #endif
@@ -1112,6 +1111,8 @@ std::size_t System::read_serialized_blocked_dof_objects (const dof_id_type n_obj
         Parallel::wait(reply_requests);
     }
 
+  Parallel::wait(id_requests);
+
   return n_read_values;
 }
 
@@ -1127,9 +1128,7 @@ unsigned int System::read_SCALAR_dofs (const unsigned int var,
   const unsigned int n_SCALAR_dofs = this->variable(var).type().order.get_order();
   std::vector<Number> input_buffer(n_SCALAR_dofs);
   if (this->processor_id() == 0)
-    {
-      io.data_stream(&input_buffer[0], n_SCALAR_dofs);
-    }
+    io.data_stream(input_buffer.data(), n_SCALAR_dofs);
 
 #ifdef LIBMESH_HAVE_MPI
   if (this->n_processors() > 1)
@@ -1820,6 +1819,8 @@ std::size_t System::write_serialized_blocked_dof_objects (const std::vector<cons
                                                           Xdr & io,
                                                           const unsigned int var_to_write) const
 {
+  parallel_object_only();
+
   //-------------------------------------------------------
   // General order: (IO format 0.7.4 & greater)
   //
@@ -1859,11 +1860,13 @@ std::size_t System::write_serialized_blocked_dof_objects (const std::vector<cons
   //     << ", num_blks = "    << num_blks
   //     << std::endl;
 
-  dof_id_type written_length=0;                                   // The numer of values written.  This will be returned
+  std::size_t written_length=0;                                  // The numer of values written.  This will be returned
   std::vector<std::vector<dof_id_type>> xfer_ids(num_blks);      // The global IDs and # of components for the local objects in all blocks
   std::vector<std::vector<Number>>      send_vals(num_blks);     // The raw values for the local objects in all blocks
   std::vector<Parallel::Request>
-    id_requests(num_blks), val_requests(num_blks);                 // send request handle for each block
+    id_requests(num_blks), val_requests(num_blks);               // send request handle for each block
+  std::vector<Parallel::MessageTag>
+    id_tags(num_blks), val_tags(num_blks);                       // tag number for each block
 
   // ------------------------------------------------------
   // First pass - count the number of objects in each block
@@ -1947,12 +1950,12 @@ std::size_t System::write_serialized_blocked_dof_objects (const std::vector<cons
             }
 
 #ifdef LIBMESH_HAVE_MPI
-      Parallel::MessageTag id_tag  = this->comm().get_unique_tag(100*num_blks + blk);
-      Parallel::MessageTag val_tag = this->comm().get_unique_tag(200*num_blks + blk);
+      id_tags[blk]  = this->comm().get_unique_tag(100*num_blks + blk);
+      val_tags[blk] = this->comm().get_unique_tag(200*num_blks + blk);
 
       // nonblocking send the data for this block
-      this->comm().send (0, ids,  id_requests[blk],  id_tag);
-      this->comm().send (0, vals, val_requests[blk], val_tag);
+      this->comm().send (0, ids,  id_requests[blk],  id_tags[blk]);
+      this->comm().send (0, vals, val_requests[blk], val_tags[blk]);
 #endif
     }
 
@@ -1984,18 +1987,14 @@ std::size_t System::write_serialized_blocked_dof_objects (const std::vector<cons
 
           std::size_t n_val_recvd_blk=0;
 
-          // tags to select data received
-          Parallel::MessageTag id_tag  (this->comm().get_unique_tag(100*num_blks + blk));
-          Parallel::MessageTag val_tag (this->comm().get_unique_tag(200*num_blks + blk));
-
           // receive this block of data from all processors.
           for (unsigned int comm_step=0; comm_step<this->n_processors(); comm_step++)
             {
 #ifdef LIBMESH_HAVE_MPI
               // blocking receive indices for this block, imposing no particular order on processor
-              Parallel::Status id_status (this->comm().probe (Parallel::any_source, id_tag));
+              Parallel::Status id_status (this->comm().probe (Parallel::any_source, id_tags[blk]));
               std::vector<dof_id_type> & ids (recv_ids[id_status.source()]);
-              this->comm().receive (id_status.source(), ids,  id_tag);
+              this->comm().receive (id_status.source(), ids, id_tags[blk]);
 #else
               std::vector<dof_id_type> & ids (recv_ids[0]);
               ids = xfer_ids[blk];
@@ -2017,9 +2016,9 @@ std::size_t System::write_serialized_blocked_dof_objects (const std::vector<cons
 
 #ifdef LIBMESH_HAVE_MPI
               // blocking receive values for this block, imposing no particular order on processor
-              Parallel::Status val_status  (this->comm().probe (Parallel::any_source, val_tag));
+              Parallel::Status val_status  (this->comm().probe (Parallel::any_source, val_tags[blk]));
               std::vector<Number> & vals    (recv_vals[val_status.source()]);
-              this->comm().receive (val_status.source(), vals, val_tag);
+              this->comm().receive (val_status.source(), vals, val_tags[blk]);
 #else
               // straight copy without MPI
               std::vector<Number> & vals (recv_vals[0]);
@@ -2145,7 +2144,7 @@ unsigned int System::write_SCALAR_dofs (const NumericVector<Number> & vec,
     {
       const unsigned int vals_size =
         cast_int<unsigned int>(vals.size());
-      io.data_stream (&vals[0], vals_size);
+      io.data_stream (vals.data(), vals_size);
       written_length += vals_size;
     }
 

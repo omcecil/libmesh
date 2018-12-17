@@ -48,6 +48,7 @@
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_vector.h"
 #include "libmesh/exodusII_io.h"
+#include "libmesh/enum_solver_package.h"
 
 // This example will solve a linear transient system,
 // so we need to include the TransientLinearImplicitSystem definition.
@@ -281,7 +282,7 @@ void init_cd (EquationSystems & es,
   // Project initial conditions at time 0
   es.parameters.set<Real> ("time") = system.time = 0;
 
-  system.project_solution(exact_value, libmesh_nullptr, es.parameters);
+  system.project_solution(exact_value, nullptr, es.parameters);
 }
 
 
@@ -478,7 +479,7 @@ void assemble_cd (EquationSystems & es,
         // If the element has no neighbor on a side then that
         // side MUST live on a boundary of the domain.
         for (auto s : elem->side_index_range())
-          if (elem->neighbor_ptr(s) == libmesh_nullptr)
+          if (elem->neighbor_ptr(s) == nullptr)
             {
               fe_face->reinit(elem, s);
 

@@ -55,11 +55,17 @@ public:
     InfCell(nn, InfPrism::n_sides(), p, _elemlinks_data, nodelinkdata)
   {}
 
+  InfPrism (InfPrism &&) = delete;
+  InfPrism (const InfPrism &) = delete;
+  InfPrism & operator= (const InfPrism &) = delete;
+  InfPrism & operator= (InfPrism &&) = delete;
+  virtual ~InfPrism() = default;
+
   /**
    * \returns The \p Point associated with local \p Node \p i,
    * in master element rather than physical coordinates.
    */
-  virtual Point master_point (const unsigned int i) const libmesh_override
+  virtual Point master_point (const unsigned int i) const override final
   {
     libmesh_assert_less(i, this->n_nodes());
     return Point(_master_points[i][0],
@@ -72,48 +78,48 @@ public:
    * than their conventional counterparts, since one
    * side is supposed to be located at infinity.
    */
-  virtual unsigned int n_sides() const libmesh_override { return 4; }
+  virtual unsigned int n_sides() const override final { return 4; }
 
   /**
    * \returns 6.  All infinite prisms (in our
    * setting) have 6 vertices.
    */
-  virtual unsigned int n_vertices() const libmesh_override { return 6; }
+  virtual unsigned int n_vertices() const override final { return 6; }
 
   /**
    * \returns 6.  All infinite prisms have 6 edges,
    * 3 lying in the base, and 3 perpendicular to the base.
    */
-  virtual unsigned int n_edges() const libmesh_override { return 6; }
+  virtual unsigned int n_edges() const override final { return 6; }
 
   /**
    * \returns 4.  All prisms have 4 faces.
    */
-  virtual unsigned int n_faces() const libmesh_override { return 4; }
+  virtual unsigned int n_faces() const override final { return 4; }
 
   /**
    * \returns 4.
    */
-  virtual unsigned int n_children() const libmesh_override { return 4; }
+  virtual unsigned int n_children() const override final { return 4; }
 
   /**
    * \returns \p true if the specified (local) node number is a
    * "mid-edge" node on an infinite element edge.
    */
   virtual bool is_mid_infinite_edge_node(const unsigned int i) const
-    libmesh_override { return (i > 2 && i < 6); }
+    override final { return (i > 2 && i < 6); }
 
   /**
    * \returns \p true if the specified child is on the specified side.
    */
   virtual bool is_child_on_side(const unsigned int c,
-                                const unsigned int s) const libmesh_override;
+                                const unsigned int s) const override final;
 
   /**
    * \returns \p true if the specified edge is on the specified side.
    */
   virtual bool is_edge_on_side(const unsigned int e,
-                               const unsigned int s) const libmesh_override;
+                               const unsigned int s) const override final;
 
   /**
    * Don't hide Elem::key() defined in the base class.
@@ -125,26 +131,32 @@ public:
    * The id is not necessarily unique, but should be close.  This is
    * particularly useful in the \p MeshBase::find_neighbors() routine.
    */
-  virtual dof_id_type key (const unsigned int s) const libmesh_override;
+  virtual dof_id_type key (const unsigned int s) const override;
 
   /**
    * \returns InfPrism6::side_nodes_map[side][side_node] after doing some range checking.
    */
   virtual unsigned int which_node_am_i(unsigned int side,
-                                       unsigned int side_node) const libmesh_override;
+                                       unsigned int side_node) const override;
 
   /**
    * \returns A primitive (3-noded) tri or (4-noded) infquad for
    * face i.
    */
-  virtual std::unique_ptr<Elem> side_ptr (const unsigned int i) libmesh_override;
+  virtual std::unique_ptr<Elem> side_ptr (const unsigned int i) override final;
+
+  /**
+   * Rebuilds a primitive (3-noded) tri or (4-noded) infquad for face
+   * i.
+   */
+  virtual void side_ptr (std::unique_ptr<Elem> & side, const unsigned int i) override final;
 
   /**
    * @returns \p true when this element contains the point
    * \p p.  Customized for infinite elements, since knowledge
    * about the envelope can be helpful.
    */
-  virtual bool contains_point (const Point & p, Real tol=TOLERANCE) const libmesh_override;
+  virtual bool contains_point (const Point & p, Real tol=TOLERANCE) const override;
 
 
 protected:

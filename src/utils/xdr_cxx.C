@@ -29,7 +29,9 @@
 #include "libmesh/xdr_cxx.h"
 #include "libmesh/libmesh_logging.h"
 #ifdef LIBMESH_HAVE_GZSTREAM
-# include "gzstream.h"
+# include "libmesh/ignore_warnings.h" // shadowing in gzstream.h
+# include "gzstream.h" // For reading/writing compressed streams
+# include "libmesh/restore_warnings.h"
 #endif
 
 
@@ -136,7 +138,7 @@ Xdr::Xdr (const std::string & name,
   mode(m),
   file_name(name),
 #ifdef LIBMESH_HAVE_XDR
-  fp(libmesh_nullptr),
+  fp(nullptr),
 #endif
   in(),
   out(),
@@ -287,7 +289,7 @@ void Xdr::close ()
           {
             fflush(fp);
             fclose(fp);
-            fp = libmesh_nullptr;
+            fp = nullptr;
           }
 #else
 
@@ -302,7 +304,7 @@ void Xdr::close ()
 
     case READ:
       {
-        if (in.get() != libmesh_nullptr)
+        if (in.get() != nullptr)
           {
             in.reset();
 
@@ -315,7 +317,7 @@ void Xdr::close ()
 
     case WRITE:
       {
-        if (out.get() != libmesh_nullptr)
+        if (out.get() != nullptr)
           {
             out.reset();
 
@@ -365,14 +367,14 @@ bool Xdr::is_open() const
 
     case READ:
       {
-        if (in.get() != libmesh_nullptr)
+        if (in.get() != nullptr)
           return in->good();
         return false;
       }
 
     case WRITE:
       {
-        if (out.get() != libmesh_nullptr)
+        if (out.get() != nullptr)
           return out->good();
         return false;
       }
@@ -519,7 +521,7 @@ bool xdr_translate(XDR * x, std::vector<T> & a)
   if (length > 0)
     {
       a.resize(length);
-      return xdr_vector(x, (char *) &a[0], length, sizeof(T),
+      return xdr_vector(x, reinterpret_cast<char *>(a.data()), length, sizeof(T),
                         xdr_translator<T>());
     }
   else
@@ -532,9 +534,8 @@ bool xdr_translate(XDR * x, std::vector<std::complex<T>> & a)
   unsigned int length = cast_int<unsigned int>(a.size());
   bool b = xdr_u_int(x, &length);
   a.resize(length);
-  typename std::vector<std::complex<T>>::iterator iter = a.begin();
-  for (; iter != a.end(); ++iter)
-    if (!xdr_translate(x, *iter))
+  for (auto & val : a)
+    if (!xdr_translate(x, val))
       b = false;
   return b;
 }
@@ -545,9 +546,8 @@ bool xdr_translate(XDR * x, std::vector<std::string> & s)
   unsigned int length = cast_int<unsigned int>(s.size());
   bool b = xdr_u_int(x, &length);
   s.resize(length);
-  std::vector<std::string>::iterator iter = s.begin();
-  for (; iter != s.end(); ++iter)
-    if (!xdr_translate(x, *iter))
+  for (auto & val : s)
+    if (!xdr_translate(x, val))
       b = false;
   return b;
 }
@@ -1163,10 +1163,10 @@ void Xdr::data_stream (long double * val, const unsigned int len, const unsigned
             // Fill io_buffer if we are writing.
             if (mode == ENCODE)
               for (unsigned int i=0, cnt=0; i<len; i++)
-                io_buffer[cnt++] = val[i];
+                io_buffer[cnt++] = double(val[i]);
 
             xdr_vector(xdrs.get(),
-                       (char *) &io_buffer[0],
+                       reinterpret_cast<char *>(io_buffer.data()),
                        len,
                        sizeof(double),
                        (xdrproc_t) xdr_double);
@@ -1286,7 +1286,7 @@ void Xdr::data_stream (std::complex<double> * val, const unsigned int len, const
                 }
 
             xdr_vector(xdrs.get(),
-                       (char *) &io_buffer[0],
+                       reinterpret_cast<char *>(io_buffer.data()),
                        2*len,
                        sizeof(double),
                        (xdrproc_t) xdr_double);
@@ -1415,7 +1415,7 @@ void Xdr::data_stream (std::complex<long double> * val, const unsigned int len, 
                 }
 
             xdr_vector(xdrs.get(),
-                       (char *) &io_buffer[0],
+                       reinterpret_cast<char *>(io_buffer.data()),
                        2*len,
                        sizeof(double),
                        (xdrproc_t) xdr_double);

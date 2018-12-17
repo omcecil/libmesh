@@ -21,10 +21,18 @@
 #include "libmesh/elem.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/parallel.h"
+#include "libmesh/parallel_sync.h"
 #include "libmesh/partitioner.h"
 #include "libmesh/mesh_tools.h"
 #include "libmesh/mesh_communication.h"
 #include "libmesh/libmesh_logging.h"
+#include "libmesh/parallel_ghost_sync.h"
+
+#ifdef LIBMESH_HAVE_PETSC
+#include "libmesh/ignore_warnings.h"
+#include "petscmat.h"
+#include "libmesh/restore_warnings.h"
+#endif
 
 namespace libMesh
 {
@@ -152,6 +160,11 @@ void Partitioner::single_partition (MeshBase & mesh)
 {
   this->single_partition_range(mesh.elements_begin(),
                                mesh.elements_end());
+
+  // Redistribute, in case someone (like our unit tests) is doing
+  // something silly (like moving a whole already-distributed mesh
+  // back onto rank 0).
+  mesh.redistribute();
 }
 
 
@@ -188,7 +201,8 @@ void Partitioner::partition_unpartitioned_elements (MeshBase & mesh,
 
   // the unpartitioned elements must exist on all processors. If the range is empty on one
   // it is empty on all, and we can quit right here.
-  if (!n_unpartitioned_elements) return;
+  if (!n_unpartitioned_elements)
+    return;
 
   // find the target subdomain sizes
   std::vector<dof_id_type> subdomain_bounds(mesh.n_processors());
@@ -270,16 +284,16 @@ void Partitioner::set_parent_processor_ids(MeshBase & mesh)
   // of its active ancestor.
   if (mesh.is_serial())
     {
-      for (auto & child : mesh.active_element_ptr_range())
+      for (auto & elem : mesh.active_element_ptr_range())
         {
           // First set descendents
           std::vector<const Elem *> subactive_family;
-          child->total_family_tree(subactive_family);
+          elem->total_family_tree(subactive_family);
           for (std::size_t i = 0; i != subactive_family.size(); ++i)
-            const_cast<Elem *>(subactive_family[i])->processor_id() = child->processor_id();
+            const_cast<Elem *>(subactive_family[i])->processor_id() = elem->processor_id();
 
           // Then set ancestors
-          Elem * parent = child->parent();
+          Elem * parent = elem->parent();
 
           while (parent)
             {
@@ -403,6 +417,263 @@ void Partitioner::set_parent_processor_ids(MeshBase & mesh)
 #endif // LIBMESH_ENABLE_AMR
 }
 
+void
+Partitioner::processor_pairs_to_interface_nodes(MeshBase & mesh,
+                                                std::map<std::pair<processor_id_type, processor_id_type>, std::set<dof_id_type>> & processor_pair_to_nodes)
+{
+  // This function must be run on all processors at once
+  libmesh_parallel_only(mesh.comm());
+
+  processor_pair_to_nodes.clear();
+
+  std::set<dof_id_type> mynodes;
+  std::set<dof_id_type> neighbor_nodes;
+  std::vector<dof_id_type> common_nodes;
+
+  // Loop over all the active elements
+  for (auto & elem : mesh.active_element_ptr_range())
+    {
+      libmesh_assert(elem);
+
+      libmesh_assert_not_equal_to (elem->processor_id(), DofObject::invalid_processor_id);
+
+      auto n_nodes = elem->n_nodes();
+
+      // prepare data for this element
+      mynodes.clear();
+      neighbor_nodes.clear();
+      common_nodes.clear();
+
+      for (unsigned int inode = 0; inode < n_nodes; inode++)
+        mynodes.insert(elem->node_id(inode));
+
+      for (auto i : elem->side_index_range())
+        {
+          auto neigh = elem->neighbor_ptr(i);
+          if (neigh && !neigh->is_remote() && neigh->processor_id() != elem->processor_id())
+            {
+              neighbor_nodes.clear();
+              common_nodes.clear();
+              auto neigh_n_nodes = neigh->n_nodes();
+              for (unsigned int inode = 0; inode < neigh_n_nodes; inode++)
+                neighbor_nodes.insert(neigh->node_id(inode));
+
+              std::set_intersection(mynodes.begin(), mynodes.end(),
+                                    neighbor_nodes.begin(), neighbor_nodes.end(),
+                                    std::back_inserter(common_nodes));
+
+              auto & map_set = processor_pair_to_nodes[std::make_pair(std::min(elem->processor_id(), neigh->processor_id()),
+                                                                      std::max(elem->processor_id(), neigh->processor_id()))];
+              for (auto global_node_id : common_nodes)
+                map_set.insert(global_node_id);
+            }
+        }
+    }
+}
+
+void Partitioner::set_interface_node_processor_ids_linear(MeshBase & mesh)
+{
+  // This function must be run on all processors at once
+  libmesh_parallel_only(mesh.comm());
+
+  std::map<std::pair<processor_id_type, processor_id_type>, std::set<dof_id_type>> processor_pair_to_nodes;
+
+  processor_pairs_to_interface_nodes(mesh, processor_pair_to_nodes);
+
+  for (auto & pmap : processor_pair_to_nodes)
+    {
+      std::size_t n_own_nodes = pmap.second.size()/2, i = 0;
+
+      for (auto it = pmap.second.begin(); it != pmap.second.end(); it++, i++)
+        {
+          auto & node = mesh.node_ref(*it);
+          if (i <= n_own_nodes)
+            node.processor_id() = pmap.first.first;
+          else
+            node.processor_id() = pmap.first.second;
+        }
+    }
+}
+
+void Partitioner::set_interface_node_processor_ids_BFS(MeshBase & mesh)
+{
+  // This function must be run on all processors at once
+  libmesh_parallel_only(mesh.comm());
+
+  std::map<std::pair<processor_id_type, processor_id_type>, std::set<dof_id_type>> processor_pair_to_nodes;
+
+  processor_pairs_to_interface_nodes(mesh, processor_pair_to_nodes);
+
+  std::unordered_map<dof_id_type, std::vector<const Elem *>> nodes_to_elem_map;
+
+  MeshTools::build_nodes_to_elem_map(mesh, nodes_to_elem_map);
+
+  std::vector<const Node *>  neighbors;
+  std::set<dof_id_type> neighbors_order;
+  std::vector<dof_id_type> common_nodes;
+  std::queue<dof_id_type> nodes_queue;
+  std::set<dof_id_type> visted_nodes;
+
+  for (auto & pmap : processor_pair_to_nodes)
+    {
+      std::size_t n_own_nodes = pmap.second.size()/2;
+
+      // Initialize node assignment
+      for (auto it = pmap.second.begin(); it != pmap.second.end(); it++)
+        mesh.node_ref(*it).processor_id() = pmap.first.second;
+
+      visted_nodes.clear();
+      for (auto it = pmap.second.begin(); it != pmap.second.end(); it++)
+        {
+          mesh.node_ref(*it).processor_id() = pmap.first.second;
+
+          if (visted_nodes.find(*it) != visted_nodes.end())
+            continue;
+          else
+            {
+              nodes_queue.push(*it);
+              visted_nodes.insert(*it);
+              if (visted_nodes.size() >= n_own_nodes)
+                break;
+            }
+
+          while (!nodes_queue.empty())
+            {
+              auto & node = mesh.node_ref(nodes_queue.front());
+              nodes_queue.pop();
+
+              neighbors.clear();
+              MeshTools::find_nodal_neighbors(mesh, node, nodes_to_elem_map, neighbors);
+              neighbors_order.clear();
+              for (auto & neighbor : neighbors)
+                neighbors_order.insert(neighbor->id());
+
+              common_nodes.clear();
+              std::set_intersection(pmap.second.begin(), pmap.second.end(),
+                                    neighbors_order.begin(), neighbors_order.end(),
+                                    std::back_inserter(common_nodes));
+
+              for (auto c_node : common_nodes)
+                if (visted_nodes.find(c_node) == visted_nodes.end())
+                  {
+                    nodes_queue.push(c_node);
+                    visted_nodes.insert(c_node);
+                    if (visted_nodes.size() >= n_own_nodes)
+                      goto queue_done;
+                  }
+
+              if (visted_nodes.size() >= n_own_nodes)
+                goto queue_done;
+            }
+        }
+    queue_done:
+      for (auto node : visted_nodes)
+        mesh.node_ref(node).processor_id() = pmap.first.first;
+    }
+}
+
+void Partitioner::set_interface_node_processor_ids_petscpartitioner(MeshBase & mesh)
+{
+  libmesh_ignore(mesh); // Only used if LIBMESH_HAVE_PETSC
+
+  // This function must be run on all processors at once
+  libmesh_parallel_only(mesh.comm());
+
+#if LIBMESH_HAVE_PETSC
+  std::map<std::pair<processor_id_type, processor_id_type>, std::set<dof_id_type>> processor_pair_to_nodes;
+
+  processor_pairs_to_interface_nodes(mesh, processor_pair_to_nodes);
+
+  std::vector<std::vector<const Elem *>> nodes_to_elem_map;
+
+  MeshTools::build_nodes_to_elem_map(mesh, nodes_to_elem_map);
+
+  std::vector<const Node *>  neighbors;
+  std::set<dof_id_type> neighbors_order;
+  std::vector<dof_id_type> common_nodes;
+
+  std::vector<dof_id_type> rows;
+  std::vector<dof_id_type> cols;
+
+  std::map<dof_id_type, dof_id_type> global_to_local;
+
+  for (auto & pmap : processor_pair_to_nodes)
+    {
+      unsigned int i = 0;
+
+      rows.clear();
+      rows.resize(pmap.second.size()+1);
+      cols.clear();
+      for (auto it = pmap.second.begin(); it != pmap.second.end(); it++)
+        global_to_local[*it] = i++;
+
+      i = 0;
+      for (auto it = pmap.second.begin(); it != pmap.second.end(); it++, i++)
+        {
+          auto & node = mesh.node_ref(*it);
+          neighbors.clear();
+          MeshTools::find_nodal_neighbors(mesh, node, nodes_to_elem_map, neighbors);
+          neighbors_order.clear();
+          for (auto & neighbor : neighbors)
+            neighbors_order.insert(neighbor->id());
+
+          common_nodes.clear();
+          std::set_intersection(pmap.second.begin(), pmap.second.end(),
+                                neighbors_order.begin(), neighbors_order.end(),
+                                std::back_inserter(common_nodes));
+
+          rows[i+1] = rows[i] + cast_int<dof_id_type>(common_nodes.size());
+
+          for (auto c_node : common_nodes)
+            cols.push_back(global_to_local[c_node]);
+        }
+
+      Mat adj;
+      MatPartitioning part;
+      IS is;
+      PetscInt local_size, rows_size, cols_size;
+      PetscInt *adj_i, *adj_j;
+      const PetscInt *indices;
+      PetscCalloc1(rows.size(), &adj_i);
+      PetscCalloc1(cols.size(), &adj_j);
+      rows_size = cast_int<PetscInt>(rows.size());
+      for (PetscInt ii=0; ii<rows_size; ii++)
+        adj_i[ii] = rows[ii];
+
+      cols_size = cast_int<PetscInt>(cols.size());
+      for (PetscInt ii=0; ii<cols_size; ii++)
+        adj_j[ii] = cols[ii];
+
+      const PetscInt sz = cast_int<PetscInt>(pmap.second.size());
+      MatCreateMPIAdj(PETSC_COMM_SELF, sz, sz, adj_i, adj_j,nullptr,&adj);
+      MatPartitioningCreate(PETSC_COMM_SELF,&part);
+      MatPartitioningSetAdjacency(part,adj);
+      MatPartitioningSetNParts(part,2);
+      PetscObjectSetOptionsPrefix((PetscObject)part, "balance_");
+      MatPartitioningSetFromOptions(part);
+      MatPartitioningApply(part,&is);
+
+      MatDestroy(&adj);
+      MatPartitioningDestroy(&part);
+
+      ISGetLocalSize(is, &local_size);
+      ISGetIndices(is, &indices);
+      i = 0;
+      for (auto it = pmap.second.begin(); it != pmap.second.end(); it++, i++)
+        {
+          auto & node = mesh.node_ref(*it);
+          if (indices[i])
+            node.processor_id() = pmap.first.second;
+          else
+            node.processor_id() = pmap.first.first;
+        }
+      ISRestoreIndices(is, &indices);
+      ISDestroy(&is);
+    }
+#else
+  libmesh_error_msg("PETSc is required");
+#endif
+}
 
 
 void Partitioner::set_node_processor_ids(MeshBase & mesh)
@@ -432,8 +703,8 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
   //
   // The only remaining issue is what to do with unpartitioned nodes.  Since they are required
   // to live on all processors we can simply rely on ourselves to number them properly.
-  std::vector<std::vector<dof_id_type>>
-    requested_node_ids(mesh.n_processors());
+  std::map<processor_id_type, std::vector<dof_id_type>>
+    requested_node_ids;
 
   // Loop over all the nodes, count the ones on each processor.  We can skip ourself
   std::vector<dof_id_type> ghost_nodes_from_proc(mesh.n_processors(), 0);
@@ -453,7 +724,8 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
   // We know how many objects live on each processor, so reserve()
   // space for each.
   for (processor_id_type pid=0; pid != mesh.n_processors(); ++pid)
-    requested_node_ids[pid].reserve(ghost_nodes_from_proc[pid]);
+    if (ghost_nodes_from_proc[pid])
+      requested_node_ids[pid].reserve(ghost_nodes_from_proc[pid]);
 
   // We need to get the new pid for each node from the processor
   // which *currently* owns the node.  We can safely skip ourself
@@ -464,7 +736,6 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
       if (current_pid != mesh.processor_id() &&
           current_pid != DofObject::invalid_processor_id)
         {
-          libmesh_assert_less (current_pid, requested_node_ids.size());
           libmesh_assert_less (requested_node_ids[current_pid].size(),
                                ghost_nodes_from_proc[current_pid]);
           requested_node_ids[current_pid].push_back(node->id());
@@ -489,6 +760,24 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
           pid = node.choose_processor_id(pid, elem->processor_id());
         }
     }
+
+  bool load_balanced_nodes_linear =
+      libMesh::on_command_line ("--load-balanced-nodes-linear");
+
+  if (load_balanced_nodes_linear)
+    set_interface_node_processor_ids_linear(mesh);
+
+  bool load_balanced_nodes_bfs =
+       libMesh::on_command_line ("--load-balanced-nodes-bfs");
+
+  if (load_balanced_nodes_bfs)
+    set_interface_node_processor_ids_BFS(mesh);
+
+  bool load_balanced_nodes_petscpartition =
+      libMesh::on_command_line ("--load_balanced_nodes_petscpartitioner");
+
+  if (load_balanced_nodes_petscpartition)
+    set_interface_node_processor_ids_petscpartitioner(mesh);
 
   // And loop over the subactive elements, but don't reassign
   // nodes that are already active on another processor.
@@ -529,23 +818,18 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
   // that we successfully reset their processor ids to something
   // valid.
 
-  // Next set node ids from other processors, excluding self
-  for (processor_id_type p=1; p != mesh.n_processors(); ++p)
+  auto gather_functor =
+    [& mesh]
+    (processor_id_type, const std::vector<dof_id_type> & ids,
+     std::vector<processor_id_type> & new_pids)
     {
-      // Trade my requests with processor procup and procdown
-      processor_id_type procup = cast_int<processor_id_type>
-        ((mesh.processor_id() + p) % mesh.n_processors());
-      processor_id_type procdown = cast_int<processor_id_type>
-        ((mesh.n_processors() + mesh.processor_id() - p) %
-         mesh.n_processors());
-      std::vector<dof_id_type> request_to_fill;
-      mesh.comm().send_receive(procup, requested_node_ids[procup],
-                               procdown, request_to_fill);
+      const std::size_t ids_size = ids.size();
+      new_pids.resize(ids_size);
 
       // Fill those requests in-place
-      for (std::size_t i=0; i != request_to_fill.size(); ++i)
+      for (std::size_t i=0; i != ids_size; ++i)
         {
-          Node & node = mesh.node_ref(request_to_fill[i]);
+          Node & node = mesh.node_ref(ids[i]);
           const processor_id_type new_pid = node.processor_id();
 
           // We may have an invalid processor_id() on nodes that have been
@@ -553,19 +837,21 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
           // themselves been removed.
           // libmesh_assert_not_equal_to (new_pid, DofObject::invalid_processor_id);
           // libmesh_assert_less (new_pid, mesh.n_partitions()); // this is the correct test --
-          request_to_fill[i] = new_pid;           //  the number of partitions may
-        }                                         //  not equal the number of processors
+          new_pids[i] = new_pid;                                 //  the number of partitions may
+        }                                                        //  not equal the number of processors
+    };
 
-      // Trade back the results
-      std::vector<dof_id_type> filled_request;
-      mesh.comm().send_receive(procdown, request_to_fill,
-                               procup,   filled_request);
-      libmesh_assert_equal_to (filled_request.size(), requested_node_ids[procup].size());
-
-      // And copy the id changes we've now been informed of
-      for (std::size_t i=0; i != filled_request.size(); ++i)
+  auto action_functor =
+    [& mesh]
+    (processor_id_type,
+     const std::vector<dof_id_type> & ids,
+     const std::vector<processor_id_type> & new_pids)
+    {
+      const std::size_t ids_size = ids.size();
+      // Copy the pid changes we've now been informed of
+      for (std::size_t i=0; i != ids_size; ++i)
         {
-          Node & node = mesh.node_ref(requested_node_ids[procup][i]);
+          Node & node = mesh.node_ref(ids[i]);
 
           // this is the correct test -- the number of partitions may
           // not equal the number of processors
@@ -575,14 +861,356 @@ void Partitioner::set_node_processor_ids(MeshBase & mesh)
           // that have not yet themselves been removed.
           // libmesh_assert_less (filled_request[i], mesh.n_partitions());
 
-          node.processor_id(cast_int<processor_id_type>(filled_request[i]));
+          node.processor_id(new_pids[i]);
         }
-    }
+    };
+
+  const processor_id_type * ex = nullptr;
+  Parallel::pull_parallel_vector_data
+    (mesh.comm(), requested_node_ids, gather_functor, action_functor, ex);
 
 #ifdef DEBUG
   MeshTools::libmesh_assert_valid_procids<Node>(mesh);
-  MeshTools::libmesh_assert_canonical_node_procids(mesh);
+  //MeshTools::libmesh_assert_canonical_node_procids(mesh);
 #endif
 }
+
+
+
+struct SyncLocalIDs
+{
+  typedef dof_id_type datum;
+
+  typedef std::unordered_map<dof_id_type, dof_id_type> map_type;
+
+  SyncLocalIDs(map_type & _id_map) : id_map(_id_map) {}
+
+  map_type & id_map;
+
+  void gather_data (const std::vector<dof_id_type> & ids,
+                    std::vector<datum> & local_ids) const
+  {
+    local_ids.resize(ids.size());
+
+    for (std::size_t i=0, imax = ids.size(); i != imax; ++i)
+      local_ids[i] = id_map[ids[i]];
+  }
+
+  void act_on_data (const std::vector<dof_id_type> & ids,
+                    const std::vector<datum> & local_ids)
+  {
+    for (std::size_t i=0, imax = local_ids.size(); i != imax; ++i)
+      id_map[ids[i]] = local_ids[i];
+  }
+};
+
+void Partitioner::_find_global_index_by_pid_map(const MeshBase & mesh)
+{
+  const dof_id_type n_active_local_elem = mesh.n_active_local_elem();
+
+  // Find the number of active elements on each processor.  We cannot use
+  // mesh.n_active_elem_on_proc(pid) since that only returns the number of
+  // elements assigned to pid which are currently stored on the calling
+  // processor. This will not in general be correct for parallel meshes
+  // when (pid!=mesh.processor_id()).
+  _n_active_elem_on_proc.resize(mesh.n_processors());
+  mesh.comm().allgather(n_active_local_elem, _n_active_elem_on_proc);
+
+  libMesh::BoundingBox bbox =
+    MeshTools::create_bounding_box(mesh);
+
+  _global_index_by_pid_map.clear();
+
+  // create the mapping which is contiguous by processor
+  MeshCommunication().find_local_indices (bbox,
+                                          mesh.active_local_elements_begin(),
+                                          mesh.active_local_elements_end(),
+                                          _global_index_by_pid_map);
+
+  SyncLocalIDs sync(_global_index_by_pid_map);
+
+  Parallel::sync_dofobject_data_by_id
+      (mesh.comm(), mesh.active_elements_begin(), mesh.active_elements_end(), sync);
+
+  dof_id_type pid_offset=0;
+  for (processor_id_type pid=0; pid<mesh.n_processors(); pid++)
+    {
+      for (const auto & elem : as_range(mesh.active_pid_elements_begin(pid),
+                                        mesh.active_pid_elements_end(pid)))
+        {
+          libmesh_assert_less (_global_index_by_pid_map[elem->id()], _n_active_elem_on_proc[pid]);
+
+          _global_index_by_pid_map[elem->id()] += pid_offset;
+        }
+
+      pid_offset += _n_active_elem_on_proc[pid];
+    }
+}
+
+void Partitioner::build_graph (const MeshBase & mesh)
+{
+  LOG_SCOPE("build_graph()", "ParmetisPartitioner");
+
+  const dof_id_type n_active_local_elem  = mesh.n_active_local_elem();
+  // If we have boundary elements in this mesh, we want to account for
+  // the connectivity between them and interior elements.  We can find
+  // interior elements from boundary elements, but we need to build up
+  // a lookup map to do the reverse.
+  typedef std::unordered_multimap<const Elem *, const Elem *> map_type;
+  map_type interior_to_boundary_map;
+
+  for (const auto & elem : mesh.active_element_ptr_range())
+    {
+      // If we don't have an interior_parent then there's nothing to look us
+      // up.
+      if ((elem->dim() >= LIBMESH_DIM) ||
+          !elem->interior_parent())
+        continue;
+
+      // get all relevant interior elements
+      std::set<const Elem *> neighbor_set;
+      elem->find_interior_neighbors(neighbor_set);
+
+      for (const auto & neighbor : neighbor_set)
+        interior_to_boundary_map.insert(std::make_pair(neighbor, elem));
+    }
+
+#ifdef LIBMESH_ENABLE_AMR
+  std::vector<const Elem *> neighbors_offspring;
+#endif
+
+   // This is costly, and we only need to do it if the mesh has
+   // changed since we last partitioned... but the mesh probably has
+   // changed since we last partitioned, and if it hasn't we don't
+   // have a reliable way to be sure of that.
+   _find_global_index_by_pid_map(mesh);
+
+   dof_id_type first_local_elem = 0;
+   for (processor_id_type pid=0; pid < mesh.processor_id(); pid++)
+     first_local_elem += _n_active_elem_on_proc[pid];
+
+  _dual_graph.clear();
+  _dual_graph.resize(n_active_local_elem);
+  _local_id_to_elem.resize(n_active_local_elem);
+
+  for (const auto & elem : mesh.active_local_element_ptr_range())
+    {
+      libmesh_assert (_global_index_by_pid_map.count(elem->id()));
+      const dof_id_type global_index_by_pid =
+        _global_index_by_pid_map[elem->id()];
+
+      const dof_id_type local_index =
+        global_index_by_pid - first_local_elem;
+      libmesh_assert_less (local_index, n_active_local_elem);
+
+      std::vector<dof_id_type> & graph_row = _dual_graph[local_index];
+
+      // Save this off to make it easy to index later
+      _local_id_to_elem[local_index] = elem;
+
+      // Loop over the element's neighbors.  An element
+      // adjacency corresponds to a face neighbor
+      for (auto neighbor : elem->neighbor_ptr_range())
+        {
+          if (neighbor != nullptr)
+            {
+              // If the neighbor is active treat it
+              // as a connection
+              if (neighbor->active())
+                {
+                  libmesh_assert(_global_index_by_pid_map.count(neighbor->id()));
+                  const dof_id_type neighbor_global_index_by_pid =
+                    _global_index_by_pid_map[neighbor->id()];
+
+                  graph_row.push_back(neighbor_global_index_by_pid);
+                }
+
+#ifdef LIBMESH_ENABLE_AMR
+
+              // Otherwise we need to find all of the
+              // neighbor's children that are connected to
+              // us and add them
+              else
+                {
+                  // The side of the neighbor to which
+                  // we are connected
+                  const unsigned int ns =
+                    neighbor->which_neighbor_am_i (elem);
+                  libmesh_assert_less (ns, neighbor->n_neighbors());
+
+                  // Get all the active children (& grandchildren, etc...)
+                  // of the neighbor
+
+                  // FIXME - this is the wrong thing, since we
+                  // should be getting the active family tree on
+                  // our side only.  But adding too many graph
+                  // links may cause hanging nodes to tend to be
+                  // on partition interiors, which would reduce
+                  // communication overhead for constraint
+                  // equations, so we'll leave it.
+
+                  neighbor->active_family_tree (neighbors_offspring);
+
+                  // Get all the neighbor's children that
+                  // live on that side and are thus connected
+                  // to us
+                  for (std::size_t nc=0; nc<neighbors_offspring.size(); nc++)
+                    {
+                      const Elem * child =
+                        neighbors_offspring[nc];
+
+                      // This does not assume a level-1 mesh.
+                      // Note that since children have sides numbered
+                      // coincident with the parent then this is a sufficient test.
+                      if (child->neighbor_ptr(ns) == elem)
+                        {
+                          libmesh_assert (child->active());
+                          libmesh_assert (_global_index_by_pid_map.count(child->id()));
+                          const dof_id_type child_global_index_by_pid =
+                            _global_index_by_pid_map[child->id()];
+
+                          graph_row.push_back(child_global_index_by_pid);
+                        }
+                    }
+                }
+
+#endif /* ifdef LIBMESH_ENABLE_AMR */
+
+
+            }
+        }
+
+      if ((elem->dim() < LIBMESH_DIM) &&
+          elem->interior_parent())
+        {
+          // get all relevant interior elements
+          std::set<const Elem *> neighbor_set;
+          elem->find_interior_neighbors(neighbor_set);
+
+          for (const auto & neighbor : neighbor_set)
+            {
+              const dof_id_type neighbor_global_index_by_pid =
+                _global_index_by_pid_map[neighbor->id()];
+
+              graph_row.push_back(neighbor_global_index_by_pid);
+            }
+        }
+
+      // Check for any boundary neighbors
+      for (const auto & pr : as_range(interior_to_boundary_map.equal_range(elem)))
+        {
+          const Elem * neighbor = pr.second;
+
+          const dof_id_type neighbor_global_index_by_pid =
+            _global_index_by_pid_map[neighbor->id()];
+
+          graph_row.push_back(neighbor_global_index_by_pid);
+        }
+    }
+
+}
+
+void Partitioner::assign_partitioning (const MeshBase & mesh, const std::vector<dof_id_type> & parts)
+{
+  LOG_SCOPE("assign_partitioning()", "ParmetisPartitioner");
+
+  // This function must be run on all processors at once
+  libmesh_parallel_only(mesh.comm());
+
+  dof_id_type first_local_elem = 0;
+  for (processor_id_type pid=0; pid < mesh.processor_id(); pid++)
+    first_local_elem += _n_active_elem_on_proc[pid];
+
+#ifndef NDEBUG
+  const dof_id_type n_active_local_elem = mesh.n_active_local_elem();
+#endif
+
+  std::map<processor_id_type, std::vector<dof_id_type>>
+    requested_ids;
+
+  // Results to gather from each processor - kept in a map so we
+  // do only one loop over elements after all receives are done.
+  std::map<processor_id_type, std::vector<processor_id_type>>
+    filled_request;
+
+  for (auto & elem : mesh.active_element_ptr_range())
+    {
+      // we need to get the index from the owning processor
+      // (note we cannot assign it now -- we are iterating
+      // over elements again and this will be bad!)
+      requested_ids[elem->processor_id()].push_back(elem->id());
+    }
+
+  auto gather_functor =
+    [this,
+     & parts,
+#ifndef NDEBUG
+     & mesh,
+     n_active_local_elem,
+#endif
+     first_local_elem]
+    (processor_id_type, const std::vector<dof_id_type> & ids,
+     std::vector<processor_id_type> & data)
+    {
+      const std::size_t ids_size = ids.size();
+      data.resize(ids.size());
+
+      for (std::size_t i=0; i != ids_size; i++)
+        {
+          const dof_id_type requested_elem_index = ids[i];
+
+          libmesh_assert(_global_index_by_pid_map.count(requested_elem_index));
+
+          const dof_id_type global_index_by_pid =
+            _global_index_by_pid_map[requested_elem_index];
+
+          const dof_id_type local_index =
+            global_index_by_pid - first_local_elem;
+
+          libmesh_assert_less (local_index, parts.size());
+          libmesh_assert_less (local_index, n_active_local_elem);
+
+          const processor_id_type elem_procid =
+            cast_int<processor_id_type>(parts[local_index]);
+
+          libmesh_assert_less (elem_procid, mesh.n_partitions());
+
+          data[i] = elem_procid;
+        }
+    };
+
+  auto action_functor =
+    [&filled_request]
+    (processor_id_type pid,
+     const std::vector<dof_id_type> &,
+     const std::vector<processor_id_type> & new_procids)
+    {
+      filled_request[pid] = new_procids;
+    };
+
+  // Trade requests with other processors
+  const processor_id_type * ex = nullptr;
+  Parallel::pull_parallel_vector_data
+    (mesh.comm(), requested_ids, gather_functor, action_functor, ex);
+
+  // and finally assign the partitioning.
+  // note we are iterating in exactly the same order
+  // used to build up the request, so we can expect the
+  // required entries to be in the proper sequence.
+  std::vector<unsigned int> counters(mesh.n_processors(), 0);
+  for (auto & elem : mesh.active_element_ptr_range())
+    {
+      const processor_id_type current_pid = elem->processor_id();
+
+      libmesh_assert_less (counters[current_pid], requested_ids[current_pid].size());
+
+      const processor_id_type elem_procid =
+        filled_request[current_pid][counters[current_pid]++];
+
+      libmesh_assert_less (elem_procid, mesh.n_partitions());
+      elem->processor_id() = elem_procid;
+    }
+}
+
 
 } // namespace libMesh

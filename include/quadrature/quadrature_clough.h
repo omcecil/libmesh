@@ -34,37 +34,42 @@ namespace libMesh
  * \date 2005
  * \brief Implements quadrature rules for Clough-Tocher macroelements.
  */
-class QClough libmesh_final : public QBase
+class QClough final : public QBase
 {
 public:
 
   /**
    * Constructor.  Declares the order of the quadrature rule.
    */
-  QClough (const unsigned int _dim,
-           const Order _order=INVALID_ORDER) :
-    QBase(_dim, _order)
+  QClough (unsigned int dim,
+           Order order=INVALID_ORDER) :
+    QBase(dim, order)
   {}
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QClough() {}
+  QClough (const QClough &) = default;
+  QClough (QClough &&) = default;
+  QClough & operator= (const QClough &) = default;
+  QClough & operator= (QClough &&) = default;
+  virtual ~QClough() = default;
 
   /**
    * \returns \p QCLOUGH.
    */
-  virtual QuadratureType type() const libmesh_override { return QCLOUGH; }
+  virtual QuadratureType type() const override;
 
 
 private:
 
   void init_1D (const ElemType _type=INVALID_ELEM,
-                unsigned int p_level=0) libmesh_override;
+                unsigned int p_level=0) override;
   void init_2D (const ElemType _type=INVALID_ELEM,
-                unsigned int p_level=0) libmesh_override;
+                unsigned int p_level=0) override;
   void init_3D (const ElemType _type=INVALID_ELEM,
-                unsigned int p_level=0) libmesh_override;
+                unsigned int p_level=0) override;
 };
 
 } // namespace libMesh

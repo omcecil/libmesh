@@ -38,6 +38,7 @@
 #include "libmesh/equation_systems.h"
 #include "libmesh/exodusII_io.h"
 #include "libmesh/gmv_io.h"
+#include "libmesh/enum_solver_package.h"
 
 // Define the Finite Element object.
 #include "libmesh/fe.h"
@@ -384,7 +385,7 @@ void assemble_poisson(EquationSystems & es,
         // If the element has no neighbor on a side then that
         // side MUST live on a boundary of the domain.
         for (auto side : elem->side_index_range())
-          if (elem->neighbor_ptr(side) == libmesh_nullptr)
+          if (elem->neighbor_ptr(side) == nullptr)
             {
               // The value of the shape functions at the quadrature
               // points.

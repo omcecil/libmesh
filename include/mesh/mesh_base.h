@@ -24,13 +24,21 @@
 #include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/boundary_info.h"
 #include "libmesh/dof_object.h" // for invalid_processor_id
-#include "libmesh/enum_elem_type.h"
 #include "libmesh/libmesh_common.h"
 #include "libmesh/multi_predicates.h"
 #include "libmesh/point_locator_base.h"
 #include "libmesh/variant_filter_iterator.h"
 #include "libmesh/parallel_object.h"
 #include "libmesh/simple_range.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ElemType : int;
+}
+#else
+#include "libmesh/enum_elem_type.h"
+#endif
 
 // C++ Includes
 #include <cstddef>
@@ -82,6 +90,25 @@ public:
    * Copy-constructor.
    */
   MeshBase (const MeshBase & other_mesh);
+
+  /**
+   * Move-constructor - this function is defaulted out-of-line (in the
+   * C file) to play nicely with our forward declarations.
+   */
+  MeshBase(MeshBase &&);
+
+  /**
+   * Copy and move assignment are not allowed because MeshBase
+   * subclasses manually manage memory (Elems and Nodes) and therefore
+   * the default versions of these operators would leak memory.  Since
+   * we don't want to maintain non-default copy and move assignment
+   * operators at this time, the safest and most self-documenting
+   * approach is to delete them.
+   *
+   * If you need to copy a Mesh, use the clone() method.
+   */
+  MeshBase & operator= (const MeshBase &) = delete;
+  MeshBase & operator= (MeshBase &&) = delete;
 
   /**
    * Virtual "copy constructor"
@@ -459,13 +486,13 @@ public:
   virtual Node * node_ptr (const dof_id_type i) = 0;
 
   /**
-   * \returns A pointer to the \f$ i^{th} \f$ node, or \p NULL if no such
+   * \returns A pointer to the \f$ i^{th} \f$ node, or \p nullptr if no such
    * node exists in this processor's mesh data structure.
    */
   virtual const Node * query_node_ptr (const dof_id_type i) const = 0;
 
   /**
-   * \returns A writable pointer to the \f$ i^{th} \f$ node, or \p NULL if
+   * \returns A writable pointer to the \f$ i^{th} \f$ node, or \p nullptr if
    * no such node exists in this processor's mesh data structure.
    */
   virtual Node * query_node_ptr (const dof_id_type i) = 0;
@@ -530,19 +557,19 @@ public:
 #endif
 
   /**
-   * \returns A pointer to the \f$ i^{th} \f$ element, or NULL if no
+   * \returns A pointer to the \f$ i^{th} \f$ element, or nullptr if no
    * such element exists in this processor's mesh data structure.
    */
   virtual const Elem * query_elem_ptr (const dof_id_type i) const = 0;
 
   /**
-   * \returns A writable pointer to the \f$ i^{th} \f$ element, or NULL
+   * \returns A writable pointer to the \f$ i^{th} \f$ element, or nullptr
    * if no such element exists in this processor's mesh data structure.
    */
   virtual Elem * query_elem_ptr (const dof_id_type i) = 0;
 
   /**
-   * \returns A pointer to the \f$ i^{th} \f$ element, or NULL if no
+   * \returns A pointer to the \f$ i^{th} \f$ element, or nullptr if no
    * such element exists in this processor's mesh data structure.
    *
    * \deprecated Use the less confusingly-named query_elem_ptr() instead.
@@ -556,7 +583,7 @@ public:
 #endif
 
   /**
-   * \returns A writable pointer to the \f$ i^{th} \f$ element, or NULL
+   * \returns A writable pointer to the \f$ i^{th} \f$ element, or nullptr
    * if no such element exists in this processor's mesh data structure.
    *
    * \deprecated Use the less confusingly-named query_elem_ptr() instead.
@@ -660,7 +687,7 @@ public:
   /**
    * Locate element face (edge in 2D) neighbors.  This is done with the help
    * of a \p std::map that functions like a hash table.
-   * After this routine is called all the elements with a \p NULL neighbor
+   * After this routine is called all the elements with a \p nullptr neighbor
    * pointer are guaranteed to be on the boundary.  Thus this routine is
    * useful for automatically determining the boundaries of the domain.
    * If reset_remote_elements is left to false, remote neighbor links are not
@@ -815,6 +842,11 @@ public:
   { return _ghosting_functors.end(); }
 
   /**
+   * Default ghosting functor
+   */
+  GhostingFunctor & default_ghosting() { return *_default_ghosting; }
+
+  /**
    * Constructs a list of all subdomain identifiers in the global mesh.
    * Subdomains correspond to separate subsets of the mesh which could correspond
    * e.g. to different materials in a solid mechanics application,
@@ -866,7 +898,7 @@ public:
    * implemented in derived classes.
    */
   virtual void read  (const std::string & name,
-                      void * mesh_data=libmesh_nullptr,
+                      void * mesh_data=nullptr,
                       bool skip_renumber_nodes_and_elements=false,
                       bool skip_find_neighbors=false) = 0;
   virtual void write (const std::string & name) = 0;
@@ -1459,15 +1491,6 @@ protected:
    * it can create and interact with \p BoundaryMesh.
    */
   friend class BoundaryInfo;
-
-private:
-  /**
-   *  The default shallow assignment operator is a very bad idea, so
-   *  we'll make it a compile-time error to try and do it from other
-   *  classes and a link-time error to try and do it from this class.
-   *  Use clone() if necessary.
-   */
-  MeshBase & operator= (const MeshBase & other);
 };
 
 

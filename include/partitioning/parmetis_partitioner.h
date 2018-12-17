@@ -49,21 +49,36 @@ class ParmetisPartitioner : public Partitioner
 public:
 
   /**
-   * Constructor.
+   * Default and copy ctors.
    */
   ParmetisPartitioner ();
+  ParmetisPartitioner (const ParmetisPartitioner & other);
 
   /**
-   * Destructor.
+   * This class contains a unique_ptr member, so it can't be default
+   * copy assigned.
    */
-  ~ParmetisPartitioner ();
+  ParmetisPartitioner & operator= (const ParmetisPartitioner &) = delete;
+
+  /**
+   * Move ctor, move assignment operator, and destructor are
+   * all explicitly inline-defaulted for this class.
+   */
+  ParmetisPartitioner (ParmetisPartitioner &&) = default;
+  ParmetisPartitioner & operator= (ParmetisPartitioner &&) = default;
+
+  /**
+   * The destructor is out-of-line-defaulted to play nice with forward
+   * declarations.
+   */
+  virtual ~ParmetisPartitioner();
 
   /**
    * \returns A copy of this partitioner wrapped in a smart pointer.
    */
-  virtual std::unique_ptr<Partitioner> clone () const libmesh_override
+  virtual std::unique_ptr<Partitioner> clone () const override
   {
-    return libmesh_make_unique<ParmetisPartitioner>();
+    return libmesh_make_unique<ParmetisPartitioner>(*this);
   }
 
 
@@ -76,48 +91,29 @@ protected:
    * then been adaptively refined) and repartitions it.
    */
   virtual void _do_repartition (MeshBase & mesh,
-                                const unsigned int n) libmesh_override;
+                                const unsigned int n) override;
 
   /**
    * Partition the \p MeshBase into \p n subdomains.
    */
   virtual void _do_partition (MeshBase & mesh,
-                              const unsigned int n) libmesh_override;
+                              const unsigned int n) override;
+
+#ifdef LIBMESH_HAVE_PARMETIS
+  /**
+  * Build the graph.
+  */
+  virtual void build_graph (const MeshBase & mesh) override;
 
 private:
 
   // These methods and data only need to be available if the
   // ParMETIS library is available.
-#ifdef LIBMESH_HAVE_PARMETIS
 
   /**
    * Initialize data structures.
    */
   void initialize (const MeshBase & mesh, const unsigned int n_sbdmns);
-
-  /**
-   * Build the graph.
-   */
-  void build_graph (const MeshBase & mesh);
-
-  /**
-   * Assign the computed partitioning to the mesh.
-   */
-  void assign_partitioning (MeshBase & mesh);
-
-  /**
-   * The number of active elements on each processor.
-   *
-   * \note ParMETIS requires that each processor have some active
-   * elements; it will abort if any processor passes a NULL _part
-   * array.
-   */
-  std::vector<dof_id_type> _n_active_elem_on_proc;
-
-  /**
-   * Maps active element ids into a contiguous range, as needed by ParMETIS.
-   */
-  std::unordered_map<dof_id_type, dof_id_type> _global_index_by_pid_map;
 
   /**
    * Pointer to the Parmetis-specific data structures.  Lets us avoid

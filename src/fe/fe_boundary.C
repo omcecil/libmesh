@@ -146,7 +146,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
                        const std::vector<Real> * const weights)
 {
   libmesh_assert(elem);
-  libmesh_assert (this->qrule != libmesh_nullptr || pts != libmesh_nullptr);
+  libmesh_assert (this->qrule != nullptr || pts != nullptr);
   // We now do this for 1D elements!
   // libmesh_assert_not_equal_to (Dim, 1);
 
@@ -164,12 +164,12 @@ void FE<Dim,T>::reinit(const Elem * elem,
   // Find the max p_level to select
   // the right quadrature rule for side integration
   unsigned int side_p_level = elem->p_level();
-  if (elem->neighbor_ptr(s) != libmesh_nullptr)
+  if (elem->neighbor_ptr(s) != nullptr)
     side_p_level = std::max(side_p_level, elem->neighbor_ptr(s)->p_level());
 
   // Initialize the shape functions at the user-specified
   // points
-  if (pts != libmesh_nullptr)
+  if (pts != nullptr)
     {
       // The shape functions do not correspond to the qrule
       this->shapes_on_quadrature = false;
@@ -178,7 +178,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
       this->_fe_map->template init_face_shape_functions<Dim>(*pts, side.get());
 
       // Compute the Jacobian*Weight on the face for integration
-      if (weights != libmesh_nullptr)
+      if (weights != nullptr)
         {
           this->_fe_map->compute_face_map (Dim, *weights, side.get());
         }
@@ -236,7 +236,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
   // Find where the integration points are located on the
   // full element.
   const std::vector<Point> * ref_qp;
-  if (pts != libmesh_nullptr)
+  if (pts != nullptr)
     ref_qp = pts;
   else
     ref_qp = &this->qrule->get_points();
@@ -264,7 +264,7 @@ void FE<Dim,T>::edge_reinit(const Elem * elem,
                             const std::vector<Real> * const weights)
 {
   libmesh_assert(elem);
-  libmesh_assert (this->qrule != libmesh_nullptr || pts != libmesh_nullptr);
+  libmesh_assert (this->qrule != nullptr || pts != nullptr);
   // We don't do this for 1D elements!
   libmesh_assert_not_equal_to (Dim, 1);
 
@@ -281,7 +281,7 @@ void FE<Dim,T>::edge_reinit(const Elem * elem,
 
   // Initialize the shape functions at the user-specified
   // points
-  if (pts != libmesh_nullptr)
+  if (pts != nullptr)
     {
       // The shape functions do not correspond to the qrule
       this->shapes_on_quadrature = false;
@@ -290,7 +290,7 @@ void FE<Dim,T>::edge_reinit(const Elem * elem,
       this->_fe_map->template init_edge_shape_functions<Dim> (*pts, edge.get());
 
       // Compute the Jacobian*Weight on the face for integration
-      if (weights != libmesh_nullptr)
+      if (weights != nullptr)
         {
           this->_fe_map->compute_edge_map (Dim, *weights, edge.get());
         }
@@ -361,7 +361,7 @@ void FE<Dim,T>::side_map (const Elem * elem,
   this->determine_calculations();
 
   unsigned int side_p_level = elem->p_level();
-  if (elem->neighbor_ptr(s) != libmesh_nullptr)
+  if (elem->neighbor_ptr(s) != nullptr)
     side_p_level = std::max(side_p_level, elem->neighbor_ptr(s)->p_level());
 
   if (side->type() != last_side ||
@@ -396,7 +396,8 @@ void FE<Dim,T>::side_map (const Elem * elem,
 
   const std::vector<std::vector<Real>> & psi_map = this->_fe_map->get_psi();
 
-  for (std::size_t i=0; i<psi_map.size(); i++) // sum over the nodes
+  // sum over the nodes
+  for (auto i : index_range(psi_map))
     {
       const Point & side_node = refspace_nodes[elem_nodes_map[i]];
       for (unsigned int p=0; p<n_points; p++)
@@ -982,7 +983,9 @@ void FEMap::compute_edge_map(int dim,
     }
 
   // compute x, dxdxi at the quadrature points
-  for (std::size_t i=0; i<this->psi_map.size(); i++) // sum over the nodes
+  for (unsigned int i=0,
+       psi_map_size=cast_int<unsigned int>(psi_map.size());
+       i != psi_map_size; i++) // sum over the nodes
     {
       const Point & edge_point = edge->point(i);
 

@@ -53,16 +53,21 @@ public:
                  const unsigned int n=0);
 
   /**
-   * Destructor.  Does nothing.
+   * The 5 special functions can be defaulted for this class, as it
+   * does not manage any memory itself.
    */
-  virtual ~DenseSubVector() {}
+  DenseSubVector (DenseSubVector &&) = default;
+  DenseSubVector (const DenseSubVector &) = default;
+  DenseSubVector & operator= (const DenseSubVector &) = default;
+  DenseSubVector & operator= (DenseSubVector &&) = default;
+  virtual ~DenseSubVector() = default;
 
   /**
    * \returns A reference to the parent vector.
    */
   DenseVector<T> & parent () { return _parent_vector; }
 
-  virtual void zero() libmesh_override;
+  virtual void zero() override;
 
   /**
    * \returns The \p (i,j) element of the subvector as a const
@@ -75,16 +80,16 @@ public:
    */
   T & operator() (const unsigned int i);
 
-  virtual T el(const unsigned int i) const libmesh_override
+  virtual T el(const unsigned int i) const override
   { return (*this)(i); }
 
-  virtual T & el(const unsigned int i) libmesh_override
+  virtual T & el(const unsigned int i) override
   { return (*this)(i); }
 
-  virtual unsigned int size() const libmesh_override
+  virtual unsigned int size() const override
   { return _n; }
 
-  virtual bool empty() const libmesh_override
+  virtual bool empty() const override
   { return (_n == 0); }
 
   /**

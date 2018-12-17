@@ -25,6 +25,7 @@
 #include "libmesh/quadrature_simpson.h"
 #include "libmesh/quadrature_composite.h"
 #include "libmesh/elem.h"
+#include "libmesh/enum_quadrature_type.h"
 
 
 
@@ -33,8 +34,16 @@ namespace libMesh
 
 
 template <class QSubCell>
-QComposite<QSubCell>::QComposite(const unsigned int d,
-                                 const Order o) :
+QuadratureType QComposite<QSubCell>::type() const
+{
+  return QCOMPOSITE;
+}
+
+
+
+template <class QSubCell>
+QComposite<QSubCell>::QComposite(unsigned int d,
+                                 Order o) :
   QSubCell(d,o), // explicitly call base class constructor
   _q_subcell(d,o),
   _lagrange_fe(FEBase::build (d, FEType (FIRST, LAGRANGE)))
@@ -47,16 +56,10 @@ QComposite<QSubCell>::QComposite(const unsigned int d,
   if (_dim == 1)
     QSubCell::init(EDGE2);
 
-  libmesh_assert (_lagrange_fe.get() != libmesh_nullptr);
+  libmesh_assert (_lagrange_fe.get() != nullptr);
 
   _lagrange_fe->attach_quadrature_rule (&_q_subcell);
 }
-
-
-
-template <class QSubCell>
-QComposite<QSubCell>::~QComposite()
-{}
 
 
 
@@ -86,7 +89,7 @@ void QComposite<QSubCell>::init (const Elem & elem,
   // mapping.
   const Elem * reference_elem = elem.reference_elem();
 
-  libmesh_assert (reference_elem != libmesh_nullptr);
+  libmesh_assert (reference_elem != nullptr);
 
   _elem_cutter(*reference_elem, vertex_distance_func);
   //_elem_cutter(elem, vertex_distance_func);

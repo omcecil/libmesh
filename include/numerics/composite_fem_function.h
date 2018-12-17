@@ -44,13 +44,25 @@ class CompositeFEMFunction : public FEMFunctionBase<Output>
 {
 public:
   explicit
-  CompositeFEMFunction () {}
+  CompositeFEMFunction () = default;
 
-  ~CompositeFEMFunction ()
-  {
-    for (auto & f : subfunctions)
-      delete f;
-  }
+  /**
+   * This class can be default move constructed and assigned.
+   */
+  CompositeFEMFunction (CompositeFEMFunction &&) = default;
+  CompositeFEMFunction & operator= (CompositeFEMFunction &&) = default;
+
+  /**
+   * This class contains unique_ptr members so it can't be default
+   * copied or assigned.
+   */
+  CompositeFEMFunction (const CompositeFEMFunction &) = delete;
+  CompositeFEMFunction & operator= (const CompositeFEMFunction &) = delete;
+
+  /**
+   * The subfunctions vector is automatically cleaned up.
+   */
+  virtual ~CompositeFEMFunction () = default;
 
   /**
    * Attach a new subfunction, along with a map from the indices of
@@ -60,10 +72,11 @@ public:
   void attach_subfunction (const FEMFunctionBase<Output> & f,
                            const std::vector<unsigned int> & index_map)
   {
-    const unsigned int subfunction_index = subfunctions.size();
+    const unsigned int subfunction_index =
+      cast_int<unsigned int>(subfunctions.size());
     libmesh_assert_equal_to(subfunctions.size(), index_maps.size());
 
-    subfunctions.push_back(f.clone().release());
+    subfunctions.push_back(f.clone());
     index_maps.push_back(index_map);
 
     unsigned int max_index =
@@ -88,7 +101,7 @@ public:
 
   virtual Output operator() (const FEMContext & c,
                              const Point & p,
-                             const Real time = 0) libmesh_override
+                             const Real time = 0) override
   {
     return this->component(c,0,p,time);
   }
@@ -96,7 +109,7 @@ public:
   virtual void operator() (const FEMContext & c,
                            const Point & p,
                            const Real time,
-                           DenseVector<Output> & output) libmesh_override
+                           DenseVector<Output> & output) override
   {
     libmesh_assert_greater_equal (output.size(),
                                   reverse_index_map.size());
@@ -108,9 +121,9 @@ public:
     DenseVector<Output> temp;
     for (std::size_t i=0; i != subfunctions.size(); ++i)
       {
-        temp.resize(index_maps[i].size());
+        temp.resize(cast_int<unsigned int>(index_maps[i].size()));
         (*subfunctions[i])(c, p, time, temp);
-        for (std::size_t j=0; j != temp.size(); ++j)
+        for (unsigned int j=0; j != temp.size(); ++j)
           output(index_maps[i][j]) = temp(j);
       }
   }
@@ -118,7 +131,7 @@ public:
   virtual Output component (const FEMContext & c,
                             unsigned int i,
                             const Point & p,
-                            Real time) libmesh_override
+                            Real time) override
   {
     if (i >= reverse_index_map.size() ||
         reverse_index_map[i].first == libMesh::invalid_uint)
@@ -132,7 +145,7 @@ public:
       component(c, reverse_index_map[i].second, p, time);
   }
 
-  virtual std::unique_ptr<FEMFunctionBase<Output>> clone() const libmesh_override
+  virtual std::unique_ptr<FEMFunctionBase<Output>> clone() const override
   {
     CompositeFEMFunction * returnval = new CompositeFEMFunction();
     for (std::size_t i=0; i != subfunctions.size(); ++i)
@@ -152,7 +165,7 @@ public:
 
 private:
   // list of functions which fill in our values
-  std::vector<FEMFunctionBase<Output> *> subfunctions;
+  std::vector<std::unique_ptr<FEMFunctionBase<Output>>> subfunctions;
 
   // for each function, list of which global indices it fills in
   std::vector<std::vector<unsigned int>> index_maps;

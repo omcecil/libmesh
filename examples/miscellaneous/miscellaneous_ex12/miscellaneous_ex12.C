@@ -53,8 +53,9 @@
 #include "libmesh/dirichlet_boundaries.h"
 #include "libmesh/zero_function.h"
 #include "libmesh/linear_solver.h"
-#include "libmesh/libmesh_nullptr.h"
 #include "libmesh/getpot.h"
+#include "libmesh/enum_solver_package.h"
+#include "libmesh/enum_solver_type.h"
 
 // Eigen includes
 #ifdef LIBMESH_HAVE_EIGEN
@@ -175,7 +176,7 @@ int main (int argc, char ** argv)
 
     // Most DirichletBoundary users will want to supply a "locally
     // indexed" functor
-    DirichletBoundary dirichlet_bc 
+    DirichletBoundary dirichlet_bc
       (boundary_ids,
        std::vector<unsigned int>(variables, variables+3), zf,
        LOCAL_VARIABLE_ORDER);
@@ -245,7 +246,7 @@ int main (int argc, char ** argv)
   if (distributed_load==0)
     {
       // Find the node nearest point C.
-      Node * node_C = libmesh_nullptr;
+      Node * node_C = nullptr;
       Point point_C(0, 3, 3);
       {
         Real nearest_dist_sq = std::numeric_limits<Real>::max();
@@ -269,7 +270,7 @@ int main (int argc, char ** argv)
 
         // Broadcast the ID of the closest node, so every processor can
         // see for certain whether they have it or not.
-        dof_id_type nearest_node_id;
+        dof_id_type nearest_node_id = 0;
         if (system.processor_id() == minrank)
           nearest_node_id = node_C->id();
         system.comm().broadcast(nearest_node_id, minrank);
@@ -775,6 +776,11 @@ void assemble_shell (EquationSystems & es,
                   full_local_KIJ.block<5,5>(0,0)=local_KIJ;
 
                   // Drilling dof stiffness contribution
+                  // Note that in the original book, there is a coefficient of
+                  // alpha between 1e-4 and 1e-7 to make the fictitious
+                  // drilling stiffness small while preventing the stiffness
+                  // matrix from being singular. For this problem, we can use
+                  // alpha = 1 to also get a good result.
                   full_local_KIJ(5,5) = Hf(0,0)*JxW[qp]*BdI.transpose()*BdJ;
 
                   // Transform the stiffness matrix to global coordinates
@@ -834,15 +840,9 @@ void assemble_shell (EquationSystems & es,
       //Finish assembling rhs so we can set one value
       system.rhs->close();
 
-      MeshBase::const_node_iterator nodeit = mesh.nodes_begin();
-      const MeshBase::const_node_iterator node_end = mesh.nodes_end();
-
-      for ( ; nodeit!=node_end; ++nodeit)
-        {
-          Node & node = **nodeit;
-          if ((node-C).norm() < 1e-3)
-            system.rhs->set(node.dof_number(0, 2, 0), -q/4);
-        }
+      for (const auto & node : mesh.node_ptr_range())
+        if (((*node) - C).norm() < 1e-3)
+          system.rhs->set(node->dof_number(0, 2, 0), -q/4);
     }
 
 #else

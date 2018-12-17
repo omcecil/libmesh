@@ -26,12 +26,14 @@
 #include <stdlib.h> // rand, srand
 
 #include "libmesh/libmesh_config.h"
-#include "libmesh/libmesh_nullptr.h"
 
 #ifdef LIBMESH_HAVE_EXODUS_API
 
+#include "libmesh/ignore_warnings.h"
 #include "exodusII.h"
 #include "exodusII_int.h"
+#include "libmesh/restore_warnings.h"
+
 #include "libmesh/getpot.h"
 
 #define EXODUS_DIM 0x8
@@ -151,7 +153,7 @@ int main(int argc, char ** argv)
           status = nc_inq_varid (nc_id, var_name.c_str(), &var_id);
           if (status != NC_NOERR) handle_error(status, "Error while inquiring about a variable's ID.");
 
-          status = nc_get_var_long (nc_id, var_id, &var_vals[0]);
+          status = nc_get_var_long (nc_id, var_id, var_vals.data());
           if (status != NC_NOERR) handle_error(status, "Error while retrieving a variable's values.");
 
           // Update the variable value specified on the command line
@@ -160,7 +162,7 @@ int main(int argc, char ** argv)
               var_vals[i] = newid;
 
           // Save that value back to the NetCDF database
-          status = nc_put_var_long (nc_id, var_id, &var_vals[0]);
+          status = nc_put_var_long (nc_id, var_id, var_vals.data());
           if (status != NC_NOERR) handle_error(status, "Error while writing a variable's values.");
         }
 
@@ -249,7 +251,7 @@ void gen_random_string(std::string & s, const int len)
     "abcdefghijklmnopqrstuvwxyz";
 
   // Seed the random number generator with the current time
-  srand( static_cast<unsigned>(time(libmesh_nullptr)) );
+  srand( static_cast<unsigned>(time(nullptr)) );
 
   s.resize(len);
   for (int i = 0; i < len; ++i)

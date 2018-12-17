@@ -39,13 +39,19 @@ public:
    * Constructor.  By default this element has no parent.
    */
   explicit
-  TriShell3 (Elem * p=libmesh_nullptr) :
+  TriShell3 (Elem * p=nullptr) :
     Tri3(p) {}
+
+  TriShell3 (TriShell3 &&) = delete;
+  TriShell3 (const TriShell3 &) = delete;
+  TriShell3 & operator= (const TriShell3 &) = delete;
+  TriShell3 & operator= (TriShell3 &&) = delete;
+  virtual ~TriShell3() = default;
 
   /**
    * \returns \p TRISHELL3.
    */
-  virtual ElemType type () const libmesh_override { return TRISHELL3; }
+  virtual ElemType type () const override { return TRISHELL3; }
 };
 
 } // namespace libMesh

@@ -23,6 +23,7 @@
 // Local includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/type_vector.h"
+#include "libmesh/tuple_of.h"
 
 // C++ includes
 #include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
@@ -47,6 +48,11 @@ template <unsigned int N, typename T>
 class TypeNTensor
 {
 public:
+  /**
+   * Helper typedef for generic index programming
+   */
+  typedef tuple_of<N, unsigned int> index_type;
+
   TypeNTensor () : _coords(std::vector<T>(int_pow(LIBMESH_DIM, N))) {}
 
   TypeNTensor (const T &) : _coords(std::vector<T>(int_pow(LIBMESH_DIM, N))) {}
@@ -145,8 +151,13 @@ public:
   const TypeNTensor<N,T> & operator /= (const T) { return *this; }
 
   /**
-   * Multiply 2 tensors together, i.e. dyadic product sum_ij Aij*Bij.
-   * The tensors may be of different types.
+   * Multiply 2 tensors together to return a scalar, i.e.
+   * \f$ \sum_{ij} A_{ij} B_{ij} \f$
+   * The tensors may contain different numeric types.
+   * Also known as the "double inner product" or "double dot product"
+   * of tensors.
+   *
+   * \returns The scalar-valued result, this tensor is unchanged.
    */
   template <typename T2>
   typename CompareTypes<T,T2>::supertype
@@ -235,6 +246,27 @@ void TypeNTensor<N, T>::add_scaled (const TypeNTensor<N, T2> & p, const T & fact
   for (unsigned int i = 0; i < size ; i++)
     _coords[i] += factor*p._coords[i];
 }
+
+template <unsigned int N, typename T, typename Scalar>
+typename boostcopy::enable_if_c<
+  ScalarTraits<Scalar>::value,
+  TypeNTensor<N,typename CompareTypes<Scalar, T>::supertype>>::type
+operator * (const Scalar &, const TypeNTensor<N, T> &)
+{
+  libmesh_not_implemented();
+  return TypeNTensor<N,typename CompareTypes<Scalar, T>::supertype>();
+}
+
+template <unsigned int N, typename T, typename Scalar>
+typename boostcopy::enable_if_c<
+  ScalarTraits<Scalar>::value,
+  TypeNTensor<N,typename CompareTypes<Scalar, T>::supertype>>::type
+operator / (const Scalar &, const TypeNTensor<N, T> &)
+{
+  libmesh_not_implemented();
+  return TypeNTensor<N,typename CompareTypes<Scalar, T>::supertype>();
+}
+
 
 } // namespace libMesh
 

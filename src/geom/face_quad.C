@@ -19,6 +19,7 @@
 #include "libmesh/face_quad.h"
 #include "libmesh/edge_edge2.h"
 #include "libmesh/face_quad4.h"
+#include "libmesh/enum_elem_quality.h"
 
 // C++ includes
 #include <array>
@@ -92,6 +93,14 @@ std::unique_ptr<Elem> Quad::side_ptr (const unsigned int i)
     edge->set_node(n) = this->node_ptr(Quad4::side_nodes_map[i][n]);
 
   return edge;
+}
+
+
+
+void Quad::side_ptr (std::unique_ptr<Elem> & side,
+                     const unsigned int i)
+{
+  this->simple_side_ptr<Quad,Quad4>(side, i, EDGE2);
 }
 
 
@@ -261,7 +270,7 @@ Real Quad::quality (const ElemQuality q) const
           return 0.;
 
         // Compute and return the shape metric. These only use the
-        // digonal entries of the T_k.
+        // diagonal entries of the T_k.
         Real den = 0.;
         if (q == SHAPE)
           {

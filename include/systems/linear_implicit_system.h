@@ -36,9 +36,15 @@ template <typename T> class ShellMatrix;
 
 
 /**
- * This class provides a specific system class.  It aims
- * at implicit systems, offering nothing more than just
- * the essentials needed to solve a system.
+ * \brief Manages consistently variables, degrees of freedom, coefficient
+ * vectors, matrices and linear solvers for implicit systems.
+ *
+ * An implicit system is a system that requires the solution of a
+ * system of equations. This class has the ability to create and use a
+ * linear solver to solve the system.
+ *
+ * The matrix LinearImplicitSystem::matrix and the vector
+ * LinearImplicitSystem::rhs should be filled during assembly.
  *
  * \note Additional vectors/matrices can be added via parent class
  * interfaces.
@@ -82,18 +88,18 @@ public:
    * Clear all the data structures associated with
    * the system.
    */
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
   /**
    * Initializes new data members of the system
    */
-  virtual void init_data () libmesh_override;
+  virtual void init_data () override;
 
   /**
    * Reinitializes the member data fields associated with
    * the system, so that, e.g., \p assemble() may be used.
    */
-  virtual void reinit () libmesh_override;
+  virtual void reinit () override;
 
   /**
    * Prepares \p matrix and \p _dof_map for matrix assembly.
@@ -101,32 +107,32 @@ public:
    * use the \p assemble() in derived classes.
    * Should be overridden in derived classes.
    */
-  virtual void assemble () libmesh_override { ImplicitSystem::assemble(); }
+  virtual void assemble () override { ImplicitSystem::assemble(); }
 
   /**
    * After calling this method, any solve will be limited to the given
    * subset.  To disable this mode, call this method with \p subset
-   * being a \p NULL pointer.
+   * being a \p nullptr.
    */
   virtual void restrict_solve_to (const SystemSubset * subset,
-                                  const SubsetSolveMode subset_solve_mode=SUBSET_ZERO) libmesh_override;
+                                  const SubsetSolveMode subset_solve_mode=SUBSET_ZERO) override;
 
   /**
    * Assembles & solves the linear system A*x=b.
    */
-  virtual void solve () libmesh_override;
+  virtual void solve () override;
 
   /**
    * \returns A pointer to a linear solver appropriate for use in
    * adjoint and/or sensitivity solves
    */
-  virtual LinearSolver<Number> * get_linear_solver() const libmesh_override;
+  virtual LinearSolver<Number> * get_linear_solver() const override;
 
   /**
    * Releases a pointer to a linear solver acquired by
    * \p this->get_linear_solver()
    */
-  virtual void release_linear_solver(LinearSolver<Number> *) const libmesh_override;
+  virtual void release_linear_solver(LinearSolver<Number> *) const override;
 
   /**
    * Assembles a residual in \p rhs and/or a jacobian in \p matrix,
@@ -135,13 +141,13 @@ public:
   virtual void assembly(bool get_residual,
                         bool get_jacobian,
                         bool apply_heterogeneous_constraints = false,
-                        bool apply_no_constraints = false) libmesh_override;
+                        bool apply_no_constraints = false) override;
 
   /**
    * \returns \p "LinearImplicit".  Helps in identifying
    * the system type in an equation system file.
    */
-  virtual std::string system_type () const libmesh_override { return "LinearImplicit"; }
+  virtual std::string system_type () const override { return "LinearImplicit"; }
 
   /**
    * The \p LinearSolver defines the interface used to
@@ -168,19 +174,19 @@ public:
    * you register your shell matrix using this function, calling \p
    * solve() will no longer use the \p matrix member but the
    * registered shell matrix instead.  You can reset this behaviour to
-   * its original state by supplying a \p NULL pointer to this
+   * its original state by supplying a \p nullptr to this
    * function.
    */
   void attach_shell_matrix (ShellMatrix<Number> * shell_matrix);
 
   /**
-   * Detaches a shell matrix.  Same as \p attach_shell_matrix(libmesh_nullptr).
+   * Detaches a shell matrix.  Same as \p attach_shell_matrix(nullptr).
    */
-  void detach_shell_matrix () { attach_shell_matrix(libmesh_nullptr); }
+  void detach_shell_matrix () { attach_shell_matrix(nullptr); }
 
   /**
    * \returns A pointer to the currently attached shell matrix, if any,
-   * or \p NULL else.
+   * otherwise \p nullptr.
    */
   ShellMatrix<Number> * get_shell_matrix() { return _shell_matrix; }
 
@@ -198,12 +204,12 @@ protected:
   Real _final_linear_residual;
 
   /**
-   * User supplies shell matrix or \p NULL if no shell matrix is used.
+   * User supplies shell matrix or \p nullptr if no shell matrix is used.
    */
   ShellMatrix<Number> * _shell_matrix;
 
   /**
-   * The current subset on which to solve (or \p NULL if none).
+   * The current subset on which to solve (or \p nullptr if none).
    */
   const SystemSubset * _subset;
 

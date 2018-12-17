@@ -15,12 +15,11 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-// C++ includes
-
 // Local includes
 #include "libmesh/face_tri.h"
 #include "libmesh/edge_edge2.h"
 #include "libmesh/face_tri3.h"
+#include "libmesh/enum_elem_quality.h"
 
 namespace libMesh
 {
@@ -89,6 +88,14 @@ std::unique_ptr<Elem> Tri::side_ptr (const unsigned int i)
     edge->set_node(n) = this->node_ptr(Tri3::side_nodes_map[i][n]);
 
   return edge;
+}
+
+
+
+void Tri::side_ptr (std::unique_ptr<Elem> & side,
+                    const unsigned int i)
+{
+  this->simple_side_ptr<Tri,Tri3>(side, i, EDGE2);
 }
 
 

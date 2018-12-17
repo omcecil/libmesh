@@ -49,7 +49,7 @@ namespace libMesh
  * \brief A quadrature rule for subdivided elements.
  */
 template <class QSubCell>
-class QComposite libmesh_final : public QSubCell
+class QComposite final : public QSubCell
 {
 public:
 
@@ -64,18 +64,28 @@ public:
   /**
    * Constructor.  Declares the order of the quadrature rule.
    */
-  QComposite (const unsigned int _dim,
-              const Order _order=INVALID_ORDER);
+  QComposite (unsigned int dim,
+              Order order=INVALID_ORDER);
 
   /**
-   * Destructor.
+   * This class contains a unique_ptr member, so it can't be default
+   * copy constructed or assigned.
    */
-  ~QComposite();
+  QComposite (const QComposite &) = delete;
+  QComposite & operator= (const QComposite &) = delete;
+
+  /**
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
+   */
+  QComposite (QComposite &&) = default;
+  QComposite & operator= (QComposite &&) = default;
+  virtual ~QComposite() = default;
 
   /**
    * \returns \p QCOMPOSITE.
    */
-  virtual QuadratureType type() const libmesh_override { return QCOMPOSITE; }
+  virtual QuadratureType type() const override;
 
   /**
    * Overrides the base class init() function, and uses the ElemCutter to
@@ -83,7 +93,7 @@ public:
    */
   virtual void init (const Elem & elem,
                      const std::vector<Real> & vertex_distance_func,
-                     unsigned int p_level=0) libmesh_override;
+                     unsigned int p_level=0) override;
 
 private:
 

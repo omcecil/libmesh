@@ -81,7 +81,7 @@ public:
   GenericProjector (const GenericProjector & in) :
     system(in.system),
     master_f(in.master_f),
-    master_g(in.master_g ? new GFunctor(*in.master_g) : libmesh_nullptr),
+    master_g(in.master_g ? new GFunctor(*in.master_g) : nullptr),
     g_was_copied(in.master_g),
     master_action(in.master_action),
     variables(in.variables)
@@ -207,16 +207,26 @@ class OldSolutionBase
 {
 public:
   OldSolutionBase(const libMesh::System & sys_in) :
-    last_elem(libmesh_nullptr),
+    last_elem(nullptr),
     sys(sys_in),
     old_context(sys_in)
   {
+    // We'll be queried for components but we'll typically be looking
+    // up data by variables, and those indices don't always match
+    for (auto v : IntRange<unsigned int>(0, sys.n_vars()))
+      {
+        const unsigned int vcomp = sys.variable_scalar_number(v,0);
+        if (vcomp >= component_to_var.size())
+          component_to_var.resize(vcomp+1, static_cast<unsigned int>(-1));
+        component_to_var[vcomp] = v;
+      }
   }
 
   OldSolutionBase(const OldSolutionBase & in) :
-    last_elem(libmesh_nullptr),
+    last_elem(nullptr),
     sys(in.sys),
-    old_context(sys)
+    old_context(sys),
+    component_to_var(in.component_to_var)
   {
   }
 
@@ -231,7 +241,7 @@ public:
     // Loop over variables, to prerequest
     for (unsigned int var=0; var!=sys.n_vars(); ++var)
       {
-        FEBase * fe = libmesh_nullptr;
+        FEBase * fe = nullptr;
         const std::set<unsigned char> & elem_dims =
           old_context.elem_dimensions();
 
@@ -350,6 +360,7 @@ protected:
   const Elem * last_elem;
   const System & sys;
   FEMContext old_context;
+  std::vector<unsigned int> component_to_var;
 
   static const Real out_of_elem_tol;
 };
@@ -405,8 +416,12 @@ public:
     if (!this->check_old_context(c, p))
       return 0;
 
+    // Handle offset from non-scalar components in previous variables
+    libmesh_assert_less(i, this->component_to_var.size());
+    unsigned int var = this->component_to_var[i];
+
     Output n;
-    (this->old_context.*point_output)(i, p, n, this->out_of_elem_tol);
+    (this->old_context.*point_output)(var, p, n, this->out_of_elem_tol);
     return n;
   }
 
@@ -477,6 +492,10 @@ eval_at_node(const FEMContext & c,
 {
   LOG_SCOPE ("Number eval_at_node()", "OldSolutionValue");
 
+  // Handle offset from non-scalar components in previous variables
+  libmesh_assert_less(i, this->component_to_var.size());
+  unsigned int var = this->component_to_var[i];
+
   // Optimize for the common case, where this node was part of the
   // old solution.
   //
@@ -486,10 +505,10 @@ eval_at_node(const FEMContext & c,
   // exceeding FE order)
   if (n.old_dof_object &&
       n.old_dof_object->n_vars(sys.number()) &&
-      n.old_dof_object->n_comp(sys.number(), i))
+      n.old_dof_object->n_comp(sys.number(), var))
     {
       const dof_id_type old_id =
-        n.old_dof_object->dof_number(sys.number(), i, 0);
+        n.old_dof_object->dof_number(sys.number(), var, 0);
       return old_solution(old_id);
     }
 
@@ -510,6 +529,10 @@ eval_at_node(const FEMContext & c,
 {
   LOG_SCOPE ("Gradient eval_at_node()", "OldSolutionValue");
 
+  // Handle offset from non-scalar components in previous variables
+  libmesh_assert_less(i, this->component_to_var.size());
+  unsigned int var = this->component_to_var[i];
+
   // Optimize for the common case, where this node was part of the
   // old solution.
   //
@@ -519,13 +542,13 @@ eval_at_node(const FEMContext & c,
   // exceeding FE order)
   if (n.old_dof_object &&
       n.old_dof_object->n_vars(sys.number()) &&
-      n.old_dof_object->n_comp(sys.number(), i))
+      n.old_dof_object->n_comp(sys.number(), var))
     {
       Gradient g;
       for (unsigned int d = 0; d != elem_dim; ++d)
         {
           const dof_id_type old_id =
-            n.old_dof_object->dof_number(sys.number(), i, d+1);
+            n.old_dof_object->dof_number(sys.number(), var, d+1);
           g(d) = old_solution(old_id);
         }
       return g;
@@ -592,9 +615,9 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
   for (const auto & var : variables)
     {
       // FIXME: Need to generalize this to vector-valued elements. [PB]
-      FEBase * fe = libmesh_nullptr;
-      FEBase * side_fe = libmesh_nullptr;
-      FEBase * edge_fe = libmesh_nullptr;
+      FEBase * fe = nullptr;
+      FEBase * side_fe = nullptr;
+      FEBase * edge_fe = nullptr;
 
       const std::set<unsigned char> & elem_dims =
         context.elem_dimensions();
@@ -642,7 +665,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
   // Iterate over all the elements in the range
   for (const auto & elem : range)
     {
-      unsigned int dim = elem->dim();
+      unsigned char dim = cast_int<unsigned char>(elem->dim());
 
       context.pre_fe_reinit(system, elem);
 
@@ -716,7 +739,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
             {
               LOG_SCOPE ("copy_dofs", "GenericProjector");
 
-              f.eval_old_dofs(context, var_component, Ue.get_values());
+              f.eval_old_dofs(context, var, Ue.get_values());
 
               action.insert(context, var, Ue);
 
@@ -724,9 +747,9 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
             }
 #endif // LIBMESH_ENABLE_AMR
 
-          FEBase * fe = libmesh_nullptr;
-          FEBase * side_fe = libmesh_nullptr;
-          FEBase * edge_fe = libmesh_nullptr;
+          FEBase * fe = nullptr;
+          FEBase * side_fe = nullptr;
+          FEBase * edge_fe = nullptr;
 
           context.get_element_fe( var, fe, dim );
           if (fe->get_fe_type().family == SCALAR)
@@ -951,7 +974,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                       // Assume that other C_ONE elements have a single nodal
                       // value shape function and nodal gradient component
                       // shape functions
-                      libmesh_assert_equal_to (nc, 1 + dim);
+                      libmesh_assert_equal_to (nc, (unsigned int)(1 + dim));
                       Ue(current_dof) = f.eval_at_node(context,
                                                        var_component,
                                                        dim,
@@ -1016,7 +1039,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                 fe->get_phi() :
 #endif
                 edge_fe->get_phi();
-              const std::vector<std::vector<RealGradient>> * dphi = libmesh_nullptr;
+              const std::vector<std::vector<RealGradient>> * dphi = nullptr;
               if (cont == C_ONE)
                 dphi =
 #ifdef LIBMESH_ENABLE_AMR
@@ -1027,7 +1050,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
 
               for (auto e : elem->edge_index_range())
                 {
-                  context.edge = e;
+                  context.edge = cast_int<unsigned char>(e);
 
 #ifdef LIBMESH_ENABLE_AMR
                   if (elem->refinement_flag() == Elem::JUST_COARSENED)
@@ -1066,15 +1089,19 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
 #endif // LIBMESH_ENABLE_AMR
                     context.edge_fe_reinit();
 
-                  const unsigned int n_qp = xyz_values.size();
+                  const unsigned int n_qp =
+                    cast_int<unsigned int>(xyz_values.size());
 
                   FEInterface::dofs_on_edge(elem, dim, base_fe_type,
                                             e, side_dofs);
 
+                  const unsigned int n_side_dofs =
+                    cast_int<unsigned int>(side_dofs.size());
+
                   // Some edge dofs are on nodes and already
                   // fixed, others are free to calculate
                   unsigned int free_dofs = 0;
-                  for (std::size_t i=0; i != side_dofs.size(); ++i)
+                  for (unsigned int i=0; i != n_side_dofs; ++i)
                     if (!dof_is_fixed[side_dofs[i]])
                       free_dof[free_dofs++] = i;
 
@@ -1104,15 +1131,15 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                                                     system.time);
 
                       // Form edge projection matrix
-                      for (std::size_t sidei=0, freei=0;
-                           sidei != side_dofs.size(); ++sidei)
+                      for (unsigned int sidei=0, freei=0;
+                           sidei != n_side_dofs; ++sidei)
                         {
                           unsigned int i = side_dofs[sidei];
                           // fixed DoFs aren't test functions
                           if (dof_is_fixed[i])
                             continue;
-                          for (std::size_t sidej=0, freej=0;
-                               sidej != side_dofs.size(); ++sidej)
+                          for (unsigned int sidej=0, freej=0;
+                               sidej != n_side_dofs; ++sidej)
                             {
                               unsigned int j = side_dofs[sidej];
                               if (dof_is_fixed[j])
@@ -1191,7 +1218,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                 fe->get_phi() :
 #endif // LIBMESH_ENABLE_AMR
                 side_fe->get_phi();
-              const std::vector<std::vector<RealGradient>> * dphi = libmesh_nullptr;
+              const std::vector<std::vector<RealGradient>> * dphi = nullptr;
               if (cont == C_ONE)
                 dphi =
 #ifdef LIBMESH_ENABLE_AMR
@@ -1204,10 +1231,13 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                   FEInterface::dofs_on_side(elem, dim, base_fe_type,
                                             s, side_dofs);
 
+                  unsigned int n_side_dofs =
+                    cast_int<unsigned int>(side_dofs.size());
+
                   // Some side dofs are on nodes/edges and already
                   // fixed, others are free to calculate
                   unsigned int free_dofs = 0;
-                  for (std::size_t i=0; i != side_dofs.size(); ++i)
+                  for (unsigned int i=0; i != n_side_dofs; ++i)
                     if (!dof_is_fixed[side_dofs[i]])
                       free_dof[free_dofs++] = i;
 
@@ -1220,7 +1250,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                   // The new side coefficients
                   DenseVector<FValue> Uside(free_dofs);
 
-                  context.side = s;
+                  context.side = cast_int<unsigned char>(s);
 
 #ifdef LIBMESH_ENABLE_AMR
                   if (elem->refinement_flag() == Elem::JUST_COARSENED)
@@ -1259,7 +1289,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
 #endif // LIBMESH_ENABLE_AMR
                     context.side_fe_reinit();
 
-                  const unsigned int n_qp = xyz_values.size();
+                  const unsigned int n_qp =
+                    cast_int<unsigned int>(xyz_values.size());
 
                   // Loop over the quadrature points
                   for (unsigned int qp=0; qp<n_qp; qp++)
@@ -1278,15 +1309,15 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
                                                     system.time);
 
                       // Form side projection matrix
-                      for (std::size_t sidei=0, freei=0;
-                           sidei != side_dofs.size(); ++sidei)
+                      for (unsigned int sidei=0, freei=0;
+                           sidei != n_side_dofs; ++sidei)
                         {
                           unsigned int i = side_dofs[sidei];
                           // fixed DoFs aren't test functions
                           if (dof_is_fixed[i])
                             continue;
-                          for (std::size_t sidej=0, freej=0;
-                               sidej != side_dofs.size(); ++sidej)
+                          for (unsigned int sidej=0, freej=0;
+                               sidej != n_side_dofs; ++sidej)
                             {
                               unsigned int j = side_dofs[sidej];
                               if (dof_is_fixed[j])
@@ -1357,7 +1388,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
               const std::vector<Real> & JxW = fe->get_JxW();
 
               const std::vector<std::vector<Real>> & phi = fe->get_phi();
-              const std::vector<std::vector<RealGradient>> * dphi = libmesh_nullptr;
+              const std::vector<std::vector<RealGradient>> * dphi = nullptr;
               if (cont == C_ONE)
                 dphi = &(fe->get_dphi());
 
@@ -1394,7 +1425,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::operator()
 #endif // LIBMESH_ENABLE_AMR
                 context.elem_fe_reinit();
 
-              const unsigned int n_qp = xyz_values.size();
+              const unsigned int n_qp =
+                cast_int<unsigned int>(xyz_values.size());
 
               Ke.resize (free_dofs, free_dofs); Ke.zero();
               Fe.resize (free_dofs); Fe.zero();

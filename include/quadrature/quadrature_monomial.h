@@ -55,25 +55,32 @@ namespace libMesh
  * \date 2008
  * \brief Implements quadrature rules for non-tensor polynomials.
  */
-class QMonomial libmesh_final : public QBase
+class QMonomial final : public QBase
 {
 public:
 
   /**
    * Constructor.  Declares the order of the quadrature rule.
    */
-  QMonomial (const unsigned int _dim,
-             const Order _order=INVALID_ORDER);
+  QMonomial (unsigned int dim,
+             Order order=INVALID_ORDER) :
+    QBase(dim,order)
+  {}
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QMonomial();
+  QMonomial (const QMonomial &) = default;
+  QMonomial (QMonomial &&) = default;
+  QMonomial & operator= (const QMonomial &) = default;
+  QMonomial & operator= (QMonomial &&) = default;
+  virtual ~QMonomial() = default;
 
   /**
    * \returns \p QMONOMIAL.
    */
-  virtual QuadratureType type() const libmesh_override { return QMONOMIAL; }
+  virtual QuadratureType type() const override;
 
 
 private:
@@ -82,19 +89,19 @@ private:
    * Just uses a Gauss rule in 1D.
    */
   virtual void init_1D (const ElemType,
-                        unsigned int =0) libmesh_override;
+                        unsigned int =0) override;
 
   /**
    * More efficient rules for quadrilaterals.
    */
   virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 
   /**
    * More efficient rules for hexahedra.
    */
   virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 
 
 

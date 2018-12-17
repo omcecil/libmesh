@@ -40,25 +40,32 @@ namespace libMesh
  * \date 2008
  * \brief Conical product quadrature rules for Tri and Tet elements.
  */
-class QConical libmesh_final : public QBase
+class QConical final : public QBase
 {
 public:
 
   /**
    * Constructor.  Declares the order of the quadrature rule.
    */
-  QConical (const unsigned int _dim,
-            const Order _order=INVALID_ORDER);
+  QConical (unsigned int d,
+            Order o=INVALID_ORDER) :
+    QBase(d,o)
+  {}
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QConical();
+  QConical (const QConical &) = default;
+  QConical (QConical &&) = default;
+  QConical & operator= (const QConical &) = default;
+  QConical & operator= (QConical &&) = default;
+  virtual ~QConical() = default;
 
   /**
    * \returns The QuadratureType for this class.
    */
-  virtual QuadratureType type() const libmesh_override { return QCONICAL; }
+  virtual QuadratureType type() const override;
 
 private:
 
@@ -66,18 +73,18 @@ private:
    * The optimal "conical product" rule in 1D is simply Gauss.
    */
   virtual void init_1D (const ElemType,
-                        unsigned int = 0) libmesh_override;
+                        unsigned int = 0) override;
 
   /**
    * The conical product rules are defined in 2D only for Tris.
    */
   virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   /**
    * The conical product rules are defined in 3D only for Tets.
    */
   virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 
   /**
    * Implementation of conical product rule for a Tri in 2D of

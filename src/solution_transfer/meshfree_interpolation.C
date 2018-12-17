@@ -158,12 +158,12 @@ void InverseDistanceInterpolation<KDDim>::construct_kd_tree ()
   LOG_SCOPE ("construct_kd_tree()", "InverseDistanceInterpolation<>");
 
   // Initialize underlying KD tree
-  if (_kd_tree.get() == libmesh_nullptr)
+  if (_kd_tree.get() == nullptr)
     _kd_tree.reset (new kd_tree_t (KDDim,
                                    _point_list_adaptor,
                                    nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */)));
 
-  libmesh_assert (_kd_tree.get() != libmesh_nullptr);
+  libmesh_assert (_kd_tree.get() != nullptr);
 
   _kd_tree->buildIndex();
 #endif
@@ -177,7 +177,7 @@ void InverseDistanceInterpolation<KDDim>::clear()
 #ifdef LIBMESH_HAVE_NANOFLANN
   // Delete the KD Tree and start fresh
   if (_kd_tree.get())
-    _kd_tree.reset (libmesh_nullptr);
+    _kd_tree.reset (nullptr);
 #endif
 
   // Call  base class clear method
@@ -195,7 +195,7 @@ void InverseDistanceInterpolation<KDDim>::interpolate_field_data (const std::vec
 
   // forcibly initialize, if needed
 #ifdef LIBMESH_HAVE_NANOFLANN
-  if (_kd_tree.get() == libmesh_nullptr)
+  if (_kd_tree.get() == nullptr)
     const_cast<InverseDistanceInterpolation<KDDim> *>(this)->construct_kd_tree();
 #endif
 
@@ -227,7 +227,7 @@ void InverseDistanceInterpolation<KDDim>::interpolate_field_data (const std::vec
       {
         const Real query_pt[] = { tgt(0), tgt(1), tgt(2) };
 
-        _kd_tree->knnSearch(&query_pt[0], num_results, &ret_index[0], &ret_dist_sqr[0]);
+        _kd_tree->knnSearch(query_pt, num_results, ret_index.data(), ret_dist_sqr.data());
 
         this->interpolate (tgt, ret_index, ret_dist_sqr, out_it);
 

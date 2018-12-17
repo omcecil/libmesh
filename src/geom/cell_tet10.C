@@ -16,13 +16,13 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/side.h"
 #include "libmesh/cell_tet10.h"
 #include "libmesh/edge_edge3.h"
 #include "libmesh/face_tri6.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -31,7 +31,14 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // Tet10 class static member initializations
-const unsigned int Tet10::side_nodes_map[4][6] =
+const int Tet10::num_nodes;
+const int Tet10::num_sides;
+const int Tet10::num_edges;
+const int Tet10::num_children;
+const int Tet10::nodes_per_side;
+const int Tet10::nodes_per_edge;
+
+const unsigned int Tet10::side_nodes_map[Tet10::num_sides][Tet10::nodes_per_side] =
   {
     {0, 2, 1, 6, 5, 4}, // Side 0
     {0, 1, 3, 4, 8, 7}, // Side 1
@@ -39,7 +46,7 @@ const unsigned int Tet10::side_nodes_map[4][6] =
     {2, 0, 3, 6, 7, 9}  // Side 3
   };
 
-const unsigned int Tet10::edge_nodes_map[6][3] =
+const unsigned int Tet10::edge_nodes_map[Tet10::num_edges][Tet10::nodes_per_edge] =
   {
     {0, 1, 4}, // Edge 0
     {1, 2, 5}, // Edge 1
@@ -77,20 +84,25 @@ bool Tet10::is_node_on_side(const unsigned int n,
                             const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 6; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned>
+Tet10::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
 bool Tet10::is_node_on_edge(const unsigned int n,
                             const unsigned int e) const
 {
   libmesh_assert_less (e, n_edges());
-  for (unsigned int i = 0; i != 3; ++i)
-    if (edge_nodes_map[e][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(edge_nodes_map[e]),
+                   std::end(edge_nodes_map[e]),
+                   n) != std::end(edge_nodes_map[e]);
 }
 
 
@@ -153,11 +165,18 @@ bool Tet10::has_affine_map() const
 
 
 
+Order Tet10::default_order() const
+{
+  return SECOND;
+}
+
+
+
 unsigned int Tet10::which_node_am_i(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
-  libmesh_assert_less (side_node, 6);
+  libmesh_assert_less (side_node, Tet10::nodes_per_side);
 
   return Tet10::side_nodes_map[side][side_node];
 }
@@ -182,6 +201,14 @@ std::unique_ptr<Elem> Tet10::build_side_ptr (const unsigned int i,
 
       return face;
     }
+}
+
+
+
+void Tet10::build_side_ptr (std::unique_ptr<Elem> & side,
+                            const unsigned int i)
+{
+  this->simple_build_side_ptr<Tet10>(side, i, TRI6);
 }
 
 
@@ -498,7 +525,7 @@ const unsigned short int Tet10::_second_order_adjacent_vertices[6][2] =
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Tet10::_embedding_matrix[8][10][10] =
+const float Tet10::_embedding_matrix[Tet10::num_children][Tet10::num_nodes][Tet10::num_nodes] =
   {
     // embedding matrix for child 0
     {
@@ -726,50 +753,50 @@ Real Tet10::volume () const
   const int N = 8;
   static const Real w[N] =
     {
-      3.6979856358852914509238091810505e-02L,
-      1.6027040598476613723156741868689e-02L,
-      2.1157006454524061178256145400082e-02L,
-      9.1694299214797439226823542540576e-03L,
-      3.6979856358852914509238091810505e-02L,
-      1.6027040598476613723156741868689e-02L,
-      2.1157006454524061178256145400082e-02L,
-      9.1694299214797439226823542540576e-03L
+      Real(3.6979856358852914509238091810505e-02L),
+      Real(1.6027040598476613723156741868689e-02L),
+      Real(2.1157006454524061178256145400082e-02L),
+      Real(9.1694299214797439226823542540576e-03L),
+      Real(3.6979856358852914509238091810505e-02L),
+      Real(1.6027040598476613723156741868689e-02L),
+      Real(2.1157006454524061178256145400082e-02L),
+      Real(9.1694299214797439226823542540576e-03L)
     };
 
   static const Real xi[N] =
     {
-      1.2251482265544137786674043037115e-01L,
-      5.4415184401122528879992623629551e-01L,
-      1.2251482265544137786674043037115e-01L,
-      5.4415184401122528879992623629551e-01L,
-      1.2251482265544137786674043037115e-01L,
-      5.4415184401122528879992623629551e-01L,
-      1.2251482265544137786674043037115e-01L,
-      5.4415184401122528879992623629551e-01L
+      Real(1.2251482265544137786674043037115e-01L),
+      Real(5.4415184401122528879992623629551e-01L),
+      Real(1.2251482265544137786674043037115e-01L),
+      Real(5.4415184401122528879992623629551e-01L),
+      Real(1.2251482265544137786674043037115e-01L),
+      Real(5.4415184401122528879992623629551e-01L),
+      Real(1.2251482265544137786674043037115e-01L),
+      Real(5.4415184401122528879992623629551e-01L)
     };
 
   static const Real eta[N] =
     {
-      1.3605497680284601717109468420738e-01L,
-      7.0679724159396903069267439165167e-02L,
-      5.6593316507280088053551297149570e-01L,
-      2.9399880063162286589079157179842e-01L,
-      1.3605497680284601717109468420738e-01L,
-      7.0679724159396903069267439165167e-02L,
-      5.6593316507280088053551297149570e-01L,
-      2.9399880063162286589079157179842e-01L
+      Real(1.3605497680284601717109468420738e-01L),
+      Real(7.0679724159396903069267439165167e-02L),
+      Real(5.6593316507280088053551297149570e-01L),
+      Real(2.9399880063162286589079157179842e-01L),
+      Real(1.3605497680284601717109468420738e-01L),
+      Real(7.0679724159396903069267439165167e-02L),
+      Real(5.6593316507280088053551297149570e-01L),
+      Real(2.9399880063162286589079157179842e-01L)
     };
 
   static const Real zeta[N] =
     {
-      1.5668263733681830907933725249176e-01L,
-      8.1395667014670255076709592007207e-02L,
-      6.5838687060044409936029672711329e-02L,
-      3.4202793236766414300604458388142e-02L,
-      5.8474756320489429588282763292971e-01L,
-      3.0377276481470755305409673253211e-01L,
-      2.4571332521171333166171692542182e-01L,
-      1.2764656212038543100867773351792e-01L
+      Real(1.5668263733681830907933725249176e-01L),
+      Real(8.1395667014670255076709592007207e-02L),
+      Real(6.5838687060044409936029672711329e-02L),
+      Real(3.4202793236766414300604458388142e-02L),
+      Real(5.8474756320489429588282763292971e-01L),
+      Real(3.0377276481470755305409673253211e-01L),
+      Real(2.4571332521171333166171692542182e-01L),
+      Real(1.2764656212038543100867773351792e-01L)
     };
 
   Real vol = 0.;

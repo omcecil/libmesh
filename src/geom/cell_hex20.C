@@ -16,13 +16,13 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/side.h"
 #include "libmesh/cell_hex20.h"
 #include "libmesh/edge_edge3.h"
 #include "libmesh/face_quad8.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -31,8 +31,14 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // Hex20 class static member initializations
+const int Hex20::num_nodes;
+const int Hex20::num_sides;
+const int Hex20::num_edges;
+const int Hex20::num_children;
+const int Hex20::nodes_per_side;
+const int Hex20::nodes_per_edge;
 
-const unsigned int Hex20::side_nodes_map[6][8] =
+const unsigned int Hex20::side_nodes_map[Hex20::num_sides][Hex20::nodes_per_side] =
   {
     {0, 3, 2, 1, 11, 10,  9,  8}, // Side 0
     {0, 1, 5, 4,  8, 13, 16, 12}, // Side 1
@@ -42,7 +48,7 @@ const unsigned int Hex20::side_nodes_map[6][8] =
     {4, 5, 6, 7, 16, 17, 18, 19}  // Side 5
   };
 
-const unsigned int Hex20::edge_nodes_map[12][3] =
+const unsigned int Hex20::edge_nodes_map[Hex20::num_edges][Hex20::nodes_per_edge] =
   {
     {0, 1, 8},  // Edge 0
     {1, 2, 9},  // Edge 1
@@ -86,20 +92,25 @@ bool Hex20::is_node_on_side(const unsigned int n,
                             const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 8; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned>
+Hex20::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
 bool Hex20::is_node_on_edge(const unsigned int n,
                             const unsigned int e) const
 {
   libmesh_assert_less (e, n_edges());
-  for (unsigned int i = 0; i != 3; ++i)
-    if (edge_nodes_map[e][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(edge_nodes_map[e]),
+                   std::end(edge_nodes_map[e]),
+                   n) != std::end(edge_nodes_map[e]);
 }
 
 
@@ -142,6 +153,13 @@ bool Hex20::has_affine_map() const
 
 
 
+Order Hex20::default_order() const
+{
+  return SECOND;
+}
+
+
+
 std::unique_ptr<Elem> Hex20::build_side_ptr (const unsigned int i,
                                              bool proxy )
 {
@@ -164,11 +182,19 @@ std::unique_ptr<Elem> Hex20::build_side_ptr (const unsigned int i,
 
 
 
+void Hex20::build_side_ptr (std::unique_ptr<Elem> & side,
+                            const unsigned int i)
+{
+  this->simple_build_side_ptr<Hex20>(side, i, QUAD8);
+}
+
+
+
 unsigned int Hex20::which_node_am_i(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
-  libmesh_assert_less (side_node, 8);
+  libmesh_assert_less (side_node, Hex20::nodes_per_side);
 
   return Hex20::side_nodes_map[side][side_node];
 }
@@ -447,7 +473,7 @@ Real Hex20::volume () const
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Hex20::_embedding_matrix[8][20][20] =
+const float Hex20::_embedding_matrix[Hex20::num_children][Hex20::num_nodes][Hex20::num_nodes] =
   {
     // embedding matrix for child 0
     {

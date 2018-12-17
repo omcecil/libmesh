@@ -59,7 +59,7 @@ template <typename T> class SparseMatrix;
  * \date 2008
  */
 template <typename T>
-class EpetraVector libmesh_final : public NumericVector<T>
+class EpetraVector final : public NumericVector<T>
 {
 public:
 
@@ -109,93 +109,91 @@ public:
                const Parallel::Communicator & comm);
 
   /**
-   * Destructor, deallocates memory. Made virtual to allow
-   * for derived classes to behave properly.
+   * This class manages the lifetime of an Epetra_Vector manually, so
+   * we don't want to allow any automatic copy/move functions to be
+   * generated, and we can't default the destructor.
    */
-  ~EpetraVector ();
+  EpetraVector (EpetraVector &&) = delete;
+  EpetraVector (const EpetraVector &) = delete;
+  EpetraVector & operator= (const EpetraVector &) = delete;
+  EpetraVector & operator= (EpetraVector &&) = delete;
+  virtual ~EpetraVector ();
 
-  virtual void close () libmesh_override;
+  virtual void close () override;
 
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
-  virtual void zero () libmesh_override;
+  virtual void zero () override;
 
-  virtual std::unique_ptr<NumericVector<T>> zero_clone () const libmesh_override;
+  virtual std::unique_ptr<NumericVector<T>> zero_clone () const override;
 
-  virtual std::unique_ptr<NumericVector<T>> clone () const libmesh_override;
+  virtual std::unique_ptr<NumericVector<T>> clone () const override;
 
   virtual void init (const numeric_index_type N,
                      const numeric_index_type n_local,
                      const bool fast=false,
-                     const ParallelType type=AUTOMATIC) libmesh_override;
+                     const ParallelType type=AUTOMATIC) override;
 
   virtual void init (const numeric_index_type N,
                      const bool fast=false,
-                     const ParallelType type=AUTOMATIC) libmesh_override;
+                     const ParallelType type=AUTOMATIC) override;
 
   virtual void init (const numeric_index_type N,
                      const numeric_index_type n_local,
                      const std::vector<numeric_index_type> & ghost,
                      const bool fast = false,
-                     const ParallelType = AUTOMATIC) libmesh_override;
+                     const ParallelType = AUTOMATIC) override;
 
   virtual void init (const NumericVector<T> & other,
-                     const bool fast = false) libmesh_override;
+                     const bool fast = false) override;
 
-  virtual NumericVector<T> & operator= (const T s) libmesh_override;
+  virtual NumericVector<T> & operator= (const T s) override;
 
-  virtual NumericVector<T> & operator= (const NumericVector<T> & v) libmesh_override;
+  virtual NumericVector<T> & operator= (const NumericVector<T> & v) override;
 
-  /**
-   * Sets (*this)(i) = v(i) for each entry of the vector.
-   *
-   * \returns A reference to *this as the derived type.
-   */
-  EpetraVector<T> & operator= (const EpetraVector<T> & v);
+  virtual NumericVector<T> & operator= (const std::vector<T> & v) override;
 
-  virtual NumericVector<T> & operator= (const std::vector<T> & v) libmesh_override;
+  virtual Real min () const override;
 
-  virtual Real min () const libmesh_override;
+  virtual Real max () const override;
 
-  virtual Real max () const libmesh_override;
+  virtual T sum () const override;
 
-  virtual T sum () const libmesh_override;
+  virtual Real l1_norm () const override;
 
-  virtual Real l1_norm () const libmesh_override;
+  virtual Real l2_norm () const override;
 
-  virtual Real l2_norm () const libmesh_override;
+  virtual Real linfty_norm () const override;
 
-  virtual Real linfty_norm () const libmesh_override;
+  virtual numeric_index_type size () const override;
 
-  virtual numeric_index_type size () const libmesh_override;
+  virtual numeric_index_type local_size() const override;
 
-  virtual numeric_index_type local_size() const libmesh_override;
+  virtual numeric_index_type first_local_index() const override;
 
-  virtual numeric_index_type first_local_index() const libmesh_override;
+  virtual numeric_index_type last_local_index() const override;
 
-  virtual numeric_index_type last_local_index() const libmesh_override;
+  virtual T operator() (const numeric_index_type i) const override;
 
-  virtual T operator() (const numeric_index_type i) const libmesh_override;
+  virtual NumericVector<T> & operator += (const NumericVector<T> & v) override;
 
-  virtual NumericVector<T> & operator += (const NumericVector<T> & v) libmesh_override;
+  virtual NumericVector<T> & operator -= (const NumericVector<T> & v) override;
 
-  virtual NumericVector<T> & operator -= (const NumericVector<T> & v) libmesh_override;
+  virtual NumericVector<T> & operator /= (const NumericVector<T> & v) override;
 
-  virtual NumericVector<T> & operator /= (NumericVector<T> & v) libmesh_override;
+  virtual void reciprocal() override;
 
-  virtual void reciprocal() libmesh_override;
+  virtual void conjugate() override;
 
-  virtual void conjugate() libmesh_override;
+  virtual void set (const numeric_index_type i, const T value) override;
 
-  virtual void set (const numeric_index_type i, const T value) libmesh_override;
+  virtual void add (const numeric_index_type i, const T value) override;
 
-  virtual void add (const numeric_index_type i, const T value) libmesh_override;
+  virtual void add (const T s) override;
 
-  virtual void add (const T s) libmesh_override;
+  virtual void add (const NumericVector<T> & v) override;
 
-  virtual void add (const NumericVector<T> & v) libmesh_override;
-
-  virtual void add (const T a, const NumericVector<T> & v) libmesh_override;
+  virtual void add (const T a, const NumericVector<T> & v) override;
 
   /**
    * We override two NumericVector<T>::add_vector() methods but don't
@@ -204,13 +202,13 @@ public:
   using NumericVector<T>::add_vector;
 
   virtual void add_vector (const T * v,
-                           const std::vector<numeric_index_type> & dof_indices) libmesh_override;
+                           const std::vector<numeric_index_type> & dof_indices) override;
 
   virtual void add_vector (const NumericVector<T> & v,
-                           const SparseMatrix<T> & A) libmesh_override;
+                           const SparseMatrix<T> & A) override;
 
   virtual void add_vector_transpose (const NumericVector<T> & v,
-                                     const SparseMatrix<T> & A) libmesh_override;
+                                     const SparseMatrix<T> & A) override;
 
   /**
    * We override one NumericVector<T>::insert() method but don't want
@@ -219,38 +217,38 @@ public:
   using NumericVector<T>::insert;
 
   virtual void insert (const T * v,
-                       const std::vector<numeric_index_type> & dof_indices) libmesh_override;
+                       const std::vector<numeric_index_type> & dof_indices) override;
 
-  virtual void scale (const T factor) libmesh_override;
+  virtual void scale (const T factor) override;
 
-  virtual void abs() libmesh_override;
+  virtual void abs() override;
 
-  virtual T dot(const NumericVector<T> & v) const libmesh_override;
+  virtual T dot(const NumericVector<T> & v) const override;
 
-  virtual void localize (std::vector<T> & v_local) const libmesh_override;
+  virtual void localize (std::vector<T> & v_local) const override;
 
-  virtual void localize (NumericVector<T> & v_local) const libmesh_override;
+  virtual void localize (NumericVector<T> & v_local) const override;
 
   virtual void localize (NumericVector<T> & v_local,
-                         const std::vector<numeric_index_type> & send_list) const libmesh_override;
+                         const std::vector<numeric_index_type> & send_list) const override;
 
   virtual void localize (std::vector<T> & v_local,
-                         const std::vector<numeric_index_type> & indices) const libmesh_override;
+                         const std::vector<numeric_index_type> & indices) const override;
 
   virtual void localize (const numeric_index_type first_local_idx,
                          const numeric_index_type last_local_idx,
-                         const std::vector<numeric_index_type> & send_list) libmesh_override;
+                         const std::vector<numeric_index_type> & send_list) override;
 
   virtual void localize_to_one (std::vector<T> & v_local,
-                                const processor_id_type proc_id=0) const libmesh_override;
+                                const processor_id_type proc_id=0) const override;
 
   virtual void pointwise_mult (const NumericVector<T> & vec1,
-                               const NumericVector<T> & vec2) libmesh_override;
+                               const NumericVector<T> & vec2) override;
 
   virtual void create_subvector (NumericVector<T> & subvector,
-                                 const std::vector<numeric_index_type> & rows) const libmesh_override;
+                                 const std::vector<numeric_index_type> & rows) const override;
 
-  virtual void swap (NumericVector<T> & v) libmesh_override;
+  virtual void swap (NumericVector<T> & v) override;
 
   /**
    * \returns The raw Epetra_Vector pointer.
@@ -411,12 +409,12 @@ EpetraVector<T>::EpetraVector (const Parallel::Communicator & comm,
   _destroy_vec_on_exit(true),
   myFirstID_(0),
   myNumIDs_(0),
-  myCoefs_(libmesh_nullptr),
-  nonlocalIDs_(libmesh_nullptr),
-  nonlocalElementSize_(libmesh_nullptr),
+  myCoefs_(nullptr),
+  nonlocalIDs_(nullptr),
+  nonlocalElementSize_(nullptr),
   numNonlocalIDs_(0),
   allocatedNonlocalLength_(0),
-  nonlocalCoefs_(libmesh_nullptr),
+  nonlocalCoefs_(nullptr),
   last_edit(0),
   ignoreNonLocalEntries_(false)
 {
@@ -434,12 +432,12 @@ EpetraVector<T>::EpetraVector (const Parallel::Communicator & comm,
   _destroy_vec_on_exit(true),
   myFirstID_(0),
   myNumIDs_(0),
-  myCoefs_(libmesh_nullptr),
-  nonlocalIDs_(libmesh_nullptr),
-  nonlocalElementSize_(libmesh_nullptr),
+  myCoefs_(nullptr),
+  nonlocalIDs_(nullptr),
+  nonlocalElementSize_(nullptr),
   numNonlocalIDs_(0),
   allocatedNonlocalLength_(0),
-  nonlocalCoefs_(libmesh_nullptr),
+  nonlocalCoefs_(nullptr),
   last_edit(0),
   ignoreNonLocalEntries_(false)
 
@@ -459,12 +457,12 @@ EpetraVector<T>::EpetraVector (const Parallel::Communicator & comm,
   _destroy_vec_on_exit(true),
   myFirstID_(0),
   myNumIDs_(0),
-  myCoefs_(libmesh_nullptr),
-  nonlocalIDs_(libmesh_nullptr),
-  nonlocalElementSize_(libmesh_nullptr),
+  myCoefs_(nullptr),
+  nonlocalIDs_(nullptr),
+  nonlocalElementSize_(nullptr),
   numNonlocalIDs_(0),
   allocatedNonlocalLength_(0),
-  nonlocalCoefs_(libmesh_nullptr),
+  nonlocalCoefs_(nullptr),
   last_edit(0),
   ignoreNonLocalEntries_(false)
 {
@@ -482,12 +480,12 @@ EpetraVector<T>::EpetraVector(Epetra_Vector & v,
   _destroy_vec_on_exit(false),
   myFirstID_(0),
   myNumIDs_(0),
-  myCoefs_(libmesh_nullptr),
-  nonlocalIDs_(libmesh_nullptr),
-  nonlocalElementSize_(libmesh_nullptr),
+  myCoefs_(nullptr),
+  nonlocalIDs_(nullptr),
+  nonlocalElementSize_(nullptr),
   numNonlocalIDs_(0),
   allocatedNonlocalLength_(0),
-  nonlocalCoefs_(libmesh_nullptr),
+  nonlocalCoefs_(nullptr),
   last_edit(0),
   ignoreNonLocalEntries_(false)
 {
@@ -525,12 +523,12 @@ EpetraVector<T>::EpetraVector (const Parallel::Communicator & comm,
   _destroy_vec_on_exit(true),
   myFirstID_(0),
   myNumIDs_(0),
-  myCoefs_(libmesh_nullptr),
-  nonlocalIDs_(libmesh_nullptr),
-  nonlocalElementSize_(libmesh_nullptr),
+  myCoefs_(nullptr),
+  nonlocalIDs_(nullptr),
+  nonlocalElementSize_(nullptr),
   numNonlocalIDs_(0),
   allocatedNonlocalLength_(0),
-  nonlocalCoefs_(libmesh_nullptr),
+  nonlocalCoefs_(nullptr),
   last_edit(0),
   ignoreNonLocalEntries_(false)
 {
@@ -673,7 +671,7 @@ void EpetraVector<T>::clear ()
       if (this->_destroy_vec_on_exit)
         {
           delete _vec;
-          _vec = libmesh_nullptr;
+          _vec = nullptr;
         }
 
       // But we currently always own our own _map
@@ -825,6 +823,14 @@ void EpetraVector<T>::swap (NumericVector<T> & other)
   std::swap(nonlocalCoefs_, v.nonlocalCoefs_);
   std::swap(last_edit, v.last_edit);
   std::swap(ignoreNonLocalEntries_, v.ignoreNonLocalEntries_);
+}
+
+
+// Trilinos only got serious about const in version 10.4
+inline
+int * numeric_trilinos_cast(const numeric_index_type * p)
+{
+  return reinterpret_cast<int *>(const_cast<numeric_index_type *>(p));
 }
 
 } // namespace libMesh

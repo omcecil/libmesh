@@ -39,10 +39,10 @@ void indices_to_fieldsplit (const Parallel::Communicator & comm,
 {
   const PetscInt * idx = PETSC_NULL;
   if (!indices.empty())
-    idx = reinterpret_cast<const PetscInt *>(&indices[0]);
+    idx = reinterpret_cast<const PetscInt *>(indices.data());
 
   IS is;
-  int ierr = ISCreateLibMesh(comm.get(), indices.size(),
+  int ierr = ISCreateLibMesh(comm.get(), cast_int<PetscInt>(indices.size()),
                              idx, PETSC_COPY_VALUES, &is);
   CHKERRABORT(comm.get(), ierr);
 
@@ -60,14 +60,14 @@ void petsc_auto_fieldsplit (PC my_pc,
 {
   std::string sys_prefix = "--solver_group_";
 
-  if (libMesh::on_command_line("--solver_system_names"))
+  if (libMesh::on_command_line("--solver-system-names"))
     {
       sys_prefix = sys_prefix + sys.name() + "_";
     }
 
   std::map<std::string, std::vector<dof_id_type>> group_indices;
 
-  if (libMesh::on_command_line("--solver_variable_names"))
+  if (libMesh::on_command_line("--solver-variable-names"))
     {
       for (unsigned int v = 0; v != sys.n_vars(); ++v)
         {
@@ -115,7 +115,7 @@ namespace libMesh
 void petsc_auto_fieldsplit (PC /* my_pc */,
                             const System & /* sys */)
 {
-  if (libMesh::on_command_line("--solver_variable_names"))
+  if (libMesh::on_command_line("--solver-variable-names"))
     {
       libmesh_do_once(
                       libMesh::out << "WARNING: libMesh does not support setting field splits" <<

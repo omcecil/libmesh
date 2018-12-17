@@ -30,6 +30,7 @@
 #include "libmesh/sphere.h"
 #include "libmesh/threads.h"
 #include "libmesh/string_to_enum.h"
+#include "libmesh/enum_elem_type.h"
 
 #ifdef DEBUG
 #  include "libmesh/remote_elem.h"
@@ -123,11 +124,7 @@ public:
       }
   }
 
-  const Point & min() const { return _bbox.min(); }
-
   Point & min() { return _bbox.min(); }
-
-  const Point & max() const { return _bbox.max(); }
 
   Point & max() { return _bbox.max(); }
 
@@ -139,11 +136,6 @@ public:
     _bbox.union_with(other._bbox);
   }
 #endif
-
-  const libMesh::BoundingBox & bbox () const
-  {
-    return _bbox;
-  }
 
   libMesh::BoundingBox & bbox ()
   {
@@ -195,9 +187,9 @@ void assert_semiverify_dofobj(const Parallel::Communicator & communicator,
     }
   else
     {
-      const unsigned int * p_ui = libmesh_nullptr;
-      const std::vector<unsigned int> * p_vui = libmesh_nullptr;
-      const std::vector<dof_id_type> * p_vdid = libmesh_nullptr;
+      const unsigned int * p_ui = nullptr;
+      const std::vector<unsigned int> * p_vui = nullptr;
+      const std::vector<dof_id_type> * p_vdid = nullptr;
 
       libmesh_assert(communicator.semiverify(p_ui));
       libmesh_assert(communicator.semiverify(p_vui));
@@ -283,9 +275,36 @@ void MeshTools::build_nodes_to_elem_map (const MeshBase & mesh,
 
 
 
+void MeshTools::build_nodes_to_elem_map (const MeshBase & mesh,
+                                         std::unordered_map<dof_id_type, std::vector<dof_id_type>> & nodes_to_elem_map)
+{
+  nodes_to_elem_map.clear();
+
+  for (const auto & elem : mesh.element_ptr_range())
+    for (auto & node : elem->node_ref_range())
+      nodes_to_elem_map[node.id()].push_back(elem->id());
+}
+
+
+
+void MeshTools::build_nodes_to_elem_map (const MeshBase & mesh,
+                                         std::unordered_map<dof_id_type, std::vector<const Elem *>> & nodes_to_elem_map)
+{
+  nodes_to_elem_map.clear();
+
+  for (const auto & elem : mesh.element_ptr_range())
+    for (auto & node : elem->node_ref_range())
+      nodes_to_elem_map[node.id()].push_back(elem);
+}
+
+
+
+#ifdef LIBMESH_ENABLE_DEPRECATED
 void MeshTools::find_boundary_nodes (const MeshBase & mesh,
                                      std::vector<bool> & on_boundary)
 {
+  libmesh_deprecated();
+
   // Resize the vector which holds boundary nodes and fill with false.
   on_boundary.resize(mesh.max_node_id());
   std::fill(on_boundary.begin(),
@@ -296,15 +315,57 @@ void MeshTools::find_boundary_nodes (const MeshBase & mesh,
   // mark them as true in on_boundary.
   for (const auto & elem : mesh.active_element_ptr_range())
     for (auto s : elem->side_index_range())
-      if (elem->neighbor_ptr(s) == libmesh_nullptr) // on the boundary
+      if (elem->neighbor_ptr(s) == nullptr) // on the boundary
         {
           std::unique_ptr<const Elem> side = elem->build_side_ptr(s);
 
-          for (auto & node : side->node_ref_range())
-            on_boundary[node.id()] = true;
+          auto nodes_on_side = elem->nodes_on_side(s);
+
+          for (auto & node_id : nodes_on_side)
+            on_boundary[node_id] = true;
         }
 }
+#endif
 
+std::unordered_set<dof_id_type>
+MeshTools::find_boundary_nodes(const MeshBase & mesh)
+{
+  std::unordered_set<dof_id_type> boundary_nodes;
+
+  // Loop over elements, find those on boundary, and
+  // mark them as true in on_boundary.
+  for (const auto & elem : mesh.active_element_ptr_range())
+    for (auto s : elem->side_index_range())
+      if (elem->neighbor_ptr(s) == nullptr) // on the boundary
+        {
+          auto nodes_on_side = elem->nodes_on_side(s);
+
+          for (auto & local_id : nodes_on_side)
+            boundary_nodes.insert(elem->node_ptr(local_id)->id());
+        }
+
+  return boundary_nodes;
+}
+
+std::unordered_set<dof_id_type>
+MeshTools::find_block_boundary_nodes(const MeshBase & mesh)
+{
+  std::unordered_set<dof_id_type> block_boundary_nodes;
+
+  // Loop over elements, find those on boundary, and
+  // mark them as true in on_boundary.
+  for (const auto & elem : mesh.active_element_ptr_range())
+    for (auto s : elem->side_index_range())
+      if (elem->neighbor_ptr(s) && (elem->neighbor_ptr(s)->subdomain_id() != elem->subdomain_id()))
+        {
+          auto nodes_on_side = elem->nodes_on_side(s);
+
+          for (auto & local_id : nodes_on_side)
+            block_boundary_nodes.insert(elem->node_ptr(local_id)->id());
+        }
+
+  return block_boundary_nodes;
+}
 
 
 #ifdef LIBMESH_ENABLE_DEPRECATED
@@ -689,10 +750,179 @@ void MeshTools::find_nodal_neighbors(const MeshBase &,
   // user in a std::vector.
   std::set<const Node *> neighbor_set;
 
+  // Look through the elements that contain this node
+  // find the local node id... then find the side that
+  // node lives on in the element
+  // next, look for the _other_ node on that side
+  // That other node is a "nodal_neighbor"... save it
+  for (const auto & elem : nodes_to_elem_map[global_id])
+    {
+      // We only care about active elements...
+      if (elem->active())
+        {
+          // Which local node number is global_id?
+          unsigned local_node_number = elem->local_node(global_id);
+
+          // Make sure it was found
+          libmesh_assert_not_equal_to(local_node_number, libMesh::invalid_uint);
+
+          const unsigned short n_edges = elem->n_edges();
+
+          // If this element has no edges, the edge-based algorithm below doesn't make sense.
+          if (!n_edges)
+            {
+              switch (elem->type())
+                {
+                case EDGE2:
+                  {
+                    switch (local_node_number)
+                      {
+                      case 0:
+                        // The other node is a nodal neighbor
+                        neighbor_set.insert(elem->node_ptr(1));
+                        break;
+
+                      case 1:
+                        // The other node is a nodal neighbor
+                        neighbor_set.insert(elem->node_ptr(0));
+                        break;
+
+                      default:
+                        libmesh_error_msg("Invalid local node number: " << local_node_number << " found." << std::endl);
+                      }
+                    break;
+                  }
+
+                case EDGE3:
+                  {
+                    switch (local_node_number)
+                      {
+                        // The outside nodes have node 2 as a neighbor
+                      case 0:
+                      case 1:
+                        neighbor_set.insert(elem->node_ptr(2));
+                        break;
+
+                        // The middle node has the outer nodes as neighbors
+                      case 2:
+                        neighbor_set.insert(elem->node_ptr(0));
+                        neighbor_set.insert(elem->node_ptr(1));
+                        break;
+
+                      default:
+                        libmesh_error_msg("Invalid local node number: " << local_node_number << " found." << std::endl);
+                      }
+                    break;
+                  }
+
+                case EDGE4:
+                  {
+                    switch (local_node_number)
+                      {
+                      case 0:
+                        // The left-middle node is a nodal neighbor
+                        neighbor_set.insert(elem->node_ptr(2));
+                        break;
+
+                      case 1:
+                        // The right-middle node is a nodal neighbor
+                        neighbor_set.insert(elem->node_ptr(3));
+                        break;
+
+                        // The left-middle node
+                      case 2:
+                        neighbor_set.insert(elem->node_ptr(0));
+                        neighbor_set.insert(elem->node_ptr(3));
+                        break;
+
+                        // The right-middle node
+                      case 3:
+                        neighbor_set.insert(elem->node_ptr(1));
+                        neighbor_set.insert(elem->node_ptr(2));
+                        break;
+
+                      default:
+                        libmesh_error_msg("Invalid local node number: " << local_node_number << " found." << std::endl);
+                      }
+                    break;
+                  }
+
+                default:
+                  libmesh_error_msg("Unrecognized ElemType: " << Utility::enum_to_string(elem->type()) << std::endl);
+                }
+            }
+
+          // Index of the current edge
+          unsigned current_edge = 0;
+
+          const unsigned short n_nodes = elem->n_nodes();
+
+          while (current_edge < n_edges)
+            {
+              // Find the edge the node is on
+              bool found_edge = false;
+              for (; current_edge<n_edges; ++current_edge)
+                if (elem->is_node_on_edge(local_node_number, current_edge))
+                  {
+                    found_edge = true;
+                    break;
+                  }
+
+              // Did we find one?
+              if (found_edge)
+                {
+                  const Node * node_to_save = nullptr;
+
+                  // Find another node in this element on this edge
+                  for (unsigned other_node_this_edge = 0; other_node_this_edge != n_nodes; other_node_this_edge++)
+                    if ( (elem->is_node_on_edge(other_node_this_edge, current_edge)) && // On the current edge
+                         (elem->node_id(other_node_this_edge) != global_id))               // But not the original node
+                      {
+                        // We've found a nodal neighbor!  Save a pointer to it..
+                        node_to_save = elem->node_ptr(other_node_this_edge);
+                        break;
+                      }
+
+                  // Make sure we found something
+                  libmesh_assert(node_to_save != nullptr);
+
+                  neighbor_set.insert(node_to_save);
+                }
+
+              // Keep looking for edges, node may be on more than one edge
+              current_edge++;
+            }
+        } // if (elem->active())
+    } // for
+
+  // Assign the entries from the set to the vector.  Note: this
+  // replaces any existing contents in neighbors and modifies its size
+  // accordingly.
+  neighbors.assign(neighbor_set.begin(), neighbor_set.end());
+}
+
+
+
+void MeshTools::find_nodal_neighbors(const MeshBase &,
+                                     const Node & node,
+                                     const std::unordered_map<dof_id_type, std::vector<const Elem *>> & nodes_to_elem_map,
+                                     std::vector<const Node *> & neighbors)
+{
+  // We'll refer back to the Node ID several times
+  dof_id_type global_id = node.id();
+
+  // We'll construct a std::set<const Node *> for more efficient
+  // searching while finding the nodal neighbors, and return it to the
+  // user in a std::vector.
+  std::set<const Node *> neighbor_set;
+
   // Iterators to iterate through the elements that include this node
+  auto my_elems_it = nodes_to_elem_map.find(global_id);
+  libmesh_assert(my_elems_it != nodes_to_elem_map.end());
+
   std::vector<const Elem *>::const_iterator
-    el = nodes_to_elem_map[global_id].begin(),
-    end_el = nodes_to_elem_map[global_id].end();
+    el = my_elems_it->second.begin(),
+    end_el = my_elems_it->second.end();
 
   // Look through the elements that contain this node
   // find the local node id... then find the side that
@@ -818,7 +1048,7 @@ void MeshTools::find_nodal_neighbors(const MeshBase &,
               // Did we find one?
               if (found_edge)
                 {
-                  const Node * node_to_save = libmesh_nullptr;
+                  const Node * node_to_save = nullptr;
 
                   // Find another node in this element on this edge
                   for (unsigned other_node_this_edge = 0; other_node_this_edge != n_nodes; other_node_this_edge++)
@@ -831,7 +1061,7 @@ void MeshTools::find_nodal_neighbors(const MeshBase &,
                       }
 
                   // Make sure we found something
-                  libmesh_assert(node_to_save != libmesh_nullptr);
+                  libmesh_assert(node_to_save != nullptr);
 
                   neighbor_set.insert(node_to_save);
                 }
@@ -863,7 +1093,7 @@ void MeshTools::find_hanging_nodes_and_parents(const MeshBase & mesh,
           const Elem * neigh = elem->neighbor_ptr(s);
 
           // If not a boundary side
-          if (neigh != libmesh_nullptr)
+          if (neigh != nullptr)
             {
               // Is there a coarser element next to this one?
               if (neigh->level() < elem->level())
@@ -1219,7 +1449,7 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               // Ordering of boundary ids shouldn't matter
               std::sort(bcids.begin(), bcids.end());
             }
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
 
           all_bcids.insert(all_bcids.end(), bcids.begin(),
                            bcids.end());
@@ -1239,7 +1469,7 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               std::sort(bcids.begin(), bcids.end());
             }
 
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
 
           all_bcids.insert(all_bcids.end(), bcids.begin(),
                            bcids.end());
@@ -1259,7 +1489,7 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               all_bcids.push_back(BoundaryInfo::invalid_id);
             }
 
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
         }
 
       for (unsigned short s=0; s != n_sides; ++s)
@@ -1279,7 +1509,7 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               all_bcids.push_back(BoundaryInfo::invalid_id);
             }
 
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
 
           if (elem)
             {
@@ -1294,7 +1524,7 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               all_bcids.push_back(BoundaryInfo::invalid_id);
             }
 
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
         }
 
       for (unsigned short sf=0; sf != 2; ++sf)
@@ -1314,7 +1544,7 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               all_bcids.push_back(BoundaryInfo::invalid_id);
             }
 
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
 
           if (elem)
             {
@@ -1329,11 +1559,11 @@ void libmesh_assert_valid_boundary_ids(const MeshBase & mesh)
               all_bcids.push_back(BoundaryInfo::invalid_id);
             }
 
-          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : libmesh_nullptr));
+          // libmesh_assert(mesh.comm().semiverify (elem ? &bcids : nullptr));
         }
 
       libmesh_assert(mesh.comm().semiverify
-                     (elem ? &all_bcids : libmesh_nullptr));
+                     (elem ? &all_bcids : nullptr));
     }
 }
 
@@ -1421,7 +1651,7 @@ void libmesh_assert_valid_unique_ids(const MeshBase & mesh)
     {
       const Elem * elem = mesh.query_elem_ptr(i);
       const unique_id_type unique_id = elem ? elem->unique_id() : 0;
-      const unique_id_type * uid_ptr = elem ? &unique_id : libmesh_nullptr;
+      const unique_id_type * uid_ptr = elem ? &unique_id : nullptr;
       libmesh_assert(mesh.comm().semiverify(uid_ptr));
     }
 
@@ -1432,7 +1662,7 @@ void libmesh_assert_valid_unique_ids(const MeshBase & mesh)
     {
       const Node * node = mesh.query_node_ptr(i);
       const unique_id_type unique_id = node ? node->unique_id() : 0;
-      const unique_id_type * uid_ptr = node ? &unique_id : libmesh_nullptr;
+      const unique_id_type * uid_ptr = node ? &unique_id : nullptr;
       libmesh_assert(mesh.comm().semiverify(uid_ptr));
     }
 }
@@ -1485,11 +1715,11 @@ void libmesh_assert_consistent_distributed_nodes(const MeshBase & mesh)
       mesh.comm().max(n_nodes);
 
       if (n_nodes)
-        libmesh_assert(mesh.comm().semiverify(elem ? &my_n_nodes : libmesh_nullptr));
+        libmesh_assert(mesh.comm().semiverify(elem ? &my_n_nodes : nullptr));
 
       for (unsigned int n=0; n != n_nodes; ++n)
         {
-          const Node * node = elem ? elem->node_ptr(n) : libmesh_nullptr;
+          const Node * node = elem ? elem->node_ptr(n) : nullptr;
           processor_id_type pid =
             node ? node->processor_id() : DofObject::invalid_processor_id;
           mesh.comm().min(pid);
@@ -1670,13 +1900,13 @@ void libmesh_assert_parallel_consistent_new_node_procids(const MeshBase & mesh)
       mesh.comm().max(n_nodes);
 
       if (n_nodes)
-        libmesh_assert(mesh.comm().semiverify(elem ? &my_n_nodes : libmesh_nullptr));
+        libmesh_assert(mesh.comm().semiverify(elem ? &my_n_nodes : nullptr));
 
       for (unsigned int n=0; n != n_nodes; ++n)
         {
-          const Node * node = elem ? elem->node_ptr(n) : libmesh_nullptr;
+          const Node * node = elem ? elem->node_ptr(n) : nullptr;
           const processor_id_type pid = node ? node->processor_id() : 0;
-          libmesh_assert(mesh.comm().semiverify (node ? &pid : libmesh_nullptr));
+          libmesh_assert(mesh.comm().semiverify (node ? &pid : nullptr));
         }
     }
 }
@@ -1730,7 +1960,7 @@ void libmesh_assert_parallel_consistent_procids<Node>(const MeshBase & mesh)
       const Node * node = mesh.query_node_ptr(i);
       const processor_id_type pid = node ? node->processor_id() : 0;
 
-      libmesh_assert(mesh.comm().semiverify (node ? &pid : libmesh_nullptr));
+      libmesh_assert(mesh.comm().semiverify (node ? &pid : nullptr));
     }
 }
 
@@ -1867,7 +2097,7 @@ void MeshTools::libmesh_assert_valid_neighbors(const MeshBase & mesh,
       for (unsigned int n = 0; n != n_neigh; ++n)
         {
           dof_id_type my_neighbor = DofObject::invalid_id;
-          dof_id_type * p_my_neighbor = libmesh_nullptr;
+          dof_id_type * p_my_neighbor = nullptr;
 
           // If we have a non-remote_elem neighbor link, then we can
           // verify it.
@@ -1878,12 +2108,12 @@ void MeshTools::libmesh_assert_valid_neighbors(const MeshBase & mesh,
                 my_neighbor = elem->neighbor_ptr(n)->id();
 
               // But wait - if we haven't set remote_elem links yet then
-              // some NULL links on ghost elements might be
+              // some nullptr links on ghost elements might be
               // future-remote_elem links, so we can't verify those.
               if (!assert_valid_remote_elems &&
                   !elem->neighbor_ptr(n) &&
                   elem->processor_id() != mesh.processor_id())
-                p_my_neighbor = libmesh_nullptr;
+                p_my_neighbor = nullptr;
             }
           libmesh_assert(mesh.comm().semiverify(p_my_neighbor));
         }
@@ -1928,13 +2158,13 @@ struct SyncNodeSet
         Node * node = mesh.node_ptr(id);
 
         // Return if the node is in the set.
-        data[i] = node_set.count(node);
+        data[i] = (node_set.find(node) != node_set.end());
       }
   }
 
   // ------------------------------------------------------------
   bool act_on_data (const std::vector<dof_id_type> & ids,
-                    std::vector<datum> in_set)
+                    const std::vector<datum> in_set)
   {
     bool data_changed = false;
 
@@ -2012,7 +2242,7 @@ struct SyncProcIdsFromMap
 
   // ------------------------------------------------------------
   void act_on_data (const std::vector<dof_id_type> & ids,
-                    std::vector<datum> proc_ids)
+                    const std::vector<datum> proc_ids)
   {
     // Set the node processor ids we've now been informed of
     for (std::size_t i=0; i != ids.size(); ++i)
@@ -2100,8 +2330,8 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
     }
 
   // Sort the new pids to push to each processor
-  std::vector<std::vector<std::pair<dof_id_type, processor_id_type>>>
-    ids_to_push(mesh.n_processors());
+  std::map<processor_id_type, std::vector<std::pair<dof_id_type, processor_id_type>>>
+    ids_to_push;
 
   for (const auto & node : mesh.node_ptr_range())
     {
@@ -2114,40 +2344,15 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
         ids_to_push[node->processor_id()].push_back(std::make_pair(id, pid));
     }
 
-  // Push using non-blocking I/O
-  std::vector<Parallel::Request> push_requests(mesh.n_processors());
-
-  for (processor_id_type p=1; p != mesh.n_processors(); ++p)
+  auto action_functor =
+    [& mesh, & new_proc_ids]
+    (processor_id_type,
+     const std::vector<std::pair<dof_id_type, processor_id_type>> & data)
     {
-      const processor_id_type procup =
-        cast_int<processor_id_type>
-        ((mesh.comm().rank() + p) % mesh.comm().size());
-
-      mesh.comm().send(procup, ids_to_push[procup], push_requests[procup]);
-    }
-
-  for (processor_id_type p=0; p != mesh.n_processors(); ++p)
-    {
-      const processor_id_type procdown =
-        cast_int<processor_id_type>
-        ((mesh.comm().size() + mesh.comm().rank() - p) %
-         mesh.comm().size());
-
-      std::vector<std::pair<dof_id_type, processor_id_type>>
-        ids_to_pull;
-
-      if (p)
-        mesh.comm().receive(procdown, ids_to_pull);
-      else
-        ids_to_pull.swap(ids_to_push[procdown]);
-
-      std::vector<std::pair<dof_id_type, processor_id_type>>::iterator
-        pulled_ids_it = ids_to_pull.begin(),
-        pulled_ids_end = ids_to_pull.end();
-      for (; pulled_ids_it != pulled_ids_end; ++pulled_ids_it)
+      for (auto & p : data)
         {
-          const dof_id_type id = pulled_ids_it->first;
-          const processor_id_type pid = pulled_ids_it->second;
+          const dof_id_type id = p.first;
+          const processor_id_type pid = p.second;
           const proc_id_map_type::iterator it = new_proc_ids.find(id);
           if (it == new_proc_ids.end())
             new_proc_ids.insert(std::make_pair(id,pid));
@@ -2157,7 +2362,13 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
               it->second = node.choose_processor_id(it->second, pid);
             }
         }
-    }
+    };
+
+  // Push using non-blocking I/O
+  std::vector<Parallel::Request> push_requests;
+
+  Parallel::push_parallel_vector_data
+    (mesh.comm(), ids_to_push, push_requests, action_functor);
 
   // Now new_proc_ids is correct for every node we used to own.  Let's
   // ask every other processor about the nodes they used to own.  But
@@ -2203,8 +2414,8 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
   // they should be canonically correct too.
 #ifdef DEBUG
   MeshTools::libmesh_assert_valid_procids<Node>(mesh);
-  if (repartition_all_nodes)
-    MeshTools::libmesh_assert_canonical_node_procids(mesh);
+  //if (repartition_all_nodes)
+  //  MeshTools::libmesh_assert_canonical_node_procids(mesh);
 #endif
 }
 

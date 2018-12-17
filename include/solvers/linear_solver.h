@@ -22,15 +22,26 @@
 
 // Local includes
 #include "libmesh/libmesh_common.h"
-#include "libmesh/enum_convergence_flags.h"
-#include "libmesh/enum_solver_package.h"
-#include "libmesh/enum_solver_type.h"
-#include "libmesh/enum_preconditioner_type.h"
-#include "libmesh/enum_subset_solve_mode.h"
+#include "libmesh/enum_subset_solve_mode.h" // SUBSET_ZERO
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h"
 #include "libmesh/parallel_object.h"
 #include "libmesh/auto_ptr.h" // deprecated
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum SolverPackage : int;
+enum PreconditionerType : int;
+enum SolverType : int;
+enum LinearConvergenceReason : int;
+}
+#else
+#include "libmesh/enum_solver_package.h"
+#include "libmesh/enum_preconditioner_type.h"
+#include "libmesh/enum_solver_type.h"
+#include "libmesh/enum_convergence_flags.h"
+#endif
 
 // C++ includes
 #include <cstddef>
@@ -93,7 +104,7 @@ public:
    * Initialize data structures if not done so already.
    * May assign a name to the solver in some implementations
    */
-  virtual void init (const char * name = libmesh_nullptr) = 0;
+  virtual void init (const char * name = nullptr) = 0;
 
   /**
    * Apply names to the system to be solved.  For most packages this
@@ -148,7 +159,7 @@ public:
    * restricted to the given set of dofs, which must contain local
    * dofs on each processor only and not contain any duplicates.  This
    * mode can be disabled by calling this method with \p dofs being a
-   * \p NULL pointer.
+   * \p nullptr.
    */
   virtual void restrict_solve_to (const std::vector<unsigned int> * const dofs,
                                   const SubsetSolveMode subset_solve_mode=SUBSET_ZERO);
@@ -299,21 +310,6 @@ protected:
 
 
 /*----------------------- inline functions ----------------------------------*/
-template <typename T>
-inline
-LinearSolver<T>::LinearSolver (const libMesh::Parallel::Communicator & comm_in) :
-  ParallelObject       (comm_in),
-  _solver_type         (GMRES),
-  _preconditioner_type (ILU_PRECOND),
-  _is_initialized      (false),
-  _preconditioner      (libmesh_nullptr),
-  same_preconditioner  (false),
-  _solver_configuration(libmesh_nullptr)
-{
-}
-
-
-
 template <typename T>
 inline
 LinearSolver<T>::~LinearSolver ()

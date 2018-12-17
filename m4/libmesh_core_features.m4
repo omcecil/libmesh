@@ -89,6 +89,31 @@ AS_IF([test "$enabledeprecated" != yes],
 
 
 # --------------------------------------------------------------
+# forward declared enumerations - enable by default
+# We want to prevent new library code from being added that
+# depends on including enum headers, but still give downstream
+# apps the ability to compile with the old headers for a
+# period of deprecation.
+# --------------------------------------------------------------
+AC_ARG_ENABLE(forward-declare-enums,
+              [AS_HELP_STRING([--disable-forward-declare-enums],[Directly include enumeration headers rather than forward declaring them])],
+              enablefwdenums=$enableval,
+              enablefwdenums=yes)
+
+AC_SUBST(enablefwdenums)
+AS_IF([test "$enablefwdenums" != yes],
+      [
+        AC_MSG_RESULT([>>> INFO: Forward declared enumerations are disabled <<<])
+        AC_MSG_RESULT([>>> Enumeration headers will be included directly <<<])
+      ],
+      [
+        AC_MSG_RESULT([<<< Configuring library with forward declared enumerations >>>])
+        AC_DEFINE(FORWARD_DECLARE_ENUMS, 1, [Flag indicating if the library uses forward declared enumerations])
+      ])
+# --------------------------------------------------------------
+
+
+# --------------------------------------------------------------
 # blocked matrix/vector storage - disabled by default.
 #   See http://sourceforge.net/mailarchive/forum.php?thread_name=B4613A7D-0033-43C7-A9DF-5A801217A097%40nasa.gov&forum_name=libmesh-devel
 # --------------------------------------------------------------
@@ -201,7 +226,7 @@ AC_ARG_WITH([processor_id_bytes],
             AS_HELP_STRING([--with-processor-id-bytes=<1|2|4|8>],
                            [bytes used for processor id [4]]),
             [processor_bytes="$withval"],
-            [processor_bytes=2])
+            [processor_bytes=4])
 
 AS_CASE("$processor_bytes",
         [1], [AC_DEFINE(PROCESSOR_ID_BYTES, 1, [size of processor_id])],
@@ -209,9 +234,9 @@ AS_CASE("$processor_bytes",
         [4], [AC_DEFINE(PROCESSOR_ID_BYTES, 4, [size of processor_id])],
         [8], [AC_DEFINE(PROCESSOR_ID_BYTES, 8, [size of processor_id])],
         [
-          AC_MSG_RESULT([>>> unrecognized processor_id size: $processor_bytes - configuring size...2])
-          AC_DEFINE(PROCESSOR_ID_BYTES, 2, [size of processor_id])
-          processor_bytes=2
+          AC_MSG_RESULT([>>> unrecognized processor_id size: $processor_bytes - configuring size...4])
+          AC_DEFINE(PROCESSOR_ID_BYTES, 4, [size of processor_id])
+          processor_bytes=4
         ])
 
 AC_MSG_RESULT([configuring size of processor_id... $processor_bytes])
@@ -550,43 +575,6 @@ AS_IF([test "$enablesecond" != no],
       [
         AC_DEFINE(ENABLE_SECOND_DERIVATIVES, 1, [Flag indicating if the library should be built with second derivatives])
         AC_MSG_RESULT(<<< Configuring library with second derivatives >>>)
-      ])
-# -------------------------------------------------------------
-
-
-
-# --------------------------------------------------------------
-# XDR binary IO support - enabled by default
-# --------------------------------------------------------------
-AC_ARG_ENABLE(xdr,
-              AS_HELP_STRING([--disable-xdr],
-                             [build without XDR platform-independent binary I/O]),
-              enablexdr=$enableval,
-              enablexdr=yes)
-
-AS_IF([test "$enablexdr" != no],
-      [
-   AC_CHECK_HEADERS(rpc/rpc.h,
-                    [
-                     AC_CHECK_FUNC(xdrstdio_create,
-                                   [
-                                     AC_DEFINE(HAVE_XDR, 1, [Flag indicating headers and libraries for XDR IO are available])
-                                     AC_MSG_RESULT(<<< Configuring library with XDR support >>>)
-                                   ],
-                                   [enablexdr=no])
-                    ],
-                    [
-                      AC_CHECK_HEADERS(rpc/xdr.h,
-                                       [
-                                        AC_CHECK_FUNC(xdrstdio_create,
-                                                      [
-                                                        AC_DEFINE(HAVE_XDR, 1, [Flag indicating headers and libraries for XDR IO are available])
-                                                        AC_MSG_RESULT(<<< Configuring library with XDR support >>>)
-                                                      ],
-                                                      [enablexdr=no])
-                                       ],
-                                       [enablexdr=no])
-                     ])
       ])
 # -------------------------------------------------------------
 

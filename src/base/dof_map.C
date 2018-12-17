@@ -34,17 +34,20 @@
 #include "libmesh/mesh_tools.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/parallel.h"
+#include "libmesh/parallel_sync.h"
 #include "libmesh/periodic_boundaries.h"
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/sparsity_pattern.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/threads.h"
 #include "libmesh/mesh_subdivision_support.h"
+#include "libmesh/int_range.h"
 
 // C++ Includes
 #include <set>
 #include <algorithm> // for std::fill, std::equal_range, std::max, std::lower_bound, etc.
 #include <sstream>
+#include <unordered_map>
 
 namespace libMesh
 {
@@ -127,10 +130,11 @@ DofMap::build_sparsity (const MeshBase & mesh) const
 DofMap::DofMap(const unsigned int number,
                MeshBase & mesh) :
   ParallelObject (mesh.comm()),
-  _dof_coupling(libmesh_nullptr),
+  _dof_coupling(nullptr),
   _error_on_cyclic_constraint(false),
   _variables(),
   _variable_groups(),
+  _variable_group_numbers(),
   _sys_number(number),
   _mesh(mesh),
   _matrices(),
@@ -138,17 +142,17 @@ DofMap::DofMap(const unsigned int number,
   _end_df(),
   _first_scalar_df(),
   _send_list(),
-  _augment_sparsity_pattern(libmesh_nullptr),
-  _extra_sparsity_function(libmesh_nullptr),
-  _extra_sparsity_context(libmesh_nullptr),
-  _augment_send_list(libmesh_nullptr),
-  _extra_send_list_function(libmesh_nullptr),
-  _extra_send_list_context(libmesh_nullptr),
+  _augment_sparsity_pattern(nullptr),
+  _extra_sparsity_function(nullptr),
+  _extra_sparsity_context(nullptr),
+  _augment_send_list(nullptr),
+  _extra_send_list_function(nullptr),
+  _extra_send_list_context(nullptr),
   _default_coupling(new DefaultCoupling()),
   _default_evaluating(new DefaultCoupling()),
   need_full_sparsity_pattern(false),
-  _n_nz(libmesh_nullptr),
-  _n_oz(libmesh_nullptr),
+  _n_nz(nullptr),
+  _n_oz(nullptr),
   _n_dfs(0),
   _n_SCALAR_dofs(0)
 #ifdef LIBMESH_ENABLE_AMR
@@ -204,8 +208,8 @@ DofMap::~DofMap()
   _mesh.remove_ghosting_functor(*_default_evaluating);
 
 #ifdef LIBMESH_ENABLE_DIRICHLET
-  for (std::size_t q = 0; q != _adjoint_dirichlet_boundaries.size(); ++q)
-    delete _adjoint_dirichlet_boundaries[q];
+  for (auto & bnd : _adjoint_dirichlet_boundaries)
+    delete bnd;
 #endif
 }
 
@@ -240,12 +244,17 @@ void DofMap::set_error_on_cyclic_constraint(bool error_on_cyclic_constraint)
 
 void DofMap::add_variable_group (const VariableGroup & var_group)
 {
+  const unsigned int vg = cast_int<unsigned int>(_variable_groups.size());
+
   _variable_groups.push_back(var_group);
 
   VariableGroup & new_var_group = _variable_groups.back();
 
   for (unsigned int var=0; var<new_var_group.n_variables(); var++)
-    _variables.push_back (new_var_group(var));
+    {
+      _variables.push_back (new_var_group(var));
+      _variable_group_numbers.push_back (vg);
+    }
 }
 
 
@@ -319,8 +328,7 @@ void DofMap::set_nonlocal_dof_objects(iterator_type objects_begin,
 
   // First, iterate over local objects to find out how many
   // are on each processor
-  std::vector<dof_id_type>
-    ghost_objects_from_proc(this->n_processors(), 0);
+  std::unordered_map<processor_id_type, dof_id_type> ghost_objects_from_proc;
 
   iterator_type it  = objects_begin;
 
@@ -337,24 +345,20 @@ void DofMap::set_nonlocal_dof_objects(iterator_type objects_begin,
         }
     }
 
-  std::vector<dof_id_type> objects_on_proc(this->n_processors(), 0);
-  this->comm().allgather(ghost_objects_from_proc[this->processor_id()],
-                         objects_on_proc);
-
-#ifdef DEBUG
-  for (processor_id_type p=0; p != this->n_processors(); ++p)
-    libmesh_assert_less_equal (ghost_objects_from_proc[p], objects_on_proc[p]);
-#endif
-
   // Request sets to send to each processor
-  std::vector<std::vector<dof_id_type>>
-    requested_ids(this->n_processors());
+  std::map<processor_id_type, std::vector<dof_id_type>>
+    requested_ids;
 
   // We know how many of our objects live on each processor, so
   // reserve() space for requests from each.
-  for (processor_id_type p=0; p != this->n_processors(); ++p)
+  auto ghost_end = ghost_objects_from_proc.end();
+  for (processor_id_type p=0, np = this->n_processors(); p != np; ++p)
     if (p != this->processor_id())
-      requested_ids[p].reserve(ghost_objects_from_proc[p]);
+      {
+        auto ghost_it = ghost_objects_from_proc.find(p);
+        if (ghost_it != ghost_end)
+          requested_ids[p].reserve(ghost_it->second);
+      }
 
   for (it = objects_begin; it != objects_end; ++it)
     {
@@ -363,36 +367,37 @@ void DofMap::set_nonlocal_dof_objects(iterator_type objects_begin,
         requested_ids[obj->processor_id()].push_back(obj->id());
     }
 #ifdef DEBUG
-  for (processor_id_type p=0; p != this->n_processors(); ++p)
-    libmesh_assert_equal_to (requested_ids[p].size(), ghost_objects_from_proc[p]);
+  for (processor_id_type p=0, np = this->n_processors(); p != np; ++p)
+    {
+      if (ghost_objects_from_proc.count(p))
+        libmesh_assert_equal_to (requested_ids[p].size(), ghost_objects_from_proc[p]);
+      else
+        libmesh_assert(!requested_ids.count(p));
+    }
 #endif
 
-  // Next set ghost object n_comps from other processors
-  for (processor_id_type p=1; p != this->n_processors(); ++p)
-    {
-      // Trade my requests with processor procup and procdown
-      processor_id_type procup =
-        cast_int<processor_id_type>((this->processor_id() + p) %
-                                    this->n_processors());
-      processor_id_type procdown =
-        cast_int<processor_id_type>((this->n_processors() +
-                                     this->processor_id() - p) %
-                                    this->n_processors());
-      std::vector<dof_id_type> request_to_fill;
-      this->comm().send_receive(procup, requested_ids[procup],
-                                procdown, request_to_fill);
+  typedef std::vector<dof_id_type> datum;
 
+  auto gather_functor =
+    [this, &mesh, &objects]
+    (processor_id_type,
+     const std::vector<dof_id_type> & ids,
+     std::vector<datum> & data)
+    {
       // Fill those requests
       const unsigned int
         sys_num      = this->sys_number(),
         n_var_groups = this->n_variable_groups();
 
-      std::vector<dof_id_type> ghost_data
-        (request_to_fill.size() * 2 * n_var_groups);
+      const std::size_t query_size = ids.size();
 
-      for (std::size_t i=0; i != request_to_fill.size(); ++i)
+      data.resize(query_size);
+      for (auto & d : data)
+        d.resize(2 * n_var_groups);
+
+      for (std::size_t i=0; i != query_size; ++i)
         {
-          DofObject * requested = (this->*objects)(mesh, request_to_fill[i]);
+          DofObject * requested = (this->*objects)(mesh, ids[i]);
           libmesh_assert(requested);
           libmesh_assert_equal_to (requested->processor_id(), this->processor_id());
           libmesh_assert_equal_to (requested->n_var_groups(sys_num), n_var_groups);
@@ -400,43 +405,50 @@ void DofMap::set_nonlocal_dof_objects(iterator_type objects_begin,
             {
               unsigned int n_comp_g =
                 requested->n_comp_group(sys_num, vg);
-              ghost_data[i*2*n_var_groups+vg] = n_comp_g;
+              data[i][vg] = n_comp_g;
               dof_id_type my_first_dof = n_comp_g ?
                 requested->vg_dof_base(sys_num, vg) : 0;
               libmesh_assert_not_equal_to (my_first_dof, DofObject::invalid_id);
-              ghost_data[i*2*n_var_groups+n_var_groups+vg] = my_first_dof;
+              data[i][n_var_groups+vg] = my_first_dof;
             }
         }
+    };
 
-      // Trade back the results
-      std::vector<dof_id_type> filled_request;
-      this->comm().send_receive(procdown, ghost_data,
-                                procup, filled_request);
+  auto action_functor =
+    [this, &mesh, &objects]
+    (processor_id_type libmesh_dbg_var(pid),
+     const std::vector<dof_id_type> & ids,
+     const std::vector<datum> & data)
+    {
+      const unsigned int
+        sys_num      = this->sys_number(),
+        n_var_groups = this->n_variable_groups();
 
-      // And copy the id changes we've now been informed of
-      libmesh_assert_equal_to (filled_request.size(),
-                               requested_ids[procup].size() * 2 * n_var_groups);
-      for (std::size_t i=0; i != requested_ids[procup].size(); ++i)
+      // Copy the id changes we've now been informed of
+      for (auto i : index_range(ids))
         {
-          DofObject * requested = (this->*objects)(mesh, requested_ids[procup][i]);
+          DofObject * requested = (this->*objects)(mesh, ids[i]);
           libmesh_assert(requested);
-          libmesh_assert_equal_to (requested->processor_id(), procup);
+          libmesh_assert_equal_to (requested->processor_id(), pid);
           for (unsigned int vg=0; vg != n_var_groups; ++vg)
             {
               unsigned int n_comp_g =
-                cast_int<unsigned int>(filled_request[i*2*n_var_groups+vg]);
+                cast_int<unsigned int>(data[i][vg]);
               requested->set_n_comp_group(sys_num, vg, n_comp_g);
               if (n_comp_g)
                 {
-                  dof_id_type my_first_dof =
-                    filled_request[i*2*n_var_groups+n_var_groups+vg];
+                  dof_id_type my_first_dof = data[i][n_var_groups+vg];
                   libmesh_assert_not_equal_to (my_first_dof, DofObject::invalid_id);
                   requested->set_vg_dof_base
                     (sys_num, vg, my_first_dof);
                 }
             }
         }
-    }
+    };
+
+  datum * ex = nullptr;
+  Parallel::pull_parallel_vector_data
+    (this->comm(), requested_ids, gather_functor, action_functor, ex);
 
 #ifdef DEBUG
   // Double check for invalid dofs
@@ -469,6 +481,12 @@ void DofMap::reinit(MeshBase & mesh)
   //
   // The user might have removed it from our coupling functors set,
   // but if so, who cares, this reconfiguration is cheap.
+
+  // Avoid calling set_dof_coupling() with an empty/non-nullptr
+  // _dof_coupling matrix which may happen when there are actually no
+  // variables on the system.
+  if (this->_dof_coupling && this->_dof_coupling->empty() && !this->n_variables())
+    this->_dof_coupling = nullptr;
   _default_coupling->set_dof_coupling(this->_dof_coupling);
 
   // By default we may want 0 or 1 levels of coupling
@@ -525,7 +543,7 @@ void DofMap::reinit(MeshBase & mesh)
         {
           Node & node = elem->node_ref(n);
 
-          if (node.old_dof_object == libmesh_nullptr)
+          if (node.old_dof_object == nullptr)
             if (node.has_dofs(sys_num))
               node.set_old_dof_object();
         }
@@ -816,15 +834,12 @@ void DofMap::clear()
   //
   // But it would be inconsistent to leave our coupling settings
   // through a clear()...
-  _dof_coupling = NULL;
+  _dof_coupling = nullptr;
 
   // Reset ghosting functor statuses
   {
-    std::set<GhostingFunctor *>::iterator        gf_it = this->coupling_functors_begin();
-    const std::set<GhostingFunctor *>::iterator gf_end = this->coupling_functors_end();
-    for (; gf_it != gf_end; ++gf_it)
+    for (const auto & gf : _coupling_functors)
       {
-        GhostingFunctor * gf = *gf_it;
         libmesh_assert(gf);
         _mesh.remove_ghosting_functor(*gf);
       }
@@ -840,11 +855,8 @@ void DofMap::clear()
 
 
   {
-    std::set<GhostingFunctor *>::iterator        gf_it = this->algebraic_ghosting_functors_begin();
-    const std::set<GhostingFunctor *>::iterator gf_end = this->algebraic_ghosting_functors_end();
-    for (; gf_it != gf_end; ++gf_it)
+    for (const auto & gf : _algebraic_ghosting_functors)
       {
-        GhostingFunctor * gf = *gf_it;
         libmesh_assert(gf);
         _mesh.remove_ghosting_functor(*gf);
       }
@@ -859,6 +871,7 @@ void DofMap::clear()
 
   _variables.clear();
   _variable_groups.clear();
+  _variable_group_numbers.clear();
   _first_df.clear();
   _end_df.clear();
   _first_scalar_df.clear();
@@ -908,7 +921,7 @@ void DofMap::distribute_dofs (MeshBase & mesh)
   // By default distribute variables in a
   // var-major fashion, but allow run-time
   // specification
-  bool node_major_dofs = libMesh::on_command_line ("--node_major_dofs");
+  bool node_major_dofs = libMesh::on_command_line ("--node-major-dofs");
 
   // The DOF counter, will be incremented as we encounter
   // new degrees of freedom
@@ -1036,27 +1049,17 @@ void DofMap::distribute_dofs (MeshBase & mesh)
       }
 
   // Allow our GhostingFunctor objects to reinit if necessary
-  {
-    std::set<GhostingFunctor *>::iterator        gf_it = this->algebraic_ghosting_functors_begin();
-    const std::set<GhostingFunctor *>::iterator gf_end = this->algebraic_ghosting_functors_end();
-    for (; gf_it != gf_end; ++gf_it)
-      {
-        GhostingFunctor * gf = *gf_it;
-        libmesh_assert(gf);
-        gf->dofmap_reinit();
-      }
-  }
+  for (const auto & gf : _algebraic_ghosting_functors)
+    {
+      libmesh_assert(gf);
+      gf->dofmap_reinit();
+    }
 
-  {
-    std::set<GhostingFunctor *>::iterator        gf_it = this->coupling_functors_begin();
-    const std::set<GhostingFunctor *>::iterator gf_end = this->coupling_functors_end();
-    for (; gf_it != gf_end; ++gf_it)
-      {
-        GhostingFunctor * gf = *gf_it;
-        libmesh_assert(gf);
-        gf->dofmap_reinit();
-      }
-  }
+  for (const auto & gf : _coupling_functors)
+    {
+      libmesh_assert(gf);
+      gf->dofmap_reinit();
+    }
 
   // Note that in the add_neighbors_to_send_list nodes on processor
   // boundaries that are shared by multiple elements are added for
@@ -1074,14 +1077,23 @@ void DofMap::local_variable_indices(std::vector<dof_id_type> & idx,
                                     const MeshBase & mesh,
                                     unsigned int var_num) const
 {
+  // Count dofs in the *exact* order that distribute_dofs numbered
+  // them, so that we can assume ascending indices and use push_back
+  // instead of find+insert.
+
   const unsigned int sys_num       = this->sys_number();
 
   // If this isn't a SCALAR variable, we need to find all its field
   // dofs on the mesh
   if (this->variable_type(var_num).family != SCALAR)
     {
+      const Variable & var(this->variable(var_num));
+
       for (auto & elem : mesh.active_local_element_ptr_range())
         {
+          if (!var.active_on_subdomain(elem->subdomain_id()))
+            continue;
+
           // Only count dofs connected to active
           // elements on this processor.
           const unsigned int n_nodes = elem->n_nodes();
@@ -1098,8 +1110,7 @@ void DofMap::local_variable_indices(std::vector<dof_id_type> & idx,
               for(unsigned int i=0; i<n_comp; i++)
                 {
                   const dof_id_type index = node.dof_number(sys_num,var_num,i);
-                  libmesh_assert_greater_equal (index, this->first_dof());
-                  libmesh_assert_less (index, this->end_dof());
+                  libmesh_assert (this->local_index(index));
 
                   if (idx.empty() || index > idx.back())
                     idx.push_back(index);
@@ -1154,6 +1165,9 @@ void DofMap::distribute_local_dofs_node_major(dof_id_type & next_free_dof,
 {
   const unsigned int sys_num       = this->sys_number();
   const unsigned int n_var_groups  = this->n_variable_groups();
+
+  // Our numbering here must be kept consistent with the numbering
+  // scheme assumed by DofMap::local_variable_indices!
 
   //-------------------------------------------------------------------------
   // First count and assign temporary numbers to local dofs
@@ -1291,6 +1305,9 @@ void DofMap::distribute_local_dofs_var_major(dof_id_type & next_free_dof,
   const unsigned int sys_num      = this->sys_number();
   const unsigned int n_var_groups = this->n_variable_groups();
 
+  // Our numbering here must be kept consistent with the numbering
+  // scheme assumed by DofMap::local_variable_indices!
+
   //-------------------------------------------------------------------------
   // First count and assign temporary numbers to local dofs
   for (unsigned vg=0; vg<n_var_groups; vg++)
@@ -1420,28 +1437,24 @@ merge_ghost_functor_outputs(GhostingFunctor::map_type & elements_to_ghost,
                             const MeshBase::const_element_iterator & elems_end,
                             processor_id_type p)
 {
-  std::set<GhostingFunctor *>::iterator gf_it = gf_begin;
-  for (; gf_it != gf_end; ++gf_it)
+  for (const auto & gf : as_range(gf_begin, gf_end))
     {
       GhostingFunctor::map_type more_elements_to_ghost;
 
-      GhostingFunctor * gf = *gf_it;
       libmesh_assert(gf);
       (*gf)(elems_begin, elems_end, p, more_elements_to_ghost);
 
-      GhostingFunctor::map_type::iterator        metg_it = more_elements_to_ghost.begin();
-      const GhostingFunctor::map_type::iterator metg_end = more_elements_to_ghost.end();
-      for (; metg_it != metg_end; ++metg_it)
+      for (const auto & pr : more_elements_to_ghost)
         {
           GhostingFunctor::map_type::iterator existing_it =
-            elements_to_ghost.find (metg_it->first);
+            elements_to_ghost.find (pr.first);
           if (existing_it == elements_to_ghost.end())
-            elements_to_ghost.insert(*metg_it);
+            elements_to_ghost.insert(pr);
           else
             {
               if (existing_it->second)
                 {
-                  if (metg_it->second)
+                  if (pr.second)
                     {
                       // If this isn't already a temporary
                       // then we need to make one so we'll
@@ -1453,7 +1466,7 @@ merge_ghost_functor_outputs(GhostingFunctor::map_type & elements_to_ghost,
                           temporary_coupling_matrices.insert(cm);
                           existing_it->second = cm;
                         }
-                      const_cast<CouplingMatrix &>(*existing_it->second) &= *metg_it->second;
+                      const_cast<CouplingMatrix &>(*existing_it->second) &= *pr.second;
                     }
                   else
                     {
@@ -1470,7 +1483,7 @@ merge_ghost_functor_outputs(GhostingFunctor::map_type & elements_to_ghost,
                       if (temp_it != temporary_coupling_matrices.end())
                         temporary_coupling_matrices.erase(temp_it);
 
-                      existing_it->second = libmesh_nullptr;
+                      existing_it->second = nullptr;
                     }
                 }
               // else we have a nullptr already, then we have a full
@@ -1520,17 +1533,15 @@ void DofMap::add_neighbors_to_send_list(MeshBase & mesh)
   std::map<const CouplingMatrix *, std::vector<unsigned int>>
     column_variable_lists;
 
-  GhostingFunctor::map_type::iterator        etg_it = elements_to_send.begin();
-  const GhostingFunctor::map_type::iterator etg_end = elements_to_send.end();
-  for (; etg_it != etg_end; ++etg_it)
+  for (auto & pr : elements_to_send)
     {
-      const Elem * const partner = etg_it->first;
+      const Elem * const partner = pr.first;
 
       // We asked ghosting functors not to give us local elements
       libmesh_assert_not_equal_to
         (partner->processor_id(), this->processor_id());
 
-      const CouplingMatrix * ghost_coupling = etg_it->second;
+      const CouplingMatrix * ghost_coupling = pr.second;
 
       // Loop over any present coupling matrix column variables if we
       // have a coupling matrix, or just add all variables to
@@ -1573,18 +1584,15 @@ void DofMap::add_neighbors_to_send_list(MeshBase & mesh)
           const std::vector<unsigned int> & variable_list =
             column_variable_list->second;
 
-          for (std::size_t j=0; j != variable_list.size(); ++j)
+          for (const auto & vj : variable_list)
             {
-              const unsigned int vj=variable_list[j];
-
               std::vector<dof_id_type> di;
               this->dof_indices (partner, di, vj);
 
               // Insert the remote DOF indices into the send list
-              for (std::size_t j=0; j != di.size(); ++j)
-                if (di[j] < this->first_dof() ||
-                    di[j] >= this->end_dof())
-                  _send_list.push_back(di[j]);
+              for (auto d : di)
+                if (!this->local_index(d))
+                  _send_list.push_back(d);
             }
         }
       else
@@ -1593,10 +1601,9 @@ void DofMap::add_neighbors_to_send_list(MeshBase & mesh)
           this->dof_indices (partner, di);
 
           // Insert the remote DOF indices into the send list
-          for (std::size_t j=0; j != di.size(); ++j)
-            if (di[j] < this->first_dof() ||
-                di[j] >= this->end_dof())
-              _send_list.push_back(di[j]);
+          for (const auto & dof : di)
+            if (!this->local_index(dof))
+              _send_list.push_back(dof);
         }
 
     }
@@ -1621,10 +1628,9 @@ void DofMap::add_neighbors_to_send_list(MeshBase & mesh)
       this->dof_indices (elem, di);
 
       // Insert the remote DOF indices into the send list
-      for (std::size_t j=0; j != di.size(); ++j)
-        if (di[j] < this->first_dof() ||
-            di[j] >= this->end_dof())
-          _send_list.push_back(di[j]);
+      for (const auto & dof : di)
+        if (!this->local_index(dof))
+          _send_list.push_back(dof);
     }
 }
 
@@ -1678,9 +1684,9 @@ bool DofMap::use_coupled_neighbor_dofs(const MeshBase & mesh) const
   // If we were asked on the command line, then we need to
   // include sensitivities between neighbor degrees of freedom
   bool implicit_neighbor_dofs =
-    libMesh::on_command_line ("--implicit_neighbor_dofs");
+    libMesh::on_command_line ("--implicit-neighbor-dofs");
 
-  // If the user specifies --implicit_neighbor_dofs 0, then
+  // If the user specifies --implicit-neighbor-dofs 0, then
   // presumably he knows what he is doing and we won't try to
   // automatically turn it on even when all the variables are
   // discontinuous.
@@ -1688,11 +1694,11 @@ bool DofMap::use_coupled_neighbor_dofs(const MeshBase & mesh) const
     {
       // No flag provided defaults to 'true'
       int flag = 1;
-      flag = libMesh::command_line_next ("--implicit_neighbor_dofs", flag);
+      flag = libMesh::command_line_next ("--implicit-neighbor-dofs", flag);
 
       if (!flag)
         {
-          // The user said --implicit_neighbor_dofs 0, so he knows
+          // The user said --implicit-neighbor-dofs 0, so he knows
           // what he is doing and really doesn't want it.
           return false;
         }
@@ -1735,20 +1741,15 @@ void DofMap::compute_sparsity(const MeshBase & mesh)
   _sp = this->build_sparsity(mesh);
 
   // It is possible that some \p SparseMatrix implementations want to
-  // see it.  Let them see it before we throw it away.
-  std::vector<SparseMatrix<Number> *>::const_iterator
-    pos = _matrices.begin(),
-    end = _matrices.end();
-
-  // If we need the full sparsity pattern, then we share a view of its
-  // arrays, and we pass it in to the matrices.
+  // see the sparsity pattern before we throw it away.  If so, we
+  // share a view of its arrays, and we pass it in to the matrices.
   if (need_full_sparsity_pattern)
     {
       _n_nz = &_sp->n_nz;
       _n_oz = &_sp->n_oz;
 
-      for (; pos != end; ++pos)
-        (*pos)->update_sparsity_pattern (_sp->sparsity_pattern);
+      for (const auto & mat : _matrices)
+        mat->update_sparsity_pattern (_sp->sparsity_pattern);
     }
   // If we don't need the full sparsity pattern anymore, steal the
   // arrays we do need and free the rest of the memory
@@ -1782,17 +1783,35 @@ void DofMap::clear_sparsity()
       delete _n_nz;
       delete _n_oz;
     }
-  _n_nz = libmesh_nullptr;
-  _n_oz = libmesh_nullptr;
+  _n_nz = nullptr;
+  _n_oz = nullptr;
+}
+
+
+
+void DofMap::remove_default_ghosting()
+{
+  this->remove_coupling_functor(this->default_coupling());
+  this->remove_algebraic_ghosting_functor(this->default_algebraic_ghosting());
+}
+
+
+
+void DofMap::add_default_ghosting()
+{
+  this->add_coupling_functor(this->default_coupling());
+  this->add_algebraic_ghosting_functor(this->default_algebraic_ghosting());
 }
 
 
 
 void
-DofMap::add_coupling_functor(GhostingFunctor & coupling_functor)
+DofMap::add_coupling_functor(GhostingFunctor & coupling_functor,
+                             bool to_mesh)
 {
   _coupling_functors.insert(&coupling_functor);
-  _mesh.add_ghosting_functor(coupling_functor);
+  if (to_mesh)
+    _mesh.add_ghosting_functor(coupling_functor);
 }
 
 
@@ -1800,7 +1819,6 @@ DofMap::add_coupling_functor(GhostingFunctor & coupling_functor)
 void
 DofMap::remove_coupling_functor(GhostingFunctor & coupling_functor)
 {
-  libmesh_assert(_coupling_functors.count(&coupling_functor));
   _coupling_functors.erase(&coupling_functor);
   _mesh.remove_ghosting_functor(coupling_functor);
 }
@@ -1808,20 +1826,21 @@ DofMap::remove_coupling_functor(GhostingFunctor & coupling_functor)
 
 
 void
-DofMap::add_algebraic_ghosting_functor(GhostingFunctor & algebraic_ghosting_functor)
+DofMap::add_algebraic_ghosting_functor(GhostingFunctor & evaluable_functor,
+                                       bool to_mesh)
 {
-  _algebraic_ghosting_functors.insert(&algebraic_ghosting_functor);
-  _mesh.add_ghosting_functor(algebraic_ghosting_functor);
+  _algebraic_ghosting_functors.insert(&evaluable_functor);
+  if (to_mesh)
+    _mesh.add_ghosting_functor(evaluable_functor);
 }
 
 
 
 void
-DofMap::remove_algebraic_ghosting_functor(GhostingFunctor & algebraic_ghosting_functor)
+DofMap::remove_algebraic_ghosting_functor(GhostingFunctor & evaluable_functor)
 {
-  libmesh_assert(_algebraic_ghosting_functors.count(&algebraic_ghosting_functor));
-  _algebraic_ghosting_functors.erase(&algebraic_ghosting_functor);
-  _mesh.remove_ghosting_functor(algebraic_ghosting_functor);
+  _algebraic_ghosting_functors.erase(&evaluable_functor);
+  _mesh.remove_ghosting_functor(evaluable_functor);
 }
 
 
@@ -1830,14 +1849,15 @@ void DofMap::extract_local_vector (const NumericVector<Number> & Ug,
                                    const std::vector<dof_id_type> & dof_indices_in,
                                    DenseVectorBase<Number> & Ue) const
 {
+  const unsigned int n_original_dofs = dof_indices_in.size();
+
 #ifdef LIBMESH_ENABLE_AMR
 
   // Trivial mapping
   libmesh_assert_equal_to (dof_indices_in.size(), Ue.size());
   bool has_constrained_dofs = false;
 
-  for (unsigned int il=0;
-       il != cast_int<unsigned int>(dof_indices_in.size()); il++)
+  for (unsigned int il=0; il != n_original_dofs; ++il)
     {
       const dof_id_type ig = dof_indices_in[il];
 
@@ -1868,8 +1888,6 @@ void DofMap::extract_local_vector (const NumericVector<Number> & Ug,
       Ue.zero();
 
       // compute Ue = C Ug, with proper mapping.
-      const unsigned int n_original_dofs =
-        cast_int<unsigned int>(dof_indices_in.size());
       for (unsigned int i=0; i != n_original_dofs; i++)
         {
           Ue.el(i) = H(i);
@@ -1895,9 +1913,6 @@ void DofMap::extract_local_vector (const NumericVector<Number> & Ug,
 
   // Trivial mapping
 
-  const unsigned int n_original_dofs =
-    cast_int<unsigned int>(dof_indices_in.size());
-
   libmesh_assert_equal_to (n_original_dofs, Ue.size());
 
   for (unsigned int il=0; il<n_original_dofs; il++)
@@ -1915,7 +1930,7 @@ void DofMap::extract_local_vector (const NumericVector<Number> & Ug,
 void DofMap::dof_indices (const Elem * const elem,
                           std::vector<dof_id_type> & di) const
 {
-  // We now allow elem==NULL to request just SCALAR dofs
+  // We now allow elem==nullptr to request just SCALAR dofs
   // libmesh_assert(elem);
 
   // If we are asking for current indices on an element, it ought to
@@ -1928,7 +1943,7 @@ void DofMap::dof_indices (const Elem * const elem,
   // Clear the DOF indices vector
   di.clear();
 
-  const unsigned int n_vars  = this->n_variables();
+  const unsigned int n_var_groups  = this->n_variable_groups();
 
 #ifdef DEBUG
   // Check that sizes match in DEBUG mode
@@ -1948,26 +1963,35 @@ void DofMap::dof_indices (const Elem * const elem,
           MeshTools::Subdivision::find_one_ring(sd_elem, elem_nodes);
 
           // Get the dof numbers
-          for (unsigned int v=0; v<n_vars; v++)
+          for (unsigned int vg=0; vg<n_var_groups; vg++)
             {
-              const Variable & var = this->variable(v);
+              const VariableGroup & var = this->variable_group(vg);
+              const unsigned int vars_in_group = var.n_variables();
+
               if (var.type().family == SCALAR &&
                   var.active_on_subdomain(elem->subdomain_id()))
                 {
+                  for (unsigned int vig=0; vig != vars_in_group; ++vig)
+                    {
 #ifdef DEBUG
-                  tot_size += this->variable(v).type().order;
+                      tot_size += var.type().order;
 #endif
-                  std::vector<dof_id_type> di_new;
-                  this->SCALAR_dof_indices(di_new,v);
-                  di.insert( di.end(), di_new.begin(), di_new.end());
+                      std::vector<dof_id_type> di_new;
+                      this->SCALAR_dof_indices(di_new,var.number(vig));
+                      di.insert( di.end(), di_new.begin(), di_new.end());
+                    }
                 }
               else
-                _dof_indices(*elem, elem->p_level(), di, v,
-                             &elem_nodes[0], elem_nodes.size()
+                for (unsigned int vig=0; vig != vars_in_group; ++vig)
+                  {
+                    _dof_indices(*elem, elem->p_level(), di, vg, vig,
+                                 elem_nodes.data(),
+                                 cast_int<unsigned int>(elem_nodes.size())
 #ifdef DEBUG
-                             , tot_size
+                                 , var.number(vig), tot_size
 #endif
-                             );
+                                 );
+                  }
             }
         }
 
@@ -1976,27 +2000,35 @@ void DofMap::dof_indices (const Elem * const elem,
 
   // Get the dof numbers for each variable
   const unsigned int n_nodes = elem ? elem->n_nodes() : 0;
-  for (unsigned int v=0; v<n_vars; v++)
+  for (unsigned int vg=0; vg<n_var_groups; vg++)
     {
-      const Variable & var = this->variable(v);
+      const VariableGroup & var = this->variable_group(vg);
+      const unsigned int vars_in_group = var.n_variables();
+
       if (var.type().family == SCALAR &&
           (!elem ||
            var.active_on_subdomain(elem->subdomain_id())))
         {
+          for (unsigned int vig=0; vig != vars_in_group; ++vig)
+            {
 #ifdef DEBUG
-          tot_size += var.type().order;
+              tot_size += var.type().order;
 #endif
-          std::vector<dof_id_type> di_new;
-          this->SCALAR_dof_indices(di_new,v);
-          di.insert( di.end(), di_new.begin(), di_new.end());
+              std::vector<dof_id_type> di_new;
+              this->SCALAR_dof_indices(di_new,var.number(vig));
+              di.insert( di.end(), di_new.begin(), di_new.end());
+            }
         }
       else if (elem)
-        _dof_indices(*elem, elem->p_level(), di, v, elem->get_nodes(),
-                     n_nodes
+        for (unsigned int vig=0; vig != vars_in_group; ++vig)
+          {
+            _dof_indices(*elem, elem->p_level(), di, vg, vig,
+                         elem->get_nodes(), n_nodes
 #ifdef DEBUG
-                     , tot_size
+                         , var.number(vig), tot_size
 #endif
                      );
+          }
     }
 
 #ifdef DEBUG
@@ -2010,7 +2042,7 @@ void DofMap::dof_indices (const Elem * const elem,
                           const unsigned int vn,
                           int p_level) const
 {
-  // We now allow elem==NULL to request just SCALAR dofs
+  // We now allow elem==nullptr to request just SCALAR dofs
   // libmesh_assert(elem);
 
   LOG_SCOPE("dof_indices()", "DofMap");
@@ -2021,6 +2053,10 @@ void DofMap::dof_indices (const Elem * const elem,
   // Use the default p refinement level?
   if (p_level == -12345)
     p_level = elem ? elem->p_level() : 0;
+
+  const unsigned int vg = this->_variable_group_numbers[vn];
+  const VariableGroup & var = this->variable_group(vg);
+  const unsigned int vig = vn - var.number();
 
 #ifdef DEBUG
   // Check that sizes match in DEBUG mode
@@ -2039,18 +2075,16 @@ void DofMap::dof_indices (const Elem * const elem,
           std::vector<const Node *> elem_nodes;
           MeshTools::Subdivision::find_one_ring(sd_elem, elem_nodes);
 
-          _dof_indices(*elem, p_level, di, vn, &elem_nodes[0],
-                       elem_nodes.size()
+          _dof_indices(*elem, p_level, di, vg, vig, elem_nodes.data(),
+                       cast_int<unsigned int>(elem_nodes.size())
 #ifdef DEBUG
-                       , tot_size
+                       , vn, tot_size
 #endif
                        );
         }
 
       return;
     }
-
-  const Variable & var = this->variable(vn);
 
   // Get the dof numbers
   if (var.type().family == SCALAR &&
@@ -2065,10 +2099,10 @@ void DofMap::dof_indices (const Elem * const elem,
       di.insert( di.end(), di_new.begin(), di_new.end());
     }
   else if (elem)
-    _dof_indices(*elem, p_level, di, vn, elem->get_nodes(),
+    _dof_indices(*elem, p_level, di, vg, vig, elem->get_nodes(),
                  elem->n_nodes()
 #ifdef DEBUG
-                 , tot_size
+                 , vn, tot_size
 #endif
                  );
 
@@ -2081,7 +2115,7 @@ void DofMap::dof_indices (const Elem * const elem,
 void DofMap::dof_indices (const Node * const node,
                           std::vector<dof_id_type> & di) const
 {
-  // We allow node==NULL to request just SCALAR dofs
+  // We allow node==nullptr to request just SCALAR dofs
   // libmesh_assert(elem);
 
   LOG_SCOPE("dof_indices(Node)", "DofMap");
@@ -2089,28 +2123,37 @@ void DofMap::dof_indices (const Node * const node,
   // Clear the DOF indices vector
   di.clear();
 
-  const unsigned int n_vars  = this->n_variables();
+  const unsigned int n_var_groups  = this->n_variable_groups();
   const unsigned int sys_num = this->sys_number();
 
   // Get the dof numbers
-  for (unsigned int v=0; v<n_vars; v++)
+  for (unsigned int vg=0; vg<n_var_groups; vg++)
     {
-      const Variable & var = this->variable(v);
+      const VariableGroup & var = this->variable_group(vg);
+      const unsigned int vars_in_group = var.n_variables();
+
       if (var.type().family == SCALAR)
         {
-          std::vector<dof_id_type> di_new;
-          this->SCALAR_dof_indices(di_new,v);
-          di.insert( di.end(), di_new.begin(), di_new.end());
+          for (unsigned int vig=0; vig != vars_in_group; ++vig)
+            {
+              std::vector<dof_id_type> di_new;
+              this->SCALAR_dof_indices(di_new,var.number(vig));
+              di.insert( di.end(), di_new.begin(), di_new.end());
+            }
         }
       else
         {
-          const int n_comp = node->n_comp(sys_num,v);
-          for (int i=0; i != n_comp; ++i)
+          const int n_comp = node->n_comp_group(sys_num,vg);
+          for (unsigned int vig=0; vig != vars_in_group; ++vig)
             {
-              libmesh_assert_not_equal_to
-                (node->dof_number(sys_num,v,i),
-                 DofObject::invalid_id);
-              di.push_back(node->dof_number(sys_num,v,i));
+              for (int i=0; i != n_comp; ++i)
+                {
+                  const dof_id_type d =
+                    node->dof_number(sys_num, vg, vig, i, n_comp);
+                  libmesh_assert_not_equal_to
+                    (d, DofObject::invalid_id);
+                  di.push_back(d);
+                }
             }
         }
     }
@@ -2127,7 +2170,7 @@ void DofMap::dof_indices (const Node * const node,
       return;
     }
 
-  // We allow node==NULL to request just SCALAR dofs
+  // We allow node==nullptr to request just SCALAR dofs
   // libmesh_assert(elem);
 
   LOG_SCOPE("dof_indices(Node)", "DofMap");
@@ -2138,7 +2181,9 @@ void DofMap::dof_indices (const Node * const node,
   const unsigned int sys_num = this->sys_number();
 
   // Get the dof numbers
-  const Variable & var = this->variable(vn);
+  const unsigned int vg = this->_variable_group_numbers[vn];
+  const VariableGroup & var = this->variable_group(vg);
+
   if (var.type().family == SCALAR)
     {
       std::vector<dof_id_type> di_new;
@@ -2147,13 +2192,15 @@ void DofMap::dof_indices (const Node * const node,
     }
   else
     {
-      const int n_comp = node->n_comp(sys_num,vn);
+      const unsigned int vig = vn - var.number();
+      const int n_comp = node->n_comp_group(sys_num,vg);
       for (int i=0; i != n_comp; ++i)
         {
+          const dof_id_type d =
+            node->dof_number(sys_num, vg, vig, i, n_comp);
           libmesh_assert_not_equal_to
-            (node->dof_number(sys_num,vn,i),
-             DofObject::invalid_id);
-          di.push_back(node->dof_number(sys_num,vn,i));
+            (d, DofObject::invalid_id);
+          di.push_back(d);
         }
     }
 }
@@ -2162,16 +2209,18 @@ void DofMap::dof_indices (const Node * const node,
 void DofMap::_dof_indices (const Elem & elem,
                            int p_level,
                            std::vector<dof_id_type> & di,
-                           const unsigned int v,
+                           const unsigned int vg,
+                           const unsigned int vig,
                            const Node * const * nodes,
                            unsigned int       n_nodes
 #ifdef DEBUG
                            ,
+                           const unsigned int v,
                            std::size_t & tot_size
 #endif
                            ) const
 {
-  const Variable & var = this->variable(v);
+  const VariableGroup & var = this->variable_group(vg);
 
   if (var.active_on_subdomain(elem.subdomain_id()))
     {
@@ -2201,9 +2250,19 @@ void DofMap::_dof_indices (const Elem & elem,
         FEInterface::n_dofs_at_node_function(dim, fe_type);
 
       // Get the node-based DOF numbers
-      for (unsigned int n=0; n<n_nodes; n++)
+      for (unsigned int n=0; n != n_nodes; n++)
         {
           const Node * node      = nodes[n];
+
+          // Cache the intermediate lookups that are common to every
+          // component
+#ifdef DEBUG
+          const std::pair<unsigned int, unsigned int>
+            vg_and_offset = node->var_to_vg_and_offset(sys_num,v);
+          libmesh_assert_equal_to (vg, vg_and_offset.first);
+          libmesh_assert_equal_to (vig, vg_and_offset.second);
+#endif
+          const unsigned int n_comp = node->n_comp_group(sys_num,vg);
 
           // There is a potential problem with h refinement.  Imagine a
           // quad9 that has a linear FE on it.  Then, on the hanging side,
@@ -2222,7 +2281,7 @@ void DofMap::_dof_indices (const Elem & elem,
           // simplify p refinement)
           if (extra_hanging_dofs && !elem.is_vertex(n))
             {
-              const int dof_offset = node->n_comp(sys_num,v) - nc;
+              const int dof_offset = n_comp - nc;
 
               // We should never have fewer dofs than necessary on a
               // node unless we're getting indices on a parent element,
@@ -2233,11 +2292,12 @@ void DofMap::_dof_indices (const Elem & elem,
                   di.resize(di.size() + nc, DofObject::invalid_id);
                 }
               else
-                for (int i=node->n_comp(sys_num,v)-1; i>=dof_offset; i--)
+                for (int i=n_comp-1; i>=dof_offset; i--)
                   {
-                    libmesh_assert_not_equal_to (node->dof_number(sys_num,v,i),
-                                                 DofObject::invalid_id);
-                    di.push_back(node->dof_number(sys_num,v,i));
+                    const dof_id_type d =
+                      node->dof_number(sys_num, vg, vig, i, n_comp);
+                    libmesh_assert_not_equal_to (d, DofObject::invalid_id);
+                    di.push_back(d);
                   }
             }
           // If this is a vertex or an element without extra hanging
@@ -2246,9 +2306,10 @@ void DofMap::_dof_indices (const Elem & elem,
           else
             for (unsigned int i=0; i<nc; i++)
               {
-                libmesh_assert_not_equal_to (node->dof_number(sys_num,v,i),
-                                             DofObject::invalid_id);
-                di.push_back(node->dof_number(sys_num,v,i));
+                const dof_id_type d =
+                  node->dof_number(sys_num, vg, vig, i, n_comp);
+                libmesh_assert_not_equal_to (d, DofObject::invalid_id);
+                di.push_back(d);
               }
         }
 
@@ -2261,15 +2322,16 @@ void DofMap::_dof_indices (const Elem & elem,
       // and we should never need those indices
       if (nc != 0)
         {
-          if (elem.n_systems() > sys_num &&
-              nc <= elem.n_comp(sys_num,v))
+          const unsigned int n_comp = elem.n_comp_group(sys_num,vg);
+          if (elem.n_systems() > sys_num && nc <= n_comp)
             {
               for (unsigned int i=0; i<nc; i++)
                 {
-                  libmesh_assert_not_equal_to (elem.dof_number(sys_num,v,i),
-                                               DofObject::invalid_id);
+                  const dof_id_type d =
+                    elem.dof_number(sys_num, vg, vig, i, n_comp);
+                  libmesh_assert_not_equal_to (d, DofObject::invalid_id);
 
-                  di.push_back(elem.dof_number(sys_num,v,i));
+                  di.push_back(d);
                 }
             }
           else
@@ -2322,8 +2384,7 @@ void DofMap::SCALAR_dof_indices (std::vector<dof_id_type> & di,
 bool DofMap::semilocal_index (dof_id_type dof_index) const
 {
   // If it's not in the local indices
-  if (dof_index < this->first_dof() ||
-      dof_index >= this->end_dof())
+  if (!this->local_index(dof_index))
     {
       // and if it's not in the ghost indices, then we're not
       // semilocal
@@ -2339,12 +2400,9 @@ bool DofMap::semilocal_index (dof_id_type dof_index) const
 bool DofMap::all_semilocal_indices (const std::vector<dof_id_type> & dof_indices_in) const
 {
   // We're all semilocal unless we find a counterexample
-  for (std::size_t i=0; i != dof_indices_in.size(); ++i)
-    {
-      const dof_id_type di = dof_indices_in[i];
-      if (!this->semilocal_index(di))
-        return false;
-    }
+  for (const auto & di : dof_indices_in)
+    if (!this->semilocal_index(di))
+      return false;
 
   return true;
 }
@@ -2381,12 +2439,12 @@ void DofMap::old_dof_indices (const Elem * const elem,
 
   libmesh_assert(elem);
 
-  const ElemType type        = elem->type();
-  const unsigned int sys_num = this->sys_number();
-  const unsigned int n_vars  = this->n_variables();
-  const unsigned int dim     = elem->dim();
+  const ElemType type              = elem->type();
+  const unsigned int sys_num       = this->sys_number();
+  const unsigned int n_var_groups  = this->n_variable_groups();
+  const unsigned int dim           = elem->dim();
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
-  const bool is_inf          = elem->infinite();
+  const bool is_inf                = elem->infinite();
 #endif
 
   // If we have dof indices stored on the elem, and there's no chance
@@ -2408,8 +2466,8 @@ void DofMap::old_dof_indices (const Elem * const elem,
       // Subdivision surface FE require the 1-ring around elem
       const Tri3Subdivision * sd_elem = static_cast<const Tri3Subdivision *>(elem);
       MeshTools::Subdivision::find_one_ring(sd_elem, elem_nodes);
-      nodes_ptr = &elem_nodes[0];
-      n_nodes = elem_nodes.size();
+      nodes_ptr = elem_nodes.data();
+      n_nodes = cast_int<unsigned int>(elem_nodes.size());
     }
   else
     {
@@ -2419,136 +2477,152 @@ void DofMap::old_dof_indices (const Elem * const elem,
     }
 
   // Get the dof numbers
-  for (unsigned int v=0; v<n_vars; v++)
-    if ((v == vn) || (vn == libMesh::invalid_uint))
-      {
-        const Variable & var = this->variable(v);
-        if (var.type().family == SCALAR &&
-            (!elem ||
-             var.active_on_subdomain(elem->subdomain_id())))
-          {
-            // We asked for this variable, so add it to the vector.
-            std::vector<dof_id_type> di_new;
-            this->SCALAR_dof_indices(di_new,v,true);
-            di.insert( di.end(), di_new.begin(), di_new.end());
-          }
-        else
-          if (var.active_on_subdomain(elem->subdomain_id()))
-            { // Do this for all the variables if one was not specified
-              // or just for the specified variable
+  for (unsigned int vg=0; vg<n_var_groups; vg++)
+    {
+      const VariableGroup & var = this->variable_group(vg);
+      const unsigned int vars_in_group = var.n_variables();
 
-              // Increase the polynomial order on p refined elements,
-              // but make sure you get the right polynomial order for
-              // the OLD degrees of freedom
-              int p_adjustment = 0;
-              if (elem->p_refinement_flag() == Elem::JUST_REFINED)
+      for (unsigned int vig=0; vig<vars_in_group; vig++)
+        {
+          const unsigned int v = var.number(vig);
+          if ((vn == v) || (vn == libMesh::invalid_uint))
+            {
+              if (var.type().family == SCALAR &&
+                  (!elem ||
+                   var.active_on_subdomain(elem->subdomain_id())))
                 {
-                  libmesh_assert_greater (elem->p_level(), 0);
-                  p_adjustment = -1;
+                  // We asked for this variable, so add it to the vector.
+                  std::vector<dof_id_type> di_new;
+                  this->SCALAR_dof_indices(di_new,v,true);
+                  di.insert( di.end(), di_new.begin(), di_new.end());
                 }
-              else if (elem->p_refinement_flag() == Elem::JUST_COARSENED)
-                {
-                  p_adjustment = 1;
-                }
-              FEType fe_type = var.type();
-              fe_type.order = static_cast<Order>(fe_type.order +
-                                                 elem->p_level() +
-                                                 p_adjustment);
+              else
+                if (var.active_on_subdomain(elem->subdomain_id()))
+                  { // Do this for all the variables if one was not specified
+                    // or just for the specified variable
 
-              const bool extra_hanging_dofs =
-                FEInterface::extra_hanging_dofs(fe_type);
-
-              const FEInterface::n_dofs_at_node_ptr ndan =
-                FEInterface::n_dofs_at_node_function(dim, fe_type);
-
-              // Get the node-based DOF numbers
-              for (std::size_t n=0; n<n_nodes; n++)
-                {
-                  const Node * node = nodes_ptr[n];
-
-                  // There is a potential problem with h refinement.  Imagine a
-                  // quad9 that has a linear FE on it.  Then, on the hanging side,
-                  // it can falsely identify a DOF at the mid-edge node. This is why
-                  // we call FEInterface instead of node->n_comp() directly.
-                  const unsigned int nc =
-#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
-                    is_inf ?
-                    FEInterface::n_dofs_at_node(dim, fe_type, type, n) :
-#endif
-                    ndan (type, fe_type.order, n);
-
-                  libmesh_assert(node->old_dof_object);
-
-                  // If this is a non-vertex on a hanging node with extra
-                  // degrees of freedom, we use the non-vertex dofs (which
-                  // come in reverse order starting from the end, to
-                  // simplify p refinement)
-                  if (extra_hanging_dofs && !elem->is_vertex(n))
-                    {
-                      const int n_comp = node->old_dof_object->n_comp(sys_num,v);
-                      const int dof_offset = n_comp - nc;
-
-                      // We should never have fewer dofs than necessary on a
-                      // node unless we're getting indices on a parent element
-                      // or a just-coarsened element
-                      if (dof_offset < 0)
-                        {
-                          libmesh_assert(!elem->active() || elem->refinement_flag() ==
-                                         Elem::JUST_COARSENED);
-                          di.resize(di.size() + nc, DofObject::invalid_id);
-                        }
-                      else
-                        for (int i=n_comp-1; i>=dof_offset; i--)
-                          {
-                            libmesh_assert_not_equal_to (node->old_dof_object->dof_number(sys_num,v,i),
-                                                         DofObject::invalid_id);
-                            di.push_back(node->old_dof_object->dof_number(sys_num,v,i));
-                          }
-                    }
-                  // If this is a vertex or an element without extra hanging
-                  // dofs, our dofs come in forward order coming from the
-                  // beginning
-                  else
-                    for (unsigned int i=0; i<nc; i++)
+                    // Increase the polynomial order on p refined elements,
+                    // but make sure you get the right polynomial order for
+                    // the OLD degrees of freedom
+                    int p_adjustment = 0;
+                    if (elem->p_refinement_flag() == Elem::JUST_REFINED)
                       {
-                        libmesh_assert_not_equal_to (node->old_dof_object->dof_number(sys_num,v,i),
-                                                     DofObject::invalid_id);
-                        di.push_back(node->old_dof_object->dof_number(sys_num,v,i));
+                        libmesh_assert_greater (elem->p_level(), 0);
+                        p_adjustment = -1;
                       }
-                }
+                    else if (elem->p_refinement_flag() == Elem::JUST_COARSENED)
+                      {
+                        p_adjustment = 1;
+                      }
+                    FEType fe_type = var.type();
+                    fe_type.order = static_cast<Order>(fe_type.order +
+                                                       elem->p_level() +
+                                                       p_adjustment);
 
-              // If there are any element-based DOF numbers, get them
-              const unsigned int nc = FEInterface::n_dofs_per_elem(dim,
-                                                                   fe_type,
-                                                                   type);
+                    const bool extra_hanging_dofs =
+                      FEInterface::extra_hanging_dofs(fe_type);
 
-              // We should never have fewer dofs than necessary on an
-              // element unless we're getting indices on a parent element
-              // or a just-coarsened element
-              if (nc != 0)
-                {
-                  if (elem->old_dof_object->n_systems() > sys_num &&
-                      nc <= elem->old_dof_object->n_comp(sys_num,v))
-                    {
-                      libmesh_assert(elem->old_dof_object);
+                    const FEInterface::n_dofs_at_node_ptr ndan =
+                      FEInterface::n_dofs_at_node_function(dim, fe_type);
 
-                      for (unsigned int i=0; i<nc; i++)
-                        {
-                          libmesh_assert_not_equal_to (elem->old_dof_object->dof_number(sys_num,v,i),
-                                                       DofObject::invalid_id);
+                    // Get the node-based DOF numbers
+                    for (unsigned int n=0; n<n_nodes; n++)
+                      {
+                        const Node * node = nodes_ptr[n];
+                        const DofObject * old_dof_obj = node->old_dof_object;
+                        libmesh_assert(old_dof_obj);
 
-                          di.push_back(elem->old_dof_object->dof_number(sys_num,v,i));
-                        }
-                    }
-                  else
-                    {
-                      libmesh_assert(!elem->active() || fe_type.family == LAGRANGE ||
-                                     elem->refinement_flag() == Elem::JUST_COARSENED);
-                      di.resize(di.size() + nc, DofObject::invalid_id);
-                    }
-                }
+                        // There is a potential problem with h refinement.  Imagine a
+                        // quad9 that has a linear FE on it.  Then, on the hanging side,
+                        // it can falsely identify a DOF at the mid-edge node. This is why
+                        // we call FEInterface instead of node->n_comp() directly.
+                        const unsigned int nc =
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+                          is_inf ?
+                          FEInterface::n_dofs_at_node(dim, fe_type, type, n) :
+#endif
+                          ndan (type, fe_type.order, n);
+
+                        const int n_comp = old_dof_obj->n_comp_group(sys_num,vg);
+
+                        // If this is a non-vertex on a hanging node with extra
+                        // degrees of freedom, we use the non-vertex dofs (which
+                        // come in reverse order starting from the end, to
+                        // simplify p refinement)
+                        if (extra_hanging_dofs && !elem->is_vertex(n))
+                          {
+                            const int dof_offset = n_comp - nc;
+
+                            // We should never have fewer dofs than necessary on a
+                            // node unless we're getting indices on a parent element
+                            // or a just-coarsened element
+                            if (dof_offset < 0)
+                              {
+                                libmesh_assert(!elem->active() || elem->refinement_flag() ==
+                                               Elem::JUST_COARSENED);
+                                di.resize(di.size() + nc, DofObject::invalid_id);
+                              }
+                            else
+                              for (int i=n_comp-1; i>=dof_offset; i--)
+                                {
+                                  const dof_id_type d =
+                                    old_dof_obj->dof_number(sys_num, vg, vig, i, n_comp);
+                                  libmesh_assert_not_equal_to (d, DofObject::invalid_id);
+                                  di.push_back(d);
+                                }
+                          }
+                        // If this is a vertex or an element without extra hanging
+                        // dofs, our dofs come in forward order coming from the
+                        // beginning
+                        else
+                          for (unsigned int i=0; i<nc; i++)
+                            {
+                              const dof_id_type d =
+                                old_dof_obj->dof_number(sys_num, vg, vig, i, n_comp);
+                              libmesh_assert_not_equal_to (d, DofObject::invalid_id);
+                              di.push_back(d);
+                            }
+                      }
+
+                    // If there are any element-based DOF numbers, get them
+                    const unsigned int nc = FEInterface::n_dofs_per_elem(dim,
+                                                                         fe_type,
+                                                                         type);
+
+                    // We should never have fewer dofs than necessary on an
+                    // element unless we're getting indices on a parent element
+                    // or a just-coarsened element
+                    if (nc != 0)
+                      {
+                        const DofObject * old_dof_obj = elem->old_dof_object;
+                        libmesh_assert(old_dof_obj);
+
+                        const unsigned int n_comp =
+                          old_dof_obj->n_comp_group(sys_num,vg);
+
+                        if (old_dof_obj->n_systems() > sys_num &&
+                            nc <= n_comp)
+                          {
+
+                            for (unsigned int i=0; i<nc; i++)
+                              {
+                                const dof_id_type d =
+                                  old_dof_obj->dof_number(sys_num, vg, vig, i, n_comp);
+
+                                di.push_back(d);
+                              }
+                          }
+                        else
+                          {
+                            libmesh_assert(!elem->active() || fe_type.family == LAGRANGE ||
+                                           elem->refinement_flag() == Elem::JUST_COARSENED);
+                            di.resize(di.size() + nc, DofObject::invalid_id);
+                          }
+                      }
+                  }
             }
-      } // end loop over variables
+        } // end loop over variables within group
+    } // end loop over variable groups
 }
 
 #endif // LIBMESH_ENABLE_AMR
@@ -2570,12 +2644,12 @@ void DofMap::find_connected_dofs (std::vector<dof_id_type> & elem_dofs) const
   // in turn depend on others.  So, we need to repeat this process
   // in that case until the system depends only on unconstrained
   // degrees of freedom.
-  for (std::size_t i=0; i<elem_dofs.size(); i++)
-    if (this->is_constrained_dof(elem_dofs[i]))
+  for (const auto & dof : elem_dofs)
+    if (this->is_constrained_dof(dof))
       {
         // If the DOF is constrained
         DofConstraints::const_iterator
-          pos = _dof_constraints.find(elem_dofs[i]);
+          pos = _dof_constraints.find(dof);
 
         libmesh_assert (pos != _dof_constraints.end());
 
@@ -2585,17 +2659,13 @@ void DofMap::find_connected_dofs (std::vector<dof_id_type> & elem_dofs) const
         // rows - we should optimize those DoFs away in the future.  [RHS]
         //libmesh_assert (!constraint_row.empty());
 
-        DofConstraintRow::const_iterator it     = constraint_row.begin();
-        DofConstraintRow::const_iterator it_end = constraint_row.end();
-
-
         // Add the DOFs this dof is constrained in terms of.
         // note that these dofs might also be constrained, so
         // we will need to call this function recursively.
-        for ( ; it != it_end; ++it)
-          if (!dof_set.count (it->first))
+        for (const auto & pr : constraint_row)
+          if (!dof_set.count (pr.first))
             {
-              dof_set.insert (it->first);
+              dof_set.insert (pr.first);
               done = false;
             }
       }
@@ -2641,12 +2711,8 @@ std::string DofMap::get_info() const
 
   // If we calculated the exact sparsity pattern, then we can report
   // exact bandwidth figures:
-  std::vector<SparseMatrix<Number> *>::const_iterator
-    pos = _matrices.begin(),
-    end = _matrices.end();
-
-  for (; pos != end; ++pos)
-    if ((*pos)->need_full_sparsity_pattern())
+  for (const auto & mat : _matrices)
+    if (mat->need_full_sparsity_pattern())
       may_equal = " = ";
 
   dof_id_type max_n_nz = 0, max_n_oz = 0;
@@ -2654,10 +2720,10 @@ std::string DofMap::get_info() const
 
   if (_n_nz)
     {
-      for (std::size_t i = 0; i != _n_nz->size(); ++i)
+      for (const auto & val : *_n_nz)
         {
-          max_n_nz = std::max(max_n_nz, (*_n_nz)[i]);
-          avg_n_nz += (*_n_nz)[i];
+          max_n_nz = std::max(max_n_nz, val);
+          avg_n_nz += val;
         }
 
       std::size_t n_nz_size = _n_nz->size();
@@ -2670,10 +2736,10 @@ std::string DofMap::get_info() const
 
       libmesh_assert(_n_oz);
 
-      for (std::size_t i = 0; i != (*_n_oz).size(); ++i)
+      for (const auto & val : *_n_oz)
         {
-          max_n_oz = std::max(max_n_oz, (*_n_oz)[i]);
-          avg_n_oz += (*_n_oz)[i];
+          max_n_oz = std::max(max_n_oz, val);
+          avg_n_oz += val;
         }
 
       std::size_t n_oz_size = _n_oz->size();
@@ -2707,8 +2773,7 @@ std::string DofMap::get_info() const
     {
       // Only count local constraints, then sum later
       const dof_id_type constrained_dof = pr.first;
-      if (constrained_dof < this->first_dof() ||
-          constrained_dof >= this->end_dof())
+      if (!this->local_index(constrained_dof))
         continue;
 
       const DofConstraintRow & row = pr.second;

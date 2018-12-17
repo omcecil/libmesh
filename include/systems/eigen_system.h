@@ -37,11 +37,15 @@ template <typename T> class SparseMatrix;
 
 
 /**
- * This class provides a specific system class.  It aims
- * at solving eigenvalue problems.  Currently, this class
- * is able  to handle standard eigenvalue problems
- * \p A*x=lambda*x  and generalized eigenvalue problems
- * \p A*x=lambda*B*x.
+ * \brief Manages consistently variables, degrees of freedom, and coefficient
+ * vectors for eigenvalue problems.
+ *
+ * Currently, this class is able to handle standard eigenvalue
+ * problems \p A*x=lambda*x and generalized eigenvalue problems \p
+ * A*x=lambda*B*x.
+ *
+ * The matrices EigenSystem::matrix_A and EigenSystem::matrix_B should be
+ * filled during assembly.
  *
  * \author Steffen Peterson
  * \date 2005
@@ -83,23 +87,23 @@ public:
    * Clear all the data structures associated with
    * the system.
    */
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
   /**
    * Reinitializes the member data fields associated with
    * the system, so that, e.g., \p assemble() may be used.
    */
-  virtual void reinit () libmesh_override;
+  virtual void reinit () override;
 
   /**
    * Assembles & solves the eigen system.
    */
-  virtual void solve () libmesh_override;
+  virtual void solve () override;
 
   /**
    * Assembles the system matrix.
    */
-  virtual void assemble () libmesh_override;
+  virtual void assemble () override;
 
   /**
    * \returns Real and imaginary part of the ith eigenvalue and copies
@@ -111,12 +115,12 @@ public:
    * \returns \p "Eigen".  Helps in identifying
    * the system type in an equation system file.
    */
-  virtual std::string system_type () const libmesh_override { return "Eigen"; }
+  virtual std::string system_type () const override { return "Eigen"; }
 
   /**
    * \returns The number of matrices handled by this system
    */
-  virtual unsigned int n_matrices () const libmesh_override;
+  virtual unsigned int n_matrices () const override;
 
   /**
    * \returns The number of converged eigenpairs.
@@ -168,7 +172,7 @@ protected:
    * Initializes the member data fields associated with
    * the system, so that, e.g., \p assemble() may be used.
    */
-  virtual void init_data () libmesh_override;
+  virtual void init_data () override;
 
   /**
    * Initializes the matrices associated with the system

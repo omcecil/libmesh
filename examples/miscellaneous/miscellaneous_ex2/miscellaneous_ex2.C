@@ -50,6 +50,7 @@
 #include "libmesh/unv_io.h"
 #include "libmesh/equation_systems.h"
 #include "libmesh/elem.h"
+#include "libmesh/enum_xdr_mode.h"
 
 // Include FrequencySystem.  This class offers added functionality for
 // the solution of frequency-dependent systems.
@@ -227,14 +228,8 @@ int main (int argc, char ** argv)
   {
     NumericVector<Number> & freq_indep_rhs = f_system.get_vector("rhs");
 
-    MeshBase::const_node_iterator       node_it  = mesh.nodes_begin();
-    const MeshBase::const_node_iterator node_end = mesh.nodes_end();
-
-    for ( ; node_it != node_end; ++node_it)
+    for (const auto & node : mesh.node_ptr_range())
       {
-        // the current node pointer
-        Node * node = *node_it;
-
         // Get the data read in from the dataset for the current Node, if any.
         const std::vector<Number> * nodal_data = unvio.get_data(node);
 
@@ -434,7 +429,7 @@ void assemble_helmholtz(EquationSystems & es,
       // If the element has no neighbor on a side then that
       // side MUST live on a boundary of the domain.
       for (auto side : elem->side_index_range())
-        if (elem->neighbor_ptr(side) == libmesh_nullptr)
+        if (elem->neighbor_ptr(side) == nullptr)
           {
             LOG_SCOPE("damping", "assemble_helmholtz");
 

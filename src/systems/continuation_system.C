@@ -30,7 +30,7 @@ ContinuationSystem::ContinuationSystem (EquationSystems & es,
                                         const std::string & name_in,
                                         const unsigned int number_in) :
   Parent(es, name_in, number_in),
-  continuation_parameter(libmesh_nullptr),
+  continuation_parameter(nullptr),
   quiet(true),
   continuation_parameter_tolerance(1.e-6),
   solution_tolerance(1.e-6),
@@ -49,7 +49,7 @@ ContinuationSystem::ContinuationSystem (EquationSystems & es,
   rhs_mode(Residual),
   linear_solver(LinearSolver<Number>::build(es.comm())),
   tangent_initialized(false),
-  newton_solver(libmesh_nullptr),
+  newton_solver(nullptr),
   dlambda_ds(0.707),
   ds(0.1),
   ds_current(0.1),
@@ -60,7 +60,7 @@ ContinuationSystem::ContinuationSystem (EquationSystems & es,
   // Warn about using untested code
   libmesh_experimental();
 
-  if (libMesh::on_command_line("--solver_system_names"))
+  if (libMesh::on_command_line("--solver-system-names"))
     linear_solver->init((this->name()+"_").c_str());
   else
     linear_solver->init();

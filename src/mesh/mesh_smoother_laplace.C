@@ -50,12 +50,13 @@ void LaplaceMeshSmoother::smooth(unsigned int n_iterations)
   // Don't smooth the nodes on the boundary...
   // this would change the mesh geometry which
   // is probably not something we want!
-  std::vector<bool> on_boundary;
-  MeshTools::find_boundary_nodes(_mesh, on_boundary);
+  auto on_boundary = MeshTools::find_boundary_nodes(_mesh);
 
-  // Ensure that the find_boundary_nodes() function returned a properly-sized vector
-  if (on_boundary.size() != _mesh.max_node_id())
-    libmesh_error_msg("MeshTools::find_boundary_nodes() returned incorrect length vector!");
+  // Also: don't smooth block bondary nodes
+  auto on_block_boundary = MeshTools::find_block_boundary_nodes(_mesh);
+
+  // Merge them
+  on_boundary.insert(on_block_boundary.begin(), on_block_boundary.end());
 
   // We can only update the nodes after all new positions were
   // determined. We store the new positions here
@@ -67,13 +68,13 @@ void LaplaceMeshSmoother::smooth(unsigned int n_iterations)
 
       for (auto & node : _mesh.local_node_ptr_range())
         {
-          if (node == libmesh_nullptr)
-            libmesh_error_msg("[" << _mesh.processor_id() << "]: Node iterator returned NULL pointer.");
+          if (node == nullptr)
+            libmesh_error_msg("[" << _mesh.processor_id() << "]: Node iterator returned nullptr.");
 
           // leave the boundary intact
           // Only relocate the nodes which are vertices of an element
           // All other entries of _graph (the secondary nodes) are empty
-          if (!on_boundary[node->id()] && (_graph[node->id()].size() > 0))
+          if (!on_boundary.count(node->id()) && (_graph[node->id()].size() > 0))
             {
               Point avg_position(0.,0.,0.);
 
@@ -97,7 +98,7 @@ void LaplaceMeshSmoother::smooth(unsigned int n_iterations)
 
       // now update the node positions (local node positions only)
       for (auto & node : _mesh.local_node_ptr_range())
-        if (!on_boundary[node->id()] && (_graph[node->id()].size() > 0))
+        if (!on_boundary.count(node->id()) && (_graph[node->id()].size() > 0))
           {
             // Should call Point::op=
             // libMesh::out << "Setting node id " << node->id() << " to position " << new_positions[node->id()];
@@ -127,7 +128,7 @@ void LaplaceMeshSmoother::smooth(unsigned int n_iterations)
       for (unsigned int son=son_begin; son<son_end; son++)
         {
           // Don't smooth second-order nodes which are on the boundary
-          if (!on_boundary[elem->node_id(son)])
+          if (!on_boundary.count(elem->node_id(son)))
             {
               const unsigned int n_adjacent_vertices =
                 elem->n_second_order_adjacent_vertices(son);
@@ -172,7 +173,7 @@ void LaplaceMeshSmoother::init()
               // boundary or for which the current element's
               // id is greater than its neighbor's.
               // Sides get only built once.
-              if ((elem->neighbor_ptr(s) == libmesh_nullptr) ||
+              if ((elem->neighbor_ptr(s) == nullptr) ||
                   (elem->id() > elem->neighbor_ptr(s)->id()))
                 {
                   std::unique_ptr<const Elem> side(elem->build_side_ptr(s));
@@ -191,7 +192,7 @@ void LaplaceMeshSmoother::init()
 
         for (auto & elem : _mesh.active_local_element_ptr_range())
           for (auto f : elem->side_index_range()) // Loop over faces
-            if ((elem->neighbor_ptr(f) == libmesh_nullptr) ||
+            if ((elem->neighbor_ptr(f) == nullptr) ||
                 (elem->id() > elem->neighbor_ptr(f)->id()))
               {
                 // We need a full (i.e. non-proxy) element for the face, since we will

@@ -23,20 +23,17 @@
 // Local includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/libmesh.h"
-#include "libmesh/enum_xdr_mode.h"
+#include "libmesh/enum_xdr_mode.h" // READ, WRITE, etc.
 #include "libmesh/auto_ptr.h" // deprecated
 
 // C++ includes
 #include <memory>
+#include <cstdio> // FILE
 #ifdef LIBMESH_HAVE_XDR
-#  ifdef LIBMESH_HAVE_RPC_RPC_H
-#    include <rpc/rpc.h>
-#  elif  LIBMESH_HAVE_RPC_XDR_H
-#    include <rpc/xdr.h>
-#  endif
+# include <rpc/rpc.h>
+# include <rpc/xdr.h>
 #endif
 
-#include <cstdio> // FILE
 #include <iosfwd>
 #include <vector>
 #include <string>

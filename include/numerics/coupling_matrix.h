@@ -236,13 +236,15 @@ public:
         libmesh_assert_less_equal(firstloc, _location);
 
 #ifdef DEBUG
-        CouplingMatrix::rc_type::const_iterator next = lb;
-        next++;
-        if (next != _my_mat._ranges.end())
-          {
-            // Ranges should be sorted and should not touch
-            libmesh_assert_greater(next->first, lastloc+1);
-          }
+        {
+          CouplingMatrix::rc_type::const_iterator next = lb;
+          next++;
+          if (next != _my_mat._ranges.end())
+            {
+              // Ranges should be sorted and should not touch
+              libmesh_assert_greater(next->first, lastloc+1);
+            }
+        }
 #endif
 
         // If we're in this range, we might need to shorten or remove
@@ -481,7 +483,7 @@ public:
   {
     libmesh_assert_not_equal_to
       (_location, std::numeric_limits<std::size_t>::max());
-    return _location % _row._mat.size();
+    return cast_int<unsigned int>(_location % _row._mat.size());
   }
 
   ConstCouplingRowConstIterator & operator++ ()

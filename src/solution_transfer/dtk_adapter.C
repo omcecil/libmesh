@@ -21,20 +21,23 @@
 
 #ifdef LIBMESH_TRILINOS_HAVE_DTK
 
+// libMesh includes
 #include "libmesh/dtk_adapter.h"
-
 #include "libmesh/dtk_evaluator.h"
 #include "libmesh/mesh.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/elem.h"
 #include "libmesh/equation_systems.h"
 
+// Trilinos includes
 #include "libmesh/ignore_warnings.h"
 #include <DTK_MeshTypes.hpp>
 #include <Teuchos_Comm.hpp>
 #include "libmesh/restore_warnings.h"
 
+// C++ includes
 #include <vector>
+#include <numeric>
 
 namespace libMesh
 {
@@ -71,8 +74,8 @@ DTKAdapter::DTKAdapter(Teuchos::RCP<const Teuchos::Comm<int>> in_comm, EquationS
   }
 
   // Currently assuming all elements are the same!
-  DataTransferKit::DTK_ElementTopology element_topology = get_element_topology(mesh.elem(0));
-  unsigned int n_nodes_per_elem = mesh.elem(0)->n_nodes();
+  DataTransferKit::DTK_ElementTopology element_topology = get_element_topology(mesh.elem_ptr(0));
+  unsigned int n_nodes_per_elem = mesh.elem_ptr(0)->n_nodes();
 
   unsigned int n_local_elem = mesh.n_local_elem();
 
@@ -96,8 +99,7 @@ DTKAdapter::DTKAdapter(Teuchos::RCP<const Teuchos::Comm<int>> in_comm, EquationS
   }
 
   Teuchos::ArrayRCP<int> permutation_list(n_nodes_per_elem);
-  for (unsigned int i = 0; i < n_nodes_per_elem; ++i )
-    permutation_list[i] = i;
+  std::iota(permutation_list.begin(), permutation_list.end(), 0);
 
   /*
     if (this->processor_id() == 1)
@@ -233,7 +235,7 @@ DTKAdapter::update_variable_values(std::string var_name)
 System *
 DTKAdapter::find_sys(std::string var_name)
 {
-  System * sys = libmesh_nullptr;
+  System * sys = nullptr;
 
   // Find the system this variable is from
   for (unsigned int i=0; i<es.n_systems(); i++)

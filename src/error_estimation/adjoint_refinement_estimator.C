@@ -43,7 +43,9 @@
 #include "libmesh/implicit_system.h"
 #include "libmesh/partitioner.h"
 #include "libmesh/adjoint_refinement_estimator.h"
-
+#include "libmesh/enum_error_estimator_type.h"
+#include "libmesh/enum_norm_type.h"
+#include "libmesh/utility.h"
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -67,6 +69,23 @@ namespace libMesh
 // Both a global QoI error estimate and element wise error indicators are included
 // Note that the element wise error indicators slightly over estimate the error in
 // each element
+
+AdjointRefinementEstimator::AdjointRefinementEstimator() :
+  ErrorEstimator(),
+  number_h_refinements(1),
+  number_p_refinements(0),
+  _residual_evaluation_physics(nullptr),
+  _qoi_set(QoISet())
+{
+  // We're not actually going to use error_norm; our norms are
+  // absolute values of QoI error.
+  error_norm = INVALID_NORM;
+}
+
+ErrorEstimatorType AdjointRefinementEstimator::type() const
+{
+  return ADJOINT_REFINEMENT;
+}
 
 void AdjointRefinementEstimator::estimate_error (const System & _system,
                                                  ErrorVector & error_per_cell,
@@ -98,7 +117,8 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
   // Loop over all the adjoint problems and, if any have heterogenous
   // Dirichlet conditions, get the corresponding coarse lift
   // function(s)
-  for (std::size_t j=0; j != system.qoi.size(); j++)
+  for (unsigned int j=0,
+       n_qois = system.n_qois(); j != n_qois; j++)
     {
       // Skip this QoI if it is not in the QoI Set or if there are no
       // heterogeneous Dirichlet boundaries for it
@@ -106,7 +126,7 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
           system.get_dof_map().has_adjoint_dirichlet_boundaries(j))
         {
           // Next, we are going to build up the residual for evaluating the flux QoI
-          NumericVector<Number> * coarse_residual = libmesh_nullptr;
+          NumericVector<Number> * coarse_residual = nullptr;
 
           // The definition of a flux QoI is R(u^h, L) where R is the residual as defined
           // by a conservation law. Therefore, if we are using stabilization, the
@@ -151,13 +171,12 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
 
   // We'll want to back up all coarse grid vectors
   std::map<std::string, std::unique_ptr<NumericVector<Number>>> coarse_vectors;
-  for (System::vectors_iterator vec = system.vectors_begin(); vec !=
-         system.vectors_end(); ++vec)
+  for (const auto & pr : as_range(system.vectors_begin(), system.vectors_end()))
     {
       // The (string) name of this vector
-      const std::string & var_name = vec->first;
+      const std::string & var_name = pr.first;
 
-      coarse_vectors[var_name] = vec->second->clone();
+      coarse_vectors[var_name] = pr.second->clone();
     }
 
   // Back up the coarse solution and coarse local solution
@@ -232,7 +251,7 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
   // Copy the projected coarse grid solutions, which will be
   // overwritten by solve()
   std::vector<std::unique_ptr<NumericVector<Number>>> coarse_adjoints;
-  for (std::size_t j=0; j != system.qoi.size(); j++)
+  for (unsigned int j=0; j != system.n_qois(); j++)
     {
       if (_qoi_set.has_index(j))
         {
@@ -247,7 +266,7 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
           coarse_adjoints.emplace_back(std::move(coarse_adjoint));
         }
       else
-        coarse_adjoints.emplace_back(libmesh_nullptr);
+        coarse_adjoints.emplace_back(nullptr);
     }
 
   // Next, we are going to build up the residual for evaluating the
@@ -280,12 +299,12 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
   // we first compute the global QoI error estimate
 
   // Resize the computed_global_QoI_errors vector to hold the error estimates for each QoI
-  computed_global_QoI_errors.resize(system.qoi.size());
+  computed_global_QoI_errors.resize(system.n_qois());
 
   // Loop over all the adjoint solutions and get the QoI error
   // contributions from all of them.  While we're looping anyway we'll
   // pull off the coarse adjoints
-  for (std::size_t j=0; j != system.qoi.size(); j++)
+  for (unsigned int j=0; j != system.n_qois(); j++)
     {
       // Skip this QoI if not in the QoI Set
       if (_qoi_set.has_index(j))
@@ -331,12 +350,12 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
   // stabilized/non-stabilized formulations, except for the case where we not using a
   // heterogenous adjoint bc and have a stabilized formulation.
   // Then, R(u^h_s, z^h_s)  != 0 (no Galerkin orthogonality w.r.t the non-stabilized residual)
-  for (std::size_t j=0; j != system.qoi.size(); j++)
+  for (unsigned int j=0; j != system.n_qois(); j++)
     {
       // Skip this QoI if not in the QoI Set
       if (_qoi_set.has_index(j))
         {
-          // If we have a NULL residual evaluation physics pointer, we
+          // If we have a nullptr residual evaluation physics pointer, we
           // assume the user's formulation is consistent from mesh to
           // mesh, so we have Galerkin orthogonality and we can get
           // better indicator results by subtracting a coarse adjoint.
@@ -400,16 +419,9 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
             // A vector to hold the coarse grid parents neighbors
             std::vector<dof_id_type> coarse_grid_neighbors;
 
-            // Iterators over the fine grid neighbors set
-            std::set<const Elem *>::iterator fine_neighbor_it = fine_grid_neighbor_set.begin();
-            const std::set<const Elem *>::iterator fine_neighbor_end = fine_grid_neighbor_set.end();
-
             // Loop over all the fine neighbors of this node
-            for (; fine_neighbor_it != fine_neighbor_end ; ++fine_neighbor_it)
+            for (const auto & fine_elem : fine_grid_neighbor_set)
               {
-                // Pointer to the current fine neighbor element
-                const Elem * fine_elem = *fine_neighbor_it;
-
                 // Find the element id for the corresponding coarse grid element
                 const Elem * coarse_elem = fine_elem;
                 for (unsigned int j = 0; j != number_h_refinements; ++j)
@@ -464,7 +476,7 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
 
   // We will loop over each adjoint solution, localize that adjoint
   // solution and then loop over local elements
-  for (std::size_t i=0; i != system.qoi.size(); i++)
+  for (unsigned int i=0; i != system.n_qois(); i++)
     {
       // Skip this QoI if not in the QoI Set
       if (_qoi_set.has_index(i))
@@ -495,11 +507,9 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
               // We will have to manually do the dot products.
               Number local_contribution = 0.;
 
-              for (std::size_t j=0; j != dof_indices.size(); j++)
-                {
-                  // The contribution to the error indicator for this element from the current QoI
-                  local_contribution += (*localized_projected_residual)(dof_indices[j]) * (*localized_adjoint_solution)(dof_indices[j]);
-                }
+              // Sum the contribution to the error indicator for each element from the current QoI
+              for (const auto & dof : dof_indices)
+                local_contribution += (*localized_projected_residual)(dof) * (*localized_adjoint_solution)(dof);
 
               // Multiply by the error weight for this QoI
               local_contribution *= error_weight;
@@ -561,16 +571,14 @@ void AdjointRefinementEstimator::estimate_error (const System & _system,
   *system.solution = *coarse_solution;
   *system.current_local_solution = *coarse_local_solution;
 
-  for (System::vectors_iterator vec = system.vectors_begin(); vec !=
-         system.vectors_end(); ++vec)
+  for (const auto & pr : as_range(system.vectors_begin(), system.vectors_end()))
     {
       // The (string) name of this vector
-      const std::string & var_name = vec->first;
+      const std::string & var_name = pr.first;
 
       // If it's a vector we already had (and not a newly created
       // vector like an adjoint rhs), we need to restore it.
-      std::map<std::string, std::unique_ptr<NumericVector<Number>>>::iterator it =
-        coarse_vectors.find(var_name);
+      auto it = coarse_vectors.find(var_name);
       if (it != coarse_vectors.end())
         {
           NumericVector<Number> * coarsevec = it->second.get();

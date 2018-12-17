@@ -19,9 +19,15 @@
 
 // Local includes
 #include "libmesh/edge_edge3.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
+
+// Edge3 class static member initializations
+const int Edge3::num_nodes;
+const int Edge3::num_children;
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -69,7 +75,7 @@ bool Edge3::is_node_on_side(const unsigned int n,
                             const unsigned int s) const
 {
   libmesh_assert_less (s, 2);
-  libmesh_assert_less (n, 3);
+  libmesh_assert_less (n, Edge3::num_nodes);
   return (s == n);
 }
 
@@ -86,6 +92,13 @@ bool Edge3::has_affine_map() const
 {
   return (this->point(2).relative_fuzzy_equals
           ((this->point(0) + this->point(1))/2));
+}
+
+
+
+Order Edge3::default_order() const
+{
+  return SECOND;
 }
 
 

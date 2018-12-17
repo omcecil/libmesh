@@ -116,6 +116,11 @@ private:
   //
   // FIXME - we require C++11 now, so we can be smarter about this.
   std::pair<std::vector <PostWaitWork * >, unsigned int> * post_wait_work;
+
+  // waitany() takes a container of Requests, so it can't be a member
+  // function, but it needs access to each Request's _prior_request
+  // and _post_wait_work
+  friend std::size_t waitany (std::vector<Request> &);
 };
 
 /**
@@ -124,10 +129,15 @@ private:
 inline Status wait (Request & r) { return r.wait(); }
 
 /**
- * Wait for a non-blocking send or receive to finish
+ * Wait for all non-blocking operations to finish
  */
-inline void wait (std::vector<Request> & r)
-{ for (std::size_t i=0; i<r.size(); i++) r[i].wait(); }
+void wait (std::vector<Request> & r);
+
+/**
+ * Wait for at least one non-blocking operation to finish.  Return the
+ * index of the request which completed.
+ */
+std::size_t waitany (std::vector<Request> & r);
 
 
 } // namespace Parallel

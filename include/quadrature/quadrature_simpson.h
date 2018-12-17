@@ -49,33 +49,38 @@ public:
    * to be smart and return, thinking it had already done the work.
    */
   explicit
-  QSimpson (const unsigned int _dim,
-            const Order o=THIRD) :
-    QBase(_dim, o)
+  QSimpson (unsigned int dim,
+            Order order=THIRD) :
+    QBase(dim, order)
   {
     if (_dim == 1)
       init(EDGE2);
   }
 
   /**
-   * Destructor. Empty.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QSimpson() {}
+  QSimpson (const QSimpson &) = default;
+  QSimpson (QSimpson &&) = default;
+  QSimpson & operator= (const QSimpson &) = default;
+  QSimpson & operator= (QSimpson &&) = default;
+  virtual ~QSimpson() = default;
 
   /**
    * \returns \p QSIMPSON.
    */
-  virtual QuadratureType type() const libmesh_override { return QSIMPSON; }
+  virtual QuadratureType type() const override;
 
 
 private:
 
   virtual void init_1D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 };
 
 } // namespace libMesh

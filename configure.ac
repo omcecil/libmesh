@@ -126,6 +126,39 @@ AC_SUBST(PERL)
 # --------------------------------------------------------------
 LIBMESH_SET_COMPILERS
 
+# By default we do not set any -march flag, but this can be turned on
+# by configuring with --enable-march
+AC_ARG_ENABLE(march,
+              AC_HELP_STRING([--enable-march],
+                             [Determine the correct -march flag for this system]),
+              [AS_CASE("${enableval}",
+                       [yes], [enablemarch=yes],
+                       [no],  [enablemarch=no],
+                       [AC_MSG_ERROR(bad value ${enableval} for --enable-march)])],
+              [enablemarch=no])
+
+# Set the value of the cache variable $ax_cv_gcc_archflag based
+# on the current architecture. For the first argument:
+# [yes] = generate portable code (-mtune)
+# [no]  = generate architecture-specific code (-march)
+# This script is specifc to GCC; the flags it determines might not
+# work for other compilers. There is also an optional third
+# argument which controls what happens when determining an arch flag
+# fails, we don't do anything in that case.
+AS_IF([test "x$enablemarch" != "xno"],
+      [
+        AX_GCC_ARCHFLAG([no],
+                        [
+                          dnl Action if success - append $ax_cv_gcc_archflag to CXXFLAGS flags for
+                          dnl all but debugging METHODS. I don't think it is needed with -O0 when
+                          dnl debugging.
+                          CXXFLAGS_OPT="$CXXFLAGS_OPT $ax_cv_gcc_archflag"
+                          CXXFLAGS_DEVEL="$CXXFLAGS_DEVEL $ax_cv_gcc_archflag"
+                          CXXFLAGS_PROF="$CXXFLAGS_PROF $ax_cv_gcc_archflag"
+                          CXXFLAGS_OPROF="$CXXFLAGS_OPROF $ax_cv_gcc_archflag"
+                        ])
+      ])
+
 # --------------------------------------------------------------
 # Allow the user to explicitly turn off C++11 support by saying
 # --disable-cxx11?  This is no longer supported.
@@ -194,6 +227,58 @@ libmesh_CXXFLAGS="$GCOV_FLAGS $libmesh_CXXFLAGS"
 #-----------------------------------------------------
 LIBMESH_SET_METHODS
 
+# By default we merely enable some warnings, but we can turn those
+# into errors (for library code only, not contrib or external code)
+# by configuring with --enable-werror
+AC_ARG_ENABLE(werror,
+              AC_HELP_STRING([--enable-werror],
+                             [Turn compilation warnings into errors]),
+              [AS_CASE("${enableval}",
+                       [yes], [enablewerror=yes],
+                       [no],  [enablewerror=no],
+                       [AC_MSG_ERROR(bad value ${enableval} for --enable-werror)])],
+              [enablewerror=no])
+
+ANY_WERROR_FLAG=$WERROR_FLAGS
+AS_IF([test "x$enablewerror" != "xyes"],
+        [ANY_WERROR_FLAG=''
+         AC_MSG_RESULT(<<< Compiler warnings are just warnings >>>)],
+        [AX_CHECK_COMPILE_FLAG($WERROR_FLAGS,
+          [AC_MSG_RESULT(<<< Compiler warnings are now errors >>>)],
+          [ANY_WERROR_FLAG=''
+           AC_MSG_RESULT(<<< Compiler does not support $WERROR_FLAGS >>>)
+           AC_MSG_RESULT(<<< Compiler warnings are just warnings >>>)])])
+AC_SUBST(ANY_WERROR_FLAG)
+
+# By default we merely enable some of the most common compiler
+# warnings, but we can turn on as many warnings as we avoid triggering
+# (for library code only, not contrib or external code) by configuring
+# with --enable-paranoid-warnings
+AC_ARG_ENABLE(paranoid-warnings,
+              AC_HELP_STRING([--enable-paranoid-warnings],
+                             [Turn on paranoid compiler warnings]),
+              [AS_CASE("${enableval}",
+                       [yes], [enableparanoid=yes],
+                       [no],  [enableparanoid=no],
+                       [AC_MSG_ERROR(bad value ${enableval} for --enable-paranoid-warnings)])],
+              [enableparanoid=no])
+
+dnl Test paranoid warning flags with -Werror on so we can detect if
+dnl some are unrecognized
+ANY_PARANOID_FLAGS=$PARANOID_FLAGS
+AS_IF([test "x$enableparanoid" != "xyes"],
+        [ANY_PARANOID_FLAGS=''
+         AC_MSG_RESULT(<<< Disabling extra paranoid compiler warnings >>>)],
+        [old_CXXFLAGS="$CXXFLAGS"
+         CXXFLAGS="$CXXFLAGS $WERROR_FLAGS $PARANOID_FLAGS"
+         AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
+          [AC_MSG_RESULT(<<< Enabled extra paranoid compiler warnings >>>)],
+          [ANY_PARANOID_FLAGS=''
+           AC_MSG_RESULT(<<< Compiler may not support all of $PARANOID_FLAGS >>>)
+           AC_MSG_RESULT(<<< Disabling extra paranoid compiler warnings >>>)])
+         CXXFLAGS="$old_CXXFLAGS"])
+AC_SUBST(ANY_PARANOID_FLAGS)
+
 # --------------------------------------------------------------
 # Test for mandatory C++11 features, those which libMesh now requires
 # for internal use.
@@ -220,31 +305,82 @@ LIBMESH_TEST_CXX11_MAKE_UNIQUE_WORKAROUND
 AS_IF([test "x$have_cxx11_make_unique_workaround" != "xyes"],
       [AC_MSG_ERROR([libMesh requires C++11 variadic template support])])
 
+LIBMESH_TEST_CXX11_TUPLE
+AS_IF([test "x$have_cxx11_tuple" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 std::tuple support])])
+
+LIBMESH_TEST_CXX11_LAMBDA
+AS_IF([test "x$have_cxx11_lambda" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 lambda support])])
+
+LIBMESH_TEST_CXX11_FIXED_TYPE_ENUM
+AS_IF([test "x$have_cxx11_fixed_type_enum" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 fixed type enumeration support])])
+
+LIBMESH_TEST_CXX11_FIXED_TYPE_ENUM_FWD
+AS_IF([test "x$have_cxx11_fixed_type_enum_fwd" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 fixed type enumeration forward declaration support])])
+
+LIBMESH_TEST_CXX11_OVERRIDE
+AS_IF([test "x$have_cxx11_override" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 compiler support the override keyword])])
+
+LIBMESH_TEST_CXX11_MOVE_CONSTRUCTORS
+AS_IF([test "x$have_cxx11_move_constructors" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 move constructor support])])
+
+LIBMESH_TEST_CXX11_DELETED_FUNCTIONS
+AS_IF([test "x$have_cxx11_deleted_functions" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 deleted function support])])
+
+LIBMESH_TEST_CXX11_DEFAULTED_FUNCTIONS
+AS_IF([test "x$have_cxx11_defaulted_functions" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 defaulted function support])])
+
+LIBMESH_TEST_CXX11_NULLPTR
+AS_IF([test "x$have_cxx11_nullptr" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires the C++11 nullptr keyword])])
+
+LIBMESH_TEST_CXX11_FINAL
+AS_IF([test "x$have_cxx11_final" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires the C++11 final keyword])])
+
+LIBMESH_TEST_CXX11_DECLTYPE
+AS_IF([test "x$have_cxx11_decltype" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires the C++11 decltype keyword])])
+
+LIBMESH_TEST_CXX11_BEGIN_END
+AS_IF([test "x$have_cxx11_begin_end" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 std::begin/end support])])
+
+LIBMESH_TEST_CXX11_CONTAINER_ERASE
+AS_IF([test "x$have_cxx11_container_erase" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 support for std container erase() functions returning iterators])])
+
+LIBMESH_TEST_CXX11_IOTA
+AS_IF([test "x$have_cxx11_iota" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 support for std::iota])])
+
+LIBMESH_TEST_CXX11_VECTOR_DATA
+AS_IF([test "x$have_cxx11_vector_data" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 support for std::vector::data()])])
+
 # --------------------------------------------------------------
 # Test for optional modern C++ features, which libMesh offers shims
 # for and/or which libMesh applications may want to selectively use.
 # --------------------------------------------------------------
-LIBMESH_TEST_CXX11_MOVE
-LIBMESH_TEST_CXX11_MOVE_CONSTRUCTORS
-LIBMESH_TEST_CXX11_DECLTYPE
 LIBMESH_TEST_CXX11_RVALUE_REFERENCES
-LIBMESH_TEST_CXX11_LAMBDA
 LIBMESH_TEST_CXX11_CONSTEXPR
 LIBMESH_TEST_CXX11_ALIAS_DECLARATIONS
 LIBMESH_TEST_CXX11_SHARED_PTR
 LIBMESH_TEST_CXX14_MAKE_UNIQUE
 LIBMESH_TEST_CXX11_REGEX
-LIBMESH_TEST_CXX11_OVERRIDE
 LIBMESH_TEST_CXX11_VARIADIC_TEMPLATES
 LIBMESH_TEST_CXX11_THREAD
 LIBMESH_TEST_CXX11_CONDITION_VARIABLE
 LIBMESH_TEST_CXX11_TYPE_TRAITS
 LIBMESH_TEST_CXX11_MATH_FUNCS
-LIBMESH_TEST_CXX11_DELETED_FUNCTIONS
-LIBMESH_TEST_CXX11_FINAL
-LIBMESH_TEST_CXX11_NULLPTR
 LIBMESH_TEST_CXX11_TO_STRING
-LIBMESH_TEST_CXX11_NOEXCEPT
 LIBMESH_TEST_CXX17_FALLTHROUGH_ATTRIBUTE
 
 #-----------------------------------------------------

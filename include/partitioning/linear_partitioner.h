@@ -42,16 +42,22 @@ class LinearPartitioner : public Partitioner
 public:
 
   /**
-   * Constructor.
+   * Ctors, assignment operators, and destructor are
+   * all explicitly defaulted for this class.
    */
-  LinearPartitioner () {}
+  LinearPartitioner () = default;
+  LinearPartitioner (const LinearPartitioner &) = default;
+  LinearPartitioner (LinearPartitioner &&) = default;
+  LinearPartitioner & operator= (const LinearPartitioner &) = default;
+  LinearPartitioner & operator= (LinearPartitioner &&) = default;
+  virtual ~LinearPartitioner() = default;
 
   /**
    * \returns A copy of this partitioner wrapped in a smart pointer.
    */
-  virtual std::unique_ptr<Partitioner> clone () const libmesh_override
+  virtual std::unique_ptr<Partitioner> clone () const override
   {
-    return libmesh_make_unique<LinearPartitioner>();
+    return libmesh_make_unique<LinearPartitioner>(*this);
   }
 
   /**
@@ -60,14 +66,14 @@ public:
   virtual void partition_range(MeshBase & mesh,
                                MeshBase::element_iterator it,
                                MeshBase::element_iterator end,
-                               const unsigned int n) libmesh_override;
+                               const unsigned int n) override;
 protected:
 
   /**
    * Partition the \p MeshBase into \p n subdomains.
    */
   virtual void _do_partition (MeshBase & mesh,
-                              const unsigned int n) libmesh_override;
+                              const unsigned int n) override;
 };
 
 } // namespace libMesh

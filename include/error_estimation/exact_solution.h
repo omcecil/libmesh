@@ -21,7 +21,15 @@
 
 // Local Includes
 #include "libmesh/libmesh_common.h" // for Number
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum FEMNormType : int;
+}
+#else
 #include "libmesh/enum_norm_type.h"
+#endif
 
 // C++ includes
 #include <map>
@@ -74,10 +82,21 @@ public:
   ExactSolution (const EquationSystems & es);
 
   /**
-   * Destructor.
+   * The copy constructor and copy/move assignment operators are
+   * deleted.  This class has containers of unique_ptrs so it can't be
+   * default (shallow) copied, and it has a const reference so it
+   * can't be assigned to after creation.
    */
-  ~ExactSolution();
+  ExactSolution(const ExactSolution &) = delete;
+  ExactSolution & operator= (const ExactSolution &) = delete;
+  ExactSolution & operator= (ExactSolution &&) = delete;
 
+  /**
+   * Move constructor and destructor are defaulted out-of-line (in the
+   * C file) to play nicely with our forward declarations.
+   */
+  ExactSolution(ExactSolution &&);
+  ~ExactSolution();
 
   /**
    * Attach function similar to system.h which

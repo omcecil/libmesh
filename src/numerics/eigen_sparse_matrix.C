@@ -167,14 +167,6 @@ EigenSparseMatrix<T>::EigenSparseMatrix (const Parallel::Communicator & comm_in)
 
 
 template <typename T>
-EigenSparseMatrix<T>::~EigenSparseMatrix ()
-{
-  this->clear ();
-}
-
-
-
-template <typename T>
 void EigenSparseMatrix<T>::clear ()
 {
   _mat.resize(0,0);
@@ -198,7 +190,7 @@ numeric_index_type EigenSparseMatrix<T>::m () const
 {
   libmesh_assert (this->initialized());
 
-  return _mat.rows();
+  return cast_int<numeric_index_type>(_mat.rows());
 }
 
 
@@ -208,7 +200,7 @@ numeric_index_type EigenSparseMatrix<T>::n () const
 {
   libmesh_assert (this->initialized());
 
-  return _mat.cols();
+  return cast_int<numeric_index_type>(_mat.cols());
 }
 
 
@@ -267,13 +259,14 @@ void EigenSparseMatrix<T>::add_matrix(const DenseMatrix<T> & dm,
 
 
 template <typename T>
-void EigenSparseMatrix<T>::add (const T a_in, SparseMatrix<T> & X_in)
+void EigenSparseMatrix<T>::add (const T a_in, const SparseMatrix<T> & X_in)
 {
   libmesh_assert (this->initialized());
   libmesh_assert_equal_to (this->m(), X_in.m());
   libmesh_assert_equal_to (this->n(), X_in.n());
 
-  EigenSparseMatrix<T> & X = cast_ref<EigenSparseMatrix<T> &> (X_in);
+  const EigenSparseMatrix<T> & X =
+    cast_ref<const EigenSparseMatrix<T> &> (X_in);
 
   _mat += X._mat*a_in;
 }

@@ -32,6 +32,7 @@
 #include "libmesh/shell_matrix.h"
 #include "libmesh/tensor_tools.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/enum_solver_package.h"
 
 namespace libMesh
 {
@@ -311,13 +312,10 @@ Real NumericVector<T>::subset_l1_norm (const std::set<numeric_index_type> & indi
 {
   const NumericVector<T> & v = *this;
 
-  std::set<numeric_index_type>::const_iterator it = indices.begin();
-  const std::set<numeric_index_type>::const_iterator it_end = indices.end();
-
   Real norm = 0;
 
-  for (; it!=it_end; ++it)
-    norm += std::abs(v(*it));
+  for (const auto & index : indices)
+    norm += std::abs(v(index));
 
   this->comm().sum(norm);
 
@@ -329,13 +327,10 @@ Real NumericVector<T>::subset_l2_norm (const std::set<numeric_index_type> & indi
 {
   const NumericVector<T> & v = *this;
 
-  std::set<numeric_index_type>::const_iterator it = indices.begin();
-  const std::set<numeric_index_type>::const_iterator it_end = indices.end();
-
   Real norm = 0;
 
-  for (; it!=it_end; ++it)
-    norm += TensorTools::norm_sq(v(*it));
+  for (const auto & index : indices)
+    norm += TensorTools::norm_sq(v(index));
 
   this->comm().sum(norm);
 
@@ -347,14 +342,11 @@ Real NumericVector<T>::subset_linfty_norm (const std::set<numeric_index_type> & 
 {
   const NumericVector<T> & v = *this;
 
-  std::set<numeric_index_type>::const_iterator it = indices.begin();
-  const std::set<numeric_index_type>::const_iterator it_end = indices.end();
-
   Real norm = 0;
 
-  for (; it!=it_end; ++it)
+  for (const auto & index : indices)
     {
-      Real value = std::abs(v(*it));
+      Real value = std::abs(v(index));
       if (value > norm)
         norm = value;
     }
@@ -370,8 +362,7 @@ template <typename T>
 void NumericVector<T>::add_vector (const T * v,
                                    const std::vector<numeric_index_type> & dof_indices)
 {
-  int n = dof_indices.size();
-  for (int i=0; i<n; i++)
+  for (std::size_t i=0, n = dof_indices.size(); i != n; i++)
     this->add (dof_indices[i], v[i]);
 }
 
@@ -381,9 +372,9 @@ template <typename T>
 void NumericVector<T>::add_vector (const NumericVector<T> & v,
                                    const std::vector<numeric_index_type> & dof_indices)
 {
-  int n = dof_indices.size();
-  libmesh_assert_equal_to(v.size(), static_cast<unsigned>(n));
-  for (int i=0; i<n; i++)
+  const std::size_t n = dof_indices.size();
+  libmesh_assert_equal_to(v.size(), n);
+  for (numeric_index_type i=0; i != n; i++)
     this->add (dof_indices[i], v(i));
 }
 

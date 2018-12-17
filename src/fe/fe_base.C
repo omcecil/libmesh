@@ -58,6 +58,9 @@ const Elem * primary_boundary_point_neighbor(const Elem * elem,
   // Container to catch boundary IDs passed back by BoundaryInfo.
   std::vector<boundary_id_type> bc_ids;
 
+  // Pull object out of the loop to reduce heap operations
+  std::unique_ptr<const Elem> periodic_side;
+
   std::set<const Elem *> point_neighbors;
   elem->find_point_neighbors(p, point_neighbors);
   for (const auto & pt_neighbor : point_neighbors)
@@ -87,7 +90,8 @@ const Elem * primary_boundary_point_neighbor(const Elem * elem,
           if (!on_relevant_boundary)
             continue;
 
-          if (!pt_neighbor->build_side_ptr(ns)->contains_point(p))
+          pt_neighbor->build_side_ptr(periodic_side, ns);
+          if (!periodic_side->contains_point(p))
             continue;
 
           vertex_on_periodic_side = true;
@@ -118,6 +122,9 @@ const Elem * primary_boundary_edge_neighbor(const Elem * elem,
   // Container to catch boundary IDs handed back by BoundaryInfo
   std::vector<boundary_id_type> bc_ids;
 
+  // Pull object out of the loop to reduce heap operations
+  std::unique_ptr<const Elem> periodic_side;
+
   for (const auto & e_neighbor : edge_neighbors)
     {
       // If this edge neighbor isn't at least
@@ -145,7 +152,7 @@ const Elem * primary_boundary_edge_neighbor(const Elem * elem,
           if (!on_relevant_boundary)
             continue;
 
-          std::unique_ptr<const Elem> periodic_side = e_neighbor->build_side_ptr(ns);
+          e_neighbor->build_side_ptr(periodic_side, ns);
           if (!(periodic_side->contains_point(p1) &&
                 periodic_side->contains_point(p2)))
             continue;
@@ -699,8 +706,8 @@ void FEGenericBase<OutputType>::compute_shape_functions (const Elem * elem,
 template <typename OutputType>
 void FEGenericBase<OutputType>::print_phi(std::ostream & os) const
 {
-  for (std::size_t i=0; i<phi.size(); ++i)
-    for (std::size_t j=0; j<phi[i].size(); ++j)
+  for (auto i : index_range(phi))
+    for (auto j : index_range(phi[i]))
       os << " phi[" << i << "][" << j << "]=" << phi[i][j] << std::endl;
 }
 
@@ -710,8 +717,8 @@ void FEGenericBase<OutputType>::print_phi(std::ostream & os) const
 template <typename OutputType>
 void FEGenericBase<OutputType>::print_dphi(std::ostream & os) const
 {
-  for (std::size_t i=0; i<dphi.size(); ++i)
-    for (std::size_t j=0; j<dphi[i].size(); ++j)
+  for (auto i : index_range(dphi))
+    for (auto j : index_range(dphi[i]))
       os << " dphi[" << i << "][" << j << "]=" << dphi[i][j];
 }
 
@@ -768,8 +775,8 @@ void FEGenericBase<OutputType>::determine_calculations()
 template <typename OutputType>
 void FEGenericBase<OutputType>::print_d2phi(std::ostream & os) const
 {
-  for (std::size_t i=0; i<dphi.size(); ++i)
-    for (std::size_t j=0; j<dphi[i].size(); ++j)
+  for (auto i : index_range(dphi))
+    for (auto j : index_range(dphi[i]))
       os << " d2phi[" << i << "][" << j << "]=" << d2phi[i][j];
 }
 
@@ -820,9 +827,9 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
   // The gradients of the shape functions at the quadrature
   // points on the child element.
   const std::vector<std::vector<OutputGradient>> * dphi_values =
-    libmesh_nullptr;
+    nullptr;
   const std::vector<std::vector<OutputGradient>> * dphi_coarse =
-    libmesh_nullptr;
+    nullptr;
 
   const FEContinuity cont = fe->get_continuity();
 
@@ -931,10 +938,13 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
         FEInterface::dofs_on_edge(elem, dim, fe_type,
                                   e, new_side_dofs);
 
+        const unsigned int n_new_side_dofs =
+          cast_int<unsigned int>(new_side_dofs.size());
+
         // Some edge dofs are on nodes and already
         // fixed, others are free to calculate
         unsigned int free_dofs = 0;
-        for (std::size_t i=0; i != new_side_dofs.size(); ++i)
+        for (unsigned int i=0; i != n_new_side_dofs; ++i)
           if (!dof_is_fixed[new_side_dofs[i]])
             free_dof[free_dofs++] = i;
         Ke.resize (free_dofs, free_dofs); Ke.zero();
@@ -1003,13 +1013,13 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
                   }
 
                 // Form edge projection matrix
-                for (std::size_t sidei=0, freei=0; sidei != new_side_dofs.size(); ++sidei)
+                for (unsigned int sidei=0, freei=0; sidei != n_new_side_dofs; ++sidei)
                   {
                     unsigned int i = new_side_dofs[sidei];
                     // fixed DoFs aren't test functions
                     if (dof_is_fixed[i])
                       continue;
-                    for (std::size_t sidej=0, freej=0; sidej != new_side_dofs.size(); ++sidej)
+                    for (unsigned int sidej=0, freej=0; sidej != n_new_side_dofs; ++sidej)
                       {
                         unsigned int j =
                           new_side_dofs[sidej];
@@ -1068,10 +1078,13 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
         FEInterface::dofs_on_side(elem, dim, fe_type,
                                   s, new_side_dofs);
 
+        const unsigned int n_new_side_dofs =
+          cast_int<unsigned int>(new_side_dofs.size());
+
         // Some side dofs are on nodes/edges and already
         // fixed, others are free to calculate
         unsigned int free_dofs = 0;
-        for (std::size_t i=0; i != new_side_dofs.size(); ++i)
+        for (unsigned int i=0; i != n_new_side_dofs; ++i)
           if (!dof_is_fixed[new_side_dofs[i]])
             free_dof[free_dofs++] = i;
         Ke.resize (free_dofs, free_dofs); Ke.zero();
@@ -1140,13 +1153,13 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
                   }
 
                 // Form side projection matrix
-                for (std::size_t sidei=0, freei=0; sidei != new_side_dofs.size(); ++sidei)
+                for (unsigned int sidei=0, freei=0; sidei != n_new_side_dofs; ++sidei)
                   {
                     unsigned int i = new_side_dofs[sidei];
                     // fixed DoFs aren't test functions
                     if (dof_is_fixed[i])
                       continue;
-                    for (std::size_t sidej=0, freej=0; sidej != new_side_dofs.size(); ++sidej)
+                    for (unsigned int sidej=0, freej=0; sidej != n_new_side_dofs; ++sidej)
                       {
                         unsigned int j =
                           new_side_dofs[sidej];
@@ -1391,9 +1404,9 @@ FEGenericBase<OutputType>::compute_proj_constraints (DofConstraints & constraint
   const std::vector<std::vector<OutputShape>> & phi = my_fe->get_phi();
   const std::vector<std::vector<OutputShape>> & neigh_phi =
     neigh_fe->get_phi();
-  const std::vector<Point> * face_normals = libmesh_nullptr;
-  const std::vector<std::vector<OutputGradient>> * dphi = libmesh_nullptr;
-  const std::vector<std::vector<OutputGradient>> * neigh_dphi = libmesh_nullptr;
+  const std::vector<Point> * face_normals = nullptr;
+  const std::vector<std::vector<OutputGradient>> * dphi = nullptr;
+  const std::vector<std::vector<OutputGradient>> * neigh_dphi = nullptr;
 
   std::vector<dof_id_type> my_dof_indices, neigh_dof_indices;
   std::vector<unsigned int> my_side_dofs, neigh_side_dofs;
@@ -1418,7 +1431,7 @@ FEGenericBase<OutputType>::compute_proj_constraints (DofConstraints & constraint
   // Look at the element faces.  Check to see if we need to
   // build constraints.
   for (auto s : elem->side_index_range())
-    if (elem->neighbor_ptr(s) != libmesh_nullptr)
+    if (elem->neighbor_ptr(s) != nullptr)
       {
         // Get pointers to the element's neighbor.
         const Elem * neigh = elem->neighbor_ptr(s);
@@ -1685,9 +1698,9 @@ compute_periodic_constraints (DofConstraints & constraints,
   const std::vector<std::vector<OutputShape>> & phi = my_fe->get_phi();
   const std::vector<std::vector<OutputShape>> & neigh_phi =
     neigh_fe->get_phi();
-  const std::vector<Point> * face_normals = libmesh_nullptr;
-  const std::vector<std::vector<OutputGradient>> * dphi = libmesh_nullptr;
-  const std::vector<std::vector<OutputGradient>> * neigh_dphi = libmesh_nullptr;
+  const std::vector<Point> * face_normals = nullptr;
+  const std::vector<std::vector<OutputGradient>> * dphi = nullptr;
+  const std::vector<std::vector<OutputGradient>> * neigh_dphi = nullptr;
   std::vector<dof_id_type> my_dof_indices, neigh_dof_indices;
   std::vector<unsigned int> my_side_dofs, neigh_side_dofs;
 
@@ -1731,8 +1744,8 @@ compute_periodic_constraints (DofConstraints & constraints,
               // Get pointers to the element's neighbor.
               const Elem * neigh = boundaries.neighbor(boundary_id, *point_locator, elem, s);
 
-              if (neigh == libmesh_nullptr)
-                libmesh_error_msg("PeriodicBoundaries point locator object returned NULL!");
+              if (neigh == nullptr)
+                libmesh_error_msg("PeriodicBoundaries point locator object returned nullptr!");
 
               // periodic (and possibly h refinement) constraints:
               // constrain dofs shared between
@@ -1800,7 +1813,7 @@ compute_periodic_constraints (DofConstraints & constraints,
                   // Translate the quadrature points over to the
                   // neighbor's boundary
                   std::vector<Point> neigh_point(q_point.size());
-                  for (std::size_t i=0; i != neigh_point.size(); ++i)
+                  for (auto i : index_range(neigh_point))
                     neigh_point[i] = periodic->get_corresponding_pos(q_point[i]);
 
                   FEInterface::inverse_map (Dim, base_fe_type, neigh,
@@ -1977,8 +1990,8 @@ compute_periodic_constraints (DofConstraints & constraints,
                             }
 
                           // What do we want to constrain against?
-                          const Elem * primary_elem = libmesh_nullptr;
-                          const Elem * main_neigh = libmesh_nullptr;
+                          const Elem * primary_elem = nullptr;
+                          const Elem * main_neigh = nullptr;
                           Point main_pt = my_node,
                             primary_pt = my_node;
 
@@ -2055,8 +2068,8 @@ compute_periodic_constraints (DofConstraints & constraints,
 
                           // Find the edge end nodes
                           const Node
-                            * e1 = libmesh_nullptr,
-                            * e2 = libmesh_nullptr;
+                            * e1 = nullptr,
+                            * e2 = nullptr;
                           for (unsigned int nn = 0; nn != elem->n_nodes(); ++nn)
                             {
                               if (nn == n)
@@ -2064,7 +2077,7 @@ compute_periodic_constraints (DofConstraints & constraints,
 
                               if (elem->is_node_on_edge(nn, e))
                                 {
-                                  if (e1 == libmesh_nullptr)
+                                  if (e1 == nullptr)
                                     {
                                       e1 = elem->node_ptr(nn);
                                     }
@@ -2115,8 +2128,8 @@ compute_periodic_constraints (DofConstraints & constraints,
                             }
 
                           // What do we want to constrain against?
-                          const Elem * primary_elem = libmesh_nullptr;
-                          const Elem * main_neigh = libmesh_nullptr;
+                          const Elem * primary_elem = nullptr;
+                          const Elem * main_neigh = nullptr;
                           Point main_pt1 = *e1,
                             main_pt2 = *e2,
                             primary_pt1 = *e1,

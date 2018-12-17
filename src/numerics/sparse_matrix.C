@@ -30,6 +30,7 @@
 #include "libmesh/trilinos_epetra_matrix.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/enum_solver_package.h"
 
 namespace libMesh
 {
@@ -43,15 +44,8 @@ namespace libMesh
 template <typename T>
 SparseMatrix<T>::SparseMatrix (const Parallel::Communicator & comm_in) :
   ParallelObject(comm_in),
-  _dof_map(libmesh_nullptr),
+  _dof_map(nullptr),
   _is_initialized(false)
-{}
-
-
-
-// Destructor
-template <typename T>
-SparseMatrix<T>::~SparseMatrix ()
 {}
 
 

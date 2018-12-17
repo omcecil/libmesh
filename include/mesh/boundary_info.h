@@ -30,6 +30,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <tuple>
 
 namespace libMesh
 {
@@ -642,9 +643,24 @@ public:
    *
    * On a ReplicatedMesh this will include all nodes; on a
    * DistributedMesh only semilocal nodes will be included.
+   *
+   * \deprecated Use the version of build_node_list() below that
+   * returns a std::vector of tuples instead.
    */
+#ifdef LIBMESH_ENABLE_DEPRECATED
   void build_node_list (std::vector<dof_id_type> &      node_id_list,
                         std::vector<boundary_id_type> & bc_id_list) const;
+#endif
+
+  /**
+   * As above, but the library creates and fills in a vector of
+   * (node-id, bc-id) pairs and returns it to the user, taking
+   * advantage of guaranteed RVO. Note: we could use std::pairs for
+   * this, but for consistency with the other build_XYZ_list
+   * functions, we're using tuples.
+   */
+  std::vector<std::tuple<dof_id_type, boundary_id_type>>
+  build_node_list() const;
 
   /**
    * Adds nodes with boundary ids based on the side's boundary
@@ -664,20 +680,47 @@ public:
    * On a ReplicatedMesh this will include all sides; on a
    * DistributedMesh only sides of semilocal elements will be
    * included.
+   *
+   * \deprecated Use the version of build_side_list() below that
+   * returns a std::vector of tuples instead.
    */
+#ifdef LIBMESH_ENABLE_DEPRECATED
   void build_side_list (std::vector<dof_id_type> &        element_id_list,
                         std::vector<unsigned short int> & side_list,
                         std::vector<boundary_id_type> &   bc_id_list) const;
+#endif
+
+  /**
+   * As above, but the library creates and fills in a vector of
+   * (elem-id, side-id, bc-id) triplets and returns it to the user,
+   * taking advantage of guaranteed RVO.
+   */
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
+  build_side_list() const;
+
   /**
    * Creates a list of active element numbers, sides, and ids for those sides.
    *
    * On a ReplicatedMesh this will include all sides; on a
    * DistributedMesh only sides of semilocal elements will be
    * included.
+   *
+   * \deprecated Use the version of build_active_side_list() below
+   * that returns a std::vector of tuples instead.
    */
+#ifdef LIBMESH_ENABLE_DEPRECATED
   void build_active_side_list (std::vector<dof_id_type> &        element_id_list,
                                std::vector<unsigned short int> & side_list,
                                std::vector<boundary_id_type> &   bc_id_list) const;
+#endif
+
+  /**
+   * As above, but the library creates and fills in a vector of
+   * (elem-id, side-id, bc-id) triplets and returns it to the user,
+   * taking advantage of guaranteed RVO.
+   */
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
+  build_active_side_list () const;
 
   /**
    * Creates a list of element numbers, edges, and boundary ids for those edges.
@@ -685,10 +728,23 @@ public:
    * On a ReplicatedMesh this will include all edges; on a
    * DistributedMesh only edges of semilocal elements will be
    * included.
+   *
+   * \deprecated Use the version of build_edge_list() below
+   * that returns a std::vector of tuples instead.
    */
+#ifdef LIBMESH_ENABLE_DEPRECATED
   void build_edge_list (std::vector<dof_id_type> &        element_id_list,
                         std::vector<unsigned short int> & edge_list,
                         std::vector<boundary_id_type> &   bc_id_list) const;
+#endif
+
+  /**
+   * As above, but the library creates and fills in a vector of
+   * (elem-id, side-id, bc-id) triplets and returns it to the user,
+   * taking advantage of guaranteed RVO.
+   */
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
+  build_edge_list() const;
 
   /**
    * Creates a list of element numbers, shellfaces, and boundary ids for those shellfaces.
@@ -696,10 +752,23 @@ public:
    * On a ReplicatedMesh this will include all shellfaces; on a
    * DistributedMesh only shellfaces of semilocal elements will be
    * included.
+   *
+   * \deprecated Use the version of build_shellface_list() below
+   * that returns a std::vector of tuples instead.
    */
+#ifdef LIBMESH_ENABLE_DEPRECATED
   void build_shellface_list (std::vector<dof_id_type> &        element_id_list,
                              std::vector<unsigned short int> & shellface_list,
                              std::vector<boundary_id_type> &   bc_id_list) const;
+#endif
+
+  /**
+   * As above, but the library creates and fills in a vector of
+   * (elem-id, side-id, bc-id) triplets and returns it to the user,
+   * taking advantage of guaranteed RVO.
+   */
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
+  build_shellface_list() const;
 
   /**
    * \returns A set of the boundary ids which exist on semilocal parts
@@ -810,7 +879,7 @@ private:
 
   /**
    * Helper method for finding consistent maps of interior to boundary
-   * dof_object ids.  Either node_id_map or side_id_map can be NULL,
+   * dof_object ids.  Either node_id_map or side_id_map can be nullptr,
    * in which case it will not be filled.
    */
   void _find_id_maps (const std::set<boundary_id_type> & requested_boundary_ids,
@@ -833,30 +902,12 @@ private:
                 boundary_id_type> _boundary_node_id;
 
   /**
-   * Typedef for iterators into the _boundary_node_id container.
-   */
-  typedef std::multimap<const Node *, boundary_id_type>::const_iterator boundary_node_iter;
-
-  /**
-   * Some older compilers don't support erasing from a map with
-   * const_iterators, so we need to use a non-const iterator in those
-   * situations.
-   */
-  typedef std::multimap<const Node *, boundary_id_type>::iterator boundary_node_erase_iter;
-
-  /**
    * Data structure that maps edges of elements
    * to boundary ids. This is only relevant in 3D.
    */
   std::multimap<const Elem *,
                 std::pair<unsigned short int, boundary_id_type>>
   _boundary_edge_id;
-
-  /**
-   * Typedef for iterators into the _boundary_edge_id container.
-   */
-  typedef std::multimap<const Elem *,
-                        std::pair<unsigned short int, boundary_id_type>>::const_iterator boundary_edge_iter;
 
   /**
    * Data structure that maps faces of shell elements
@@ -867,13 +918,6 @@ private:
   _boundary_shellface_id;
 
   /**
-   * Typedef for iterators into the _boundary_shellface_id container.
-   */
-  typedef std::multimap<const Elem *,
-                        std::pair<unsigned short int, boundary_id_type>>::const_iterator boundary_shellface_iter;
-
-
-  /**
    * Data structure that maps sides of elements
    * to boundary ids.
    */
@@ -881,19 +925,6 @@ private:
                 std::pair<unsigned short int, boundary_id_type>>
   _boundary_side_id;
 
-  /**
-   * Typedef for iterators into the _boundary_side_id container.
-   */
-  typedef std::multimap<const Elem *,
-                        std::pair<unsigned short int, boundary_id_type>>::const_iterator boundary_side_iter;
-
-  /**
-   * Some older compilers don't support erasing from a map with
-   * const_iterators, so we need to use a non-const iterator in those
-   * situations.
-   */
-  typedef std::multimap<const Elem *,
-                        std::pair<unsigned short int, boundary_id_type>>::iterator erase_iter;
   /**
    * A collection of user-specified boundary ids for sides, edges, nodes,
    * and shell faces.

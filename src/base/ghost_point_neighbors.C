@@ -16,15 +16,15 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ Includes
-#include <set>
-#include <utility> // std::make_pair
-
 // Local Includes
 #include "libmesh/ghost_point_neighbors.h"
 
 #include "libmesh/elem.h"
 #include "libmesh/remote_elem.h"
+
+// C++ Includes
+#include <unordered_set>
+#include <utility> // std::make_pair
 
 namespace libMesh
 {
@@ -39,11 +39,11 @@ void GhostPointNeighbors::operator()
   // us correct results even in corner cases, such as where two
   // elements meet only at a corner.  ;-)
 
-  std::set<const Node *> connected_nodes;
+  std::unordered_set<const Node *> connected_nodes;
 
   // Links between boundary and interior elements on mixed
   // dimensional meshes also give us correct ghosting in this way.
-  std::set<const Elem *> interior_parents;
+  std::unordered_set<const Elem *> interior_parents;
 
   // We also preserve neighbors and their neighboring children for
   // active local elements - in most cases this is redundant with the
@@ -57,7 +57,7 @@ void GhostPointNeighbors::operator()
   // This code is just for geometric coupling, so we use a null
   // CouplingMatrix pointer.  We'll declare that here so as to avoid
   // confusing the insert() calls later.
-  CouplingMatrix * nullcm = libmesh_nullptr;
+  CouplingMatrix * nullcm = nullptr;
 
   for (const auto & elem : as_range(range_begin, range_end))
     {
@@ -74,10 +74,10 @@ void GhostPointNeighbors::operator()
                   std::vector<const Elem*> family;
                   neigh->active_family_tree_by_neighbor(family, elem);
 
-                  for (std::size_t i=0; i!=family.size(); ++i)
-                    if (family[i]->processor_id() != p)
+                  for (const Elem * f : family)
+                    if (f->processor_id() != p)
                       coupled_elements.insert
-                        (std::make_pair(family[i], nullcm));
+                        (std::make_pair(f, nullcm));
                 }
               else
 #endif
@@ -108,7 +108,7 @@ void GhostPointNeighbors::operator()
   // Connect any interior_parents who are really in our mesh
   for (const auto & elem : _mesh.element_ptr_range())
     {
-      std::set<const Elem *>::iterator ip_it =
+      std::unordered_set<const Elem *>::iterator ip_it =
         interior_parents.find(elem);
 
       if (ip_it != interior_parents.end())

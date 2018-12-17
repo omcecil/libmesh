@@ -29,6 +29,7 @@
 #include "libmesh/parallel.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/numeric_vector.h"
+#include "libmesh/int_range.h"
 
 #if defined(LIBMESH_HAVE_NEMESIS_API) && defined(LIBMESH_HAVE_EXODUS_API)
 
@@ -117,9 +118,9 @@ void Nemesis_IO_Helper::get_ss_param_global()
 
       nemesis_err_flag =
         Nemesis::ne_get_ss_param_global(ex_id,
-                                        &global_sideset_ids[0],
-                                        &num_global_side_counts[0],
-                                        &num_global_side_df_counts[0]);
+                                        global_sideset_ids.data(),
+                                        num_global_side_counts.data(),
+                                        num_global_side_df_counts.data());
       EX_CHECK_ERR(nemesis_err_flag, "Error reading global sideset parameters!");
 
       if (verbose)
@@ -150,9 +151,9 @@ void Nemesis_IO_Helper::get_ns_param_global()
 
       nemesis_err_flag =
         Nemesis::ne_get_ns_param_global(ex_id,
-                                        &global_nodeset_ids[0],
-                                        &num_global_node_counts[0],
-                                        &num_global_node_df_counts[0]);
+                                        global_nodeset_ids.data(),
+                                        num_global_node_counts.data(),
+                                        num_global_node_df_counts.data());
       EX_CHECK_ERR(nemesis_err_flag, "Error reading global nodeset parameters!");
 
       if (verbose)
@@ -181,8 +182,8 @@ void Nemesis_IO_Helper::get_eb_info_global()
     {
       nemesis_err_flag =
         Nemesis::ne_get_eb_info_global(ex_id,
-                                       &global_elem_blk_ids[0],
-                                       &global_elem_blk_cnts[0]);
+                                       global_elem_blk_ids.data(),
+                                       global_elem_blk_cnts.data());
       EX_CHECK_ERR(nemesis_err_flag, "Error reading global element block info!");
     }
 
@@ -257,8 +258,8 @@ void Nemesis_IO_Helper::get_elem_map()
 
   nemesis_err_flag =
     Nemesis::ne_get_elem_map(ex_id,
-                             elem_mapi.empty() ? libmesh_nullptr : &elem_mapi[0],
-                             elem_mapb.empty() ? libmesh_nullptr : &elem_mapb[0],
+                             elem_mapi.empty() ? nullptr : elem_mapi.data(),
+                             elem_mapb.empty() ? nullptr : elem_mapb.data(),
                              this->processor_id()
                              );
   EX_CHECK_ERR(nemesis_err_flag, "Error reading element maps!");
@@ -267,12 +268,12 @@ void Nemesis_IO_Helper::get_elem_map()
   if (verbose)
     {
       libMesh::out << "[" << this->processor_id() << "] elem_mapi[i] = ";
-      for (unsigned int i=0; i<static_cast<unsigned int>(num_internal_elems-1); ++i)
+      for (auto i : IntRange<int>(0, num_internal_elems-1))
         libMesh::out << elem_mapi[i] << ", ";
       libMesh::out << "... " << elem_mapi.back() << std::endl;
 
       libMesh::out << "[" << this->processor_id() << "] elem_mapb[i] = ";
-      for (unsigned int i=0; i<static_cast<unsigned int>(std::min(10, num_border_elems-1)); ++i)
+      for (auto i : IntRange<int>(0, std::min(10, num_border_elems-1)))
         libMesh::out << elem_mapb[i] << ", ";
       libMesh::out << "... " << elem_mapb.back() << std::endl;
     }
@@ -289,9 +290,9 @@ void Nemesis_IO_Helper::get_node_map()
 
   nemesis_err_flag =
     Nemesis::ne_get_node_map(ex_id,
-                             node_mapi.empty() ? libmesh_nullptr : &node_mapi[0],
-                             node_mapb.empty() ? libmesh_nullptr : &node_mapb[0],
-                             node_mape.empty() ? libmesh_nullptr : &node_mape[0],
+                             node_mapi.empty() ? nullptr : node_mapi.data(),
+                             node_mapb.empty() ? nullptr : node_mapb.data(),
+                             node_mape.empty() ? nullptr : node_mape.data(),
                              this->processor_id()
                              );
   EX_CHECK_ERR(nemesis_err_flag, "Error reading node maps!");
@@ -327,10 +328,10 @@ void Nemesis_IO_Helper::get_cmap_params()
 
   nemesis_err_flag =
     Nemesis::ne_get_cmap_params(ex_id,
-                                node_cmap_ids.empty()       ? libmesh_nullptr : &node_cmap_ids[0],
-                                node_cmap_node_cnts.empty() ? libmesh_nullptr : &node_cmap_node_cnts[0],
-                                elem_cmap_ids.empty()       ? libmesh_nullptr : &elem_cmap_ids[0],
-                                elem_cmap_elem_cnts.empty() ? libmesh_nullptr : &elem_cmap_elem_cnts[0],
+                                node_cmap_ids.empty()       ? nullptr : node_cmap_ids.data(),
+                                node_cmap_node_cnts.empty() ? nullptr : node_cmap_node_cnts.data(),
+                                elem_cmap_ids.empty()       ? nullptr : elem_cmap_ids.data(),
+                                elem_cmap_elem_cnts.empty() ? nullptr : elem_cmap_elem_cnts.data(),
                                 this->processor_id());
   EX_CHECK_ERR(nemesis_err_flag, "Error reading cmap parameters!");
 
@@ -378,8 +379,8 @@ void Nemesis_IO_Helper::get_node_cmap()
           nemesis_err_flag =
             Nemesis::ne_get_node_cmap(ex_id,
                                       node_cmap_ids[i],
-                                      &node_cmap_node_ids[i][0],
-                                      &node_cmap_proc_ids[i][0],
+                                      node_cmap_node_ids[i].data(),
+                                      node_cmap_proc_ids[i].data(),
                                       this->processor_id());
           EX_CHECK_ERR(nemesis_err_flag, "Error reading node cmap node and processor ids!");
         }
@@ -420,9 +421,9 @@ void Nemesis_IO_Helper::get_elem_cmap()
           nemesis_err_flag =
             Nemesis::ne_get_elem_cmap(ex_id,
                                       elem_cmap_ids[i],
-                                      &elem_cmap_elem_ids[i][0],
-                                      &elem_cmap_side_ids[i][0],
-                                      &elem_cmap_proc_ids[i][0],
+                                      elem_cmap_elem_ids[i].data(),
+                                      elem_cmap_side_ids[i].data(),
+                                      elem_cmap_proc_ids[i].data(),
                                       this->processor_id());
           EX_CHECK_ERR(nemesis_err_flag, "Error reading elem cmap elem, side, and processor ids!");
         }
@@ -494,8 +495,8 @@ void Nemesis_IO_Helper::put_eb_info_global(std::vector<int> & global_elem_blk_id
 {
   nemesis_err_flag =
     Nemesis::ne_put_eb_info_global(ex_id,
-                                   &global_elem_blk_ids_in[0],
-                                   &global_elem_blk_cnts_in[0]);
+                                   global_elem_blk_ids_in.data(),
+                                   global_elem_blk_cnts_in.data());
 
   EX_CHECK_ERR(nemesis_err_flag, "Error writing global element block information!");
 }
@@ -512,9 +513,9 @@ void Nemesis_IO_Helper::put_ns_param_global(std::vector<int> & global_nodeset_id
     {
       nemesis_err_flag =
         Nemesis::ne_put_ns_param_global(ex_id,
-                                        &global_nodeset_ids_in[0],
-                                        &num_global_node_counts_in[0],
-                                        &num_global_node_df_counts_in[0]);
+                                        global_nodeset_ids_in.data(),
+                                        num_global_node_counts_in.data(),
+                                        num_global_node_df_counts_in.data());
     }
 
   EX_CHECK_ERR(nemesis_err_flag, "Error writing global nodeset parameters!");
@@ -532,9 +533,9 @@ void Nemesis_IO_Helper::put_ss_param_global(std::vector<int> & global_sideset_id
     {
       nemesis_err_flag =
         Nemesis::ne_put_ss_param_global(ex_id,
-                                        &global_sideset_ids_in[0],
-                                        &num_global_side_counts_in[0],
-                                        &num_global_side_df_counts_in[0]);
+                                        global_sideset_ids_in.data(),
+                                        num_global_side_counts_in.data(),
+                                        num_global_side_df_counts_in.data());
     }
 
   EX_CHECK_ERR(nemesis_err_flag, "Error writing global sideset parameters!");
@@ -574,18 +575,18 @@ void Nemesis_IO_Helper::put_cmap_params(std::vector<int> & node_cmap_ids_in,
                                         std::vector<int> & elem_cmap_ids_in,
                                         std::vector<int> & elem_cmap_elem_cnts_in)
 {
-  // We might not have cmaps on every processor in some corner
-  // cases
-  if (node_cmap_ids.size())
-    {
-      nemesis_err_flag =
-        Nemesis::ne_put_cmap_params(ex_id,
-                                    &node_cmap_ids_in[0],
-                                    &node_cmap_node_cnts_in[0],
-                                    &elem_cmap_ids_in[0],
-                                    &elem_cmap_elem_cnts_in[0],
-                                    this->processor_id());
-    }
+  libmesh_assert(!node_cmap_ids_in.empty());
+  libmesh_assert(!node_cmap_node_cnts_in.empty());
+  libmesh_assert(!elem_cmap_ids_in.empty());
+  libmesh_assert(!elem_cmap_elem_cnts_in.empty());
+
+  nemesis_err_flag =
+    Nemesis::ne_put_cmap_params(ex_id,
+                                node_cmap_ids_in.data(),
+                                node_cmap_node_cnts_in.data(),
+                                elem_cmap_ids_in.data(),
+                                elem_cmap_elem_cnts_in.data(),
+                                this->processor_id());
 
   EX_CHECK_ERR(nemesis_err_flag, "Error writing cmap parameters!");
 }
@@ -621,11 +622,14 @@ void Nemesis_IO_Helper::put_node_cmap(std::vector<std::vector<int>> & node_cmap_
 
   for (std::size_t i=0; i<node_cmap_node_ids_in.size(); ++i)
     {
+      int * node_ids_ptr = node_cmap_node_ids_in[i].empty() ?
+        nullptr : node_cmap_node_ids_in[i].data();
+      int * proc_ids_ptr = node_cmap_proc_ids_in[i].empty() ?
+        nullptr : node_cmap_proc_ids_in[i].data();
+
       nemesis_err_flag =
-        Nemesis::ne_put_node_cmap(ex_id,
-                                  this->node_cmap_ids[i],
-                                  &node_cmap_node_ids_in[i][0],
-                                  &node_cmap_proc_ids_in[i][0],
+        Nemesis::ne_put_node_cmap(ex_id, this->node_cmap_ids[i],
+                                  node_ids_ptr, proc_ids_ptr,
                                   this->processor_id());
 
       EX_CHECK_ERR(nemesis_err_flag, "Error writing node communication map to file!");
@@ -641,9 +645,9 @@ void Nemesis_IO_Helper::put_node_map(std::vector<int> & node_mapi_in,
 {
   nemesis_err_flag =
     Nemesis::ne_put_node_map(ex_id,
-                             node_mapi_in.empty() ? libmesh_nullptr : &node_mapi_in[0],
-                             node_mapb_in.empty() ? libmesh_nullptr : &node_mapb_in[0],
-                             node_mape_in.empty() ? libmesh_nullptr : &node_mape_in[0], // Don't take address of empty vector...
+                             node_mapi_in.empty() ? nullptr : node_mapi_in.data(),
+                             node_mapb_in.empty() ? nullptr : node_mapb_in.data(),
+                             node_mape_in.empty() ? nullptr : node_mape_in.data(),
                              this->processor_id());
 
   EX_CHECK_ERR(nemesis_err_flag, "Error writing Nemesis internal and border node maps to file!");
@@ -661,9 +665,9 @@ void Nemesis_IO_Helper::put_elem_cmap(std::vector<std::vector<int>> & elem_cmap_
       nemesis_err_flag =
         Nemesis::ne_put_elem_cmap(ex_id,
                                   this->elem_cmap_ids[i],
-                                  &elem_cmap_elem_ids_in[i][0],
-                                  &elem_cmap_side_ids_in[i][0],
-                                  &elem_cmap_proc_ids_in[i][0],
+                                  elem_cmap_elem_ids_in[i].data(),
+                                  elem_cmap_side_ids_in[i].data(),
+                                  elem_cmap_proc_ids_in[i].data(),
                                   this->processor_id());
 
       EX_CHECK_ERR(nemesis_err_flag, "Error writing elem communication map to file!");
@@ -678,8 +682,8 @@ void Nemesis_IO_Helper::put_elem_map(std::vector<int> & elem_mapi_in,
 {
   nemesis_err_flag =
     Nemesis::ne_put_elem_map(ex_id,
-                             elem_mapi_in.empty() ? libmesh_nullptr : &elem_mapi_in[0],
-                             elem_mapb_in.empty() ? libmesh_nullptr : &elem_mapb_in[0],
+                             elem_mapi_in.empty() ? nullptr : elem_mapi_in.data(),
+                             elem_mapb_in.empty() ? nullptr : elem_mapb_in.data(),
                              this->processor_id());
 
   EX_CHECK_ERR(nemesis_err_flag, "Error writing Nemesis internal and border element maps to file!");
@@ -696,15 +700,18 @@ void Nemesis_IO_Helper::put_n_coord(unsigned start_node_num,
                                     std::vector<Real> & y_coor,
                                     std::vector<Real> & z_coor)
 {
-  nemesis_err_flag =
-    Nemesis::ne_put_n_coord(ex_id,
-                            start_node_num,
-                            num_nodes_in,
-                            &x_coor[0],
-                            &y_coor[0],
-                            &z_coor[0]);
+  if (num_nodes_in)
+    {
+      nemesis_err_flag =
+        Nemesis::ne_put_n_coord(ex_id,
+                                start_node_num,
+                                num_nodes_in,
+                                x_coor.empty() ? nullptr : x_coor.data(),
+                                y_coor.empty() ? nullptr : y_coor.data(),
+                                z_coor.empty() ? nullptr : z_coor.data());
 
-  EX_CHECK_ERR(nemesis_err_flag, "Error writing coords to file!");
+      EX_CHECK_ERR(nemesis_err_flag, "Error writing coords to file!");
+    }
 }
 
 
@@ -859,49 +866,48 @@ void Nemesis_IO_Helper::initialize(std::string title_in, const MeshBase & mesh, 
   // when the mesh file is read back in.
   this->compute_communication_map_parameters();
 
-  // Write communication map parameters to file.
-  this->put_cmap_params(this->node_cmap_ids,
-                        this->node_cmap_node_cnts,
-                        this->elem_cmap_ids,
-                        this->elem_cmap_elem_cnts);
+  // Do we have communication maps to write?  Note that
+  // ne_put_cmap_params expects us to have either *both* node and elem
+  // cmaps or *neither*
+  if (!this->node_cmap_ids.empty() &&
+      !this->node_cmap_node_cnts.empty() &&
+      !this->elem_cmap_ids.empty() &&
+      !this->elem_cmap_elem_cnts.empty())
+    {
+      // Write communication map parameters to file.
+      this->put_cmap_params(this->node_cmap_ids,
+                            this->node_cmap_node_cnts,
+                            this->elem_cmap_ids,
+                            this->elem_cmap_elem_cnts);
 
+      // Ready the node communication maps.  The node IDs which
+      // are communicated are the ones currently stored in
+      // proc_nodes_touched_intersections.
+      this->compute_node_communication_maps();
 
-  // Ready the node communication maps.  The node IDs which
-  // are communicated are the ones currently stored in
-  // proc_nodes_touched_intersections.
-  this->compute_node_communication_maps();
+      // Write the packed node communication vectors to file.
+      this->put_node_cmap(this->node_cmap_node_ids,
+                          this->node_cmap_proc_ids);
 
-  // Write the packed node communication vectors to file.
-  this->put_node_cmap(this->node_cmap_node_ids,
-                      this->node_cmap_proc_ids);
+      // Ready the node maps.  These have nothing to do with communication, they map
+      // the nodes to internal, border, and external nodes in the file.
+      this->compute_node_maps();
 
+      // Call the Nemesis API to write the node maps to file.
+      this->put_node_map(this->node_mapi,
+                         this->node_mapb,
+                         this->node_mape);
 
-  // Ready the node maps.  These have nothing to do with communication, they map
-  // the nodes to internal, border, and external nodes in the file.
-  this->compute_node_maps();
+      // Ready the element communication maps.  This includes border
+      // element IDs, sides which are on the border, and the processors to which
+      // they are to be communicated...
+      this->compute_elem_communication_maps();
 
-  // Call the Nemesis API to write the node maps to file.
-  this->put_node_map(this->node_mapi,
-                     this->node_mapb,
-                     this->node_mape);
-
-
-
-  // Ready the element communication maps.  This includes border
-  // element IDs, sides which are on the border, and the processors to which
-  // they are to be communicated...
-  this->compute_elem_communication_maps();
-
-
-
-  // Call the Nemesis API to write the packed element communication maps vectors to file
-  this->put_elem_cmap(this->elem_cmap_elem_ids,
-                      this->elem_cmap_side_ids,
-                      this->elem_cmap_proc_ids);
-
-
-
-
+      // Call the Nemesis API to write the packed element communication maps vectors to file
+      this->put_elem_cmap(this->elem_cmap_elem_ids,
+                          this->elem_cmap_side_ids,
+                          this->elem_cmap_proc_ids);
+    }
 
 
   // Ready the Nemesis element maps (internal and border) for writing to file.
@@ -910,7 +916,6 @@ void Nemesis_IO_Helper::initialize(std::string title_in, const MeshBase & mesh, 
   // Call the Nemesis API to write the internal and border element IDs.
   this->put_elem_map(this->elem_mapi,
                      this->elem_mapb);
-
 
   // Now write Exodus-specific initialization information, some of which is
   // different when you are using Nemesis.
@@ -971,31 +976,23 @@ void Nemesis_IO_Helper::compute_element_maps()
 
   {
     unsigned cnt = 0;
-    std::set<unsigned>::iterator
-      it = this->internal_elem_ids.begin(),
-      end = this->internal_elem_ids.end();
-
-    for (; it != end; ++it, ++cnt)
+    for (const auto & id : this->internal_elem_ids)
       {
-        std::map<int, int>::iterator elem_it = libmesh_elem_num_to_exodus.find(*it);
+        std::map<int, int>::iterator elem_it = libmesh_elem_num_to_exodus.find(id);
         if (elem_it == libmesh_elem_num_to_exodus.end())
-          libmesh_error_msg("Elem number " << *it << " not found in libmesh_elem_num_to_exodus map.");
-        this->elem_mapi[cnt] = elem_it->second;
+          libmesh_error_msg("Elem number " << id << " not found in libmesh_elem_num_to_exodus map.");
+        this->elem_mapi[cnt++] = elem_it->second;
       }
   }
 
   {
     unsigned cnt = 0;
-    std::set<unsigned>::iterator
-      it = this->border_elem_ids.begin(),
-      end = this->border_elem_ids.end();
-
-    for (; it != end; ++it, ++cnt)
+    for (const auto & id : this->border_elem_ids)
       {
-        std::map<int, int>::iterator elem_it = libmesh_elem_num_to_exodus.find(*it);
+        std::map<int, int>::iterator elem_it = libmesh_elem_num_to_exodus.find(id);
         if (elem_it == libmesh_elem_num_to_exodus.end())
-          libmesh_error_msg("Elem number " << *it << " not found in libmesh_elem_num_to_exodus map.");
-        this->elem_mapb[cnt] = elem_it->second;
+          libmesh_error_msg("Elem number " << id << " not found in libmesh_elem_num_to_exodus map.");
+        this->elem_mapb[cnt++] = elem_it->second;
       }
   }
 }
@@ -1071,31 +1068,23 @@ void Nemesis_IO_Helper::compute_node_maps()
   // Copy set contents into vectors
   {
     unsigned cnt = 0;
-    std::set<unsigned>::iterator
-      it = this->internal_node_ids.begin(),
-      end = this->internal_node_ids.end();
-
-    for (; it != end; ++it, ++cnt)
+    for (const auto & id : this->internal_node_ids)
       {
-        std::map<int, int>::iterator node_it = libmesh_node_num_to_exodus.find(*it);
+        std::map<int, int>::iterator node_it = libmesh_node_num_to_exodus.find(id);
         if (node_it == libmesh_node_num_to_exodus.end())
-          libmesh_error_msg("Node number " << *it << " not found in libmesh_node_num_to_exodus map.");
-        this->node_mapi[cnt] = node_it->second;
+          libmesh_error_msg("Node number " << id << " not found in libmesh_node_num_to_exodus map.");
+        this->node_mapi[cnt++] = node_it->second;
       }
   }
 
   {
     unsigned cnt=0;
-    std::set<unsigned>::iterator
-      it = this->border_node_ids.begin(),
-      end = this->border_node_ids.end();
-
-    for (; it != end; ++it, ++cnt)
+    for (const auto & id : this->border_node_ids)
       {
-        std::map<int, int>::iterator node_it = libmesh_node_num_to_exodus.find(*it);
+        std::map<int, int>::iterator node_it = libmesh_node_num_to_exodus.find(id);
         if (node_it == libmesh_node_num_to_exodus.end())
-          libmesh_error_msg("Node number " << *it << " not found in libmesh_node_num_to_exodus map.");
-        this->node_mapb[cnt] = node_it->second;
+          libmesh_error_msg("Node number " << id << " not found in libmesh_node_num_to_exodus map.");
+        this->node_mapb[cnt++] = node_it->second;
       }
   }
 }
@@ -1109,6 +1098,10 @@ void Nemesis_IO_Helper::compute_node_communication_maps()
   // Make sure there's no left-over information
   this->node_cmap_node_ids.clear();
   this->node_cmap_proc_ids.clear();
+
+  libmesh_assert_less_equal
+    (this->proc_nodes_touched_intersections.size(),
+     std::size_t(this->num_node_cmaps));
 
   // Allocate enough space for all our node maps
   this->node_cmap_node_ids.resize(this->num_node_cmaps);
@@ -1293,15 +1286,13 @@ Nemesis_IO_Helper::compute_internal_and_border_elems_and_internal_nodes(const Me
       // border_elem_ids and the entries which go into proc_border_elem_sets.
       // The latter is for communication purposes, ie determining which elements
       // should be shared between processors.
-      for (unsigned int node=0; node<elem->n_nodes(); ++node)
-        {
-          this->nodes_attached_to_local_elems.insert(elem->node_id(node));
-        } // end loop over element's nodes
+      for (auto node : elem->node_index_range())
+        this->nodes_attached_to_local_elems.insert(elem->node_id(node));
 
       // Loop over element's neighbors, see if it has a neighbor which is off-processor
       for (auto n : elem->side_index_range())
         {
-          if (elem->neighbor_ptr(n) != libmesh_nullptr)
+          if (elem->neighbor_ptr(n) != nullptr)
             {
               unsigned neighbor_proc_id = elem->neighbor_ptr(n)->processor_id();
 
@@ -1425,49 +1416,32 @@ void Nemesis_IO_Helper::compute_num_global_sidesets(const MeshBase & pmesh)
       libMesh::out << std::endl;
     }
 
-  // We also need global counts of sides in each of the sidesets.  Again, there may be a
-  // better way to do this...
-  std::vector<dof_id_type> bndry_elem_list;
-  std::vector<unsigned short int> bndry_side_list;
-  std::vector<boundary_id_type> bndry_id_list;
-  pmesh.get_boundary_info().build_side_list(bndry_elem_list, bndry_side_list, bndry_id_list);
+  // We also need global counts of sides in each of the sidesets.
+  // Build a list of (elem, side, bc) tuples.
+  typedef std::tuple<dof_id_type, unsigned short int, boundary_id_type> Tuple;
+  std::vector<Tuple> bc_triples = pmesh.get_boundary_info().build_side_list();
 
-  // Similarly to the nodes, we can't count any sides for elements which aren't local
-  std::vector<dof_id_type>::iterator it_elem=bndry_elem_list.begin();
-  std::vector<unsigned short>::iterator it_side=bndry_side_list.begin();
-  std::vector<boundary_id_type>::iterator it_id=bndry_id_list.begin();
+  // Iterators to the beginning and end of the current range.
+  std::vector<Tuple>::iterator
+    it = bc_triples.begin(),
+    new_end = bc_triples.end();
 
-  // New end iterators, to be updated as we find non-local IDs
-  std::vector<dof_id_type>::iterator new_bndry_elem_list_end = bndry_elem_list.end();
-  std::vector<unsigned short>::iterator new_bndry_side_list_end = bndry_side_list.end();
-  std::vector<boundary_id_type>::iterator new_bndry_id_list_end = bndry_id_list.end();
-
-  for ( ; it_elem != new_bndry_elem_list_end; )
+  while (it != new_end)
     {
-      if (pmesh.elem_ref(*it_elem).processor_id() != this->processor_id())
+      if (pmesh.elem_ref(std::get<0>(*it)).processor_id() != this->processor_id())
         {
           // Back up the new end iterators to prepare for swap
-          --new_bndry_elem_list_end;
-          --new_bndry_side_list_end;
-          --new_bndry_id_list_end;
+          --new_end;
 
           // Swap places, the non-local elem will now be "past-the-end"
-          std::swap (*it_elem, *new_bndry_elem_list_end);
-          std::swap (*it_side, *new_bndry_side_list_end);
-          std::swap (*it_id, *new_bndry_id_list_end);
+          std::swap (*it, *new_end);
         }
       else // elem is local, go to next
-        {
-          ++it_elem;
-          ++it_side;
-          ++it_id;
-        }
+        ++it;
     }
 
-  // Erase from "new" end to old end on each vector.
-  bndry_elem_list.erase(new_bndry_elem_list_end, bndry_elem_list.end());
-  bndry_side_list.erase(new_bndry_side_list_end, bndry_side_list.end());
-  bndry_id_list.erase(new_bndry_id_list_end, bndry_id_list.end());
+  // Erase from "new" end to old.
+  bc_triples.erase(new_end, bc_triples.end());
 
   this->num_global_side_counts.clear(); // Make sure we don't have any leftover information
   this->num_global_side_counts.resize(this->global_sideset_ids.size());
@@ -1475,10 +1449,11 @@ void Nemesis_IO_Helper::compute_num_global_sidesets(const MeshBase & pmesh)
   // Get the count for each global sideset ID
   for (std::size_t i=0; i<global_sideset_ids.size(); ++i)
     {
-      this->num_global_side_counts[i] = cast_int<int>
-        (std::count(bndry_id_list.begin(),
-                    bndry_id_list.end(),
-                    cast_int<boundary_id_type>(this->global_sideset_ids[i])));
+      int id = global_sideset_ids[i];
+      this->num_global_side_counts[i] =
+        cast_int<int>(std::count_if(bc_triples.begin(),
+                                    bc_triples.end(),
+                                    [id](const Tuple & t)->bool { return std::get<2>(t) == id; }));
     }
 
   if (verbose)
@@ -1545,21 +1520,18 @@ void Nemesis_IO_Helper::compute_num_global_nodesets(const MeshBase & pmesh)
     }
 
   // 7.) We also need to know the number of nodes which is in each of the nodesets, globally.
-  // There is probably a better way to do this...
-  std::vector<dof_id_type> boundary_node_list;
-  std::vector<boundary_id_type> boundary_node_boundary_id_list;
-  pmesh.get_boundary_info().build_node_list
-    (boundary_node_list, boundary_node_boundary_id_list);
+
+  // Build list of (node-id, bc-id) tuples.
+  typedef std::tuple<dof_id_type, boundary_id_type> Tuple;
+  std::vector<Tuple> bc_tuples = pmesh.get_boundary_info().build_node_list();
 
   if (verbose)
     {
       libMesh::out << "[" << this->processor_id() << "] boundary_node_list.size()="
-                   << boundary_node_list.size() << std::endl;
+                   << bc_tuples.size() << std::endl;
       libMesh::out << "[" << this->processor_id() << "] (boundary_node_id, boundary_id) = ";
-      for (std::size_t i=0; i<boundary_node_list.size(); ++i)
-        {
-          libMesh::out << "(" << boundary_node_list[i] << ", " << boundary_node_boundary_id_list[i] << ") ";
-        }
+      for (const auto & t : bc_tuples)
+        libMesh::out << "(" << std::get<0>(t) << ", " << std::get<1>(t) << ") ";
       libMesh::out << std::endl;
     }
 
@@ -1574,42 +1546,35 @@ void Nemesis_IO_Helper::compute_num_global_nodesets(const MeshBase & pmesh)
   // that would give us duplicate entries when we do the parallel summation.
   // So instead, only count entries for nodes owned by this processor.
   // Start by getting rid of all non-local node entries from the vectors.
-  std::vector<dof_id_type>::iterator it_node=boundary_node_list.begin();
-  std::vector<boundary_id_type>::iterator it_id=boundary_node_boundary_id_list.begin();
+  std::vector<Tuple>::iterator
+    it = bc_tuples.begin(),
+    new_end = bc_tuples.end();
 
-  // New end iterators, to be updated as we find non-local IDs
-  std::vector<dof_id_type>::iterator new_node_list_end = boundary_node_list.end();
-  std::vector<boundary_id_type>::iterator new_boundary_id_list_end = boundary_node_boundary_id_list.end();
-  for ( ; it_node != new_node_list_end; )
+  while (it != new_end)
     {
-      if (pmesh.node_ptr( *it_node )->processor_id() != this->processor_id())
+      if (pmesh.node_ptr(std::get<0>(*it))->processor_id() != this->processor_id())
         {
           // Back up the new end iterators to prepare for swap
-          --new_node_list_end;
-          --new_boundary_id_list_end;
+          --new_end;
 
           // Swap places, the non-local node will now be "past-the-end"
-          std::swap (*it_node, *new_node_list_end);
-          std::swap (*it_id, *new_boundary_id_list_end);
+          std::swap(*it, *new_end);
         }
       else // node is local, go to next
-        {
-          ++it_node;
-          ++it_id;
-        }
+        ++it;
     }
 
-  // Erase from "new" end to old end on each vector.
-  boundary_node_list.erase(new_node_list_end, boundary_node_list.end());
-  boundary_node_boundary_id_list.erase(new_boundary_id_list_end, boundary_node_boundary_id_list.end());
+  // Erase from "new" end to old end.
+  bc_tuples.erase(new_end, bc_tuples.end());
 
   // Now we can do the local count for each ID...
   for (std::size_t i=0; i<global_nodeset_ids.size(); ++i)
     {
-      this->num_global_node_counts[i] = cast_int<int>
-        (std::count(boundary_node_boundary_id_list.begin(),
-                    boundary_node_boundary_id_list.end(),
-                    cast_int<boundary_id_type>(this->global_nodeset_ids[i])));
+      int id = this->global_nodeset_ids[i];
+      this->num_global_node_counts[i] =
+        cast_int<int>(std::count_if(bc_tuples.begin(),
+                                    bc_tuples.end(),
+                                    [id](const Tuple & t)->bool { return std::get<1>(t) == id; }));
     }
 
   // And finally we can sum them up
@@ -1767,13 +1732,12 @@ void Nemesis_IO_Helper::build_element_and_node_maps(const MeshBase & pmesh)
   for (const auto & elem : pmesh.active_local_element_ptr_range())
     {
       // Grab the nodes while we're here.
-      for (unsigned int n=0; n<elem->n_nodes(); ++n)
+      for (auto n : elem->node_index_range())
         this->nodes_attached_to_local_elems.insert( elem->node_id(n) );
 
       subdomain_id_type cur_subdomain = elem->subdomain_id();
 
-      this->subdomain_map[cur_subdomain].push_back
-        (cast_int<unsigned>(elem->id()));
+      this->subdomain_map[cur_subdomain].push_back(elem->id());
     }
 
   // Set num_nodes which is used by exodusII_io_helper
@@ -1818,7 +1782,7 @@ void Nemesis_IO_Helper::build_element_and_node_maps(const MeshBase & pmesh)
       block_ids.push_back(pr.first);
 
       // Vector of element IDs for this subdomain
-      std::vector<unsigned int> & elem_ids_this_subdomain = pr.second;
+      std::vector<dof_id_type> & elem_ids_this_subdomain = pr.second;
 
       // The code below assumes this subdomain block is not empty, make sure that's the case!
       if (elem_ids_this_subdomain.size() == 0)
@@ -1842,9 +1806,9 @@ void Nemesis_IO_Helper::build_element_and_node_maps(const MeshBase & pmesh)
       current_block_connectivity.clear();
       current_block_connectivity.resize(elem_ids_this_subdomain.size() * this->num_nodes_per_elem);
 
-      for (std::size_t i=0; i<elem_ids_this_subdomain.size(); i++)
+      for (auto i : index_range(elem_ids_this_subdomain))
         {
-          unsigned int elem_id = elem_ids_this_subdomain[i];
+          auto elem_id = elem_ids_this_subdomain[i];
 
           // Set the number map for elements
           this->exodus_elem_num_to_libmesh.push_back(elem_id);
@@ -1858,9 +1822,9 @@ void Nemesis_IO_Helper::build_element_and_node_maps(const MeshBase & pmesh)
 
           // But we can get away with writing e.g. HEX8 and INFHEX8 in
           // the same block...
-          libmesh_assert_equal_to (elem.n_nodes(), Elem::build(conv.get_canonical_type(), libmesh_nullptr)->n_nodes());
+          libmesh_assert_equal_to (elem.n_nodes(), Elem::build(conv.get_canonical_type(), nullptr)->n_nodes());
 
-          for (unsigned int j=0; j < static_cast<unsigned int>(this->num_nodes_per_elem); j++)
+          for (auto j : IntRange<int>(0, this->num_nodes_per_elem))
             {
               const unsigned int connect_index   = (i*this->num_nodes_per_elem)+j;
               const unsigned int elem_node_index = conv.get_node_map(j);
@@ -1903,24 +1867,16 @@ void Nemesis_IO_Helper::compute_border_node_ids(const MeshBase & pmesh)
         std::set<unsigned> & set_p = proc_nodes_touched[ elem->processor_id() ];
 
         // Insert all nodes touched by this element into the set
-        for (unsigned int node=0; node<elem->n_nodes(); ++node)
+        for (auto node : elem->node_index_range())
           set_p.insert(elem->node_id(node));
       }
 
     // The number of node communication maps is the number of other processors
     // with which we share nodes. (I think.) This is just the size of the map we just
-    // created, minus 1.
+    // created, minus 1 unless this processor has no nodes of its own.
     this->num_node_cmaps =
-      cast_int<int>(proc_nodes_touched.size() - 1);
-
-    // If we've got no elements on this processor and haven't touched
-    // any nodes, however, then that's 0 other processors with which
-    // we share nodes, not -1.
-    if (this->num_node_cmaps == -1)
-      {
-        libmesh_assert (pmesh.active_elements_begin() == pmesh.active_elements_end());
-        this->num_node_cmaps = 0;
-      }
+      cast_int<int>(proc_nodes_touched.size() -
+                    proc_nodes_touched.count(this->processor_id()));
 
     // We can't be connecting to more processors than exist outside
     // ourselves
@@ -1986,6 +1942,10 @@ void Nemesis_IO_Helper::compute_border_node_ids(const MeshBase & pmesh)
         this->border_node_ids.swap(intermediate_result);
       }
 
+    libmesh_assert_less_equal
+      (this->proc_nodes_touched_intersections.size(),
+       std::size_t(this->num_node_cmaps));
+
     if (verbose)
       {
         libMesh::out << "[" << this->processor_id()
@@ -2011,42 +1971,39 @@ void Nemesis_IO_Helper::write_nodesets(const MeshBase & mesh)
   // Store a map of vectors for boundary node IDs on this processor.
   // Use a vector of int here so it can be passed directly to Exodus.
   std::map<boundary_id_type, std::vector<int>> local_node_boundary_id_lists;
-  typedef std::map<boundary_id_type, std::vector<int>>::iterator local_node_boundary_id_lists_iterator;
 
   // FIXME: We should build this list only one time!!  We already built it above, but we
   // did not have the libmesh to exodus node mapping at that time... for now we'll just
   // build it here again, hopefully it's small relative to the size of the entire mesh.
-  std::vector<dof_id_type> boundary_node_list;
-  std::vector<boundary_id_type> boundary_node_boundary_id_list;
-  mesh.get_boundary_info().build_node_list
-    (boundary_node_list, boundary_node_boundary_id_list);
+
+  // Build list of (node-id, bc-id) tuples.
+  typedef std::tuple<dof_id_type, boundary_id_type> Tuple;
+  std::vector<Tuple> bc_tuples = mesh.get_boundary_info().build_node_list();
 
   if (verbose)
     {
       libMesh::out << "[" << this->processor_id() << "] boundary_node_list.size()="
-                   << boundary_node_list.size() << std::endl;
+                   << bc_tuples.size() << std::endl;
       libMesh::out << "[" << this->processor_id() << "] (boundary_node_id, boundary_id) = ";
-      for (std::size_t i=0; i<boundary_node_list.size(); ++i)
-        {
-          libMesh::out << "(" << boundary_node_list[i] << ", " << boundary_node_boundary_id_list[i] << ") ";
-        }
+      for (const auto & t : bc_tuples)
+        libMesh::out << "(" << std::get<0>(t) << ", " << std::get<1>(t) << ") ";
       libMesh::out << std::endl;
     }
 
   // For each node in the node list, add it to the vector of node IDs for that
   // set for the local processor.  This will be used later when writing Exodus
   // nodesets.
-  for (std::size_t i=0; i<boundary_node_list.size(); ++i)
+  for (const auto & t : bc_tuples)
     {
       // Don't try to grab a reference to the vector unless the current node is attached
       // to a local element.  Otherwise, another processor will be responsible for writing it in its nodeset.
-      std::map<int, int>::iterator it = this->libmesh_node_num_to_exodus.find( boundary_node_list[i] );
+      std::map<int, int>::iterator it = this->libmesh_node_num_to_exodus.find(std::get<0>(t));
 
       if (it != this->libmesh_node_num_to_exodus.end())
         {
           // Get reference to the vector where this node ID will be inserted.  If it
           // doesn't yet exist, this will create it.
-          std::vector<int> & current_id_set = local_node_boundary_id_lists[ boundary_node_boundary_id_list[i] ];
+          std::vector<int> & current_id_set = local_node_boundary_id_lists[std::get<1>(t)];
 
           // Push back Exodus-mapped node ID for this set
           // TODO: reserve space in these vectors somehow.
@@ -2077,7 +2034,8 @@ void Nemesis_IO_Helper::write_nodesets(const MeshBase & mesh)
       for (std::size_t i=0; i<this->global_nodeset_ids.size(); ++i)
         {
           const std::string & current_ns_name =
-            mesh.get_boundary_info().get_nodeset_name(global_nodeset_ids[i]);
+            mesh.get_boundary_info().get_nodeset_name
+              (cast_int<boundary_id_type>(global_nodeset_ids[i]));
 
           // Store this name in a data structure that will be used to
           // write sideset names to file.
@@ -2102,7 +2060,7 @@ void Nemesis_IO_Helper::write_nodesets(const MeshBase & mesh)
           */
 
           // Try to find this boundary ID in the local list we created
-          local_node_boundary_id_lists_iterator it =
+          auto it =
             local_node_boundary_id_lists.find (cast_int<boundary_id_type>(this->global_nodeset_ids[i]));
 
           // No nodes found for this boundary ID on this processor
@@ -2137,7 +2095,7 @@ void Nemesis_IO_Helper::write_nodesets(const MeshBase & mesh)
               // Call Exodus interface to write the actual node IDs for this boundary ID
               this->ex_err = exII::ex_put_node_set(this->ex_id,
                                                    exodus_id,
-                                                   &current_nodeset_ids[0]);
+                                                   current_nodeset_ids.data());
 
               EX_CHECK_ERR(this->ex_err, "Error writing nodesets in Nemesis");
 
@@ -2167,30 +2125,25 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
   // Use a vector of int here so it can be passed directly to Exodus.
   std::map<boundary_id_type, std::vector<int>> local_elem_boundary_id_lists;
   std::map<boundary_id_type, std::vector<int>> local_elem_boundary_id_side_lists;
-  typedef std::map<boundary_id_type, std::vector<int>>::iterator local_elem_boundary_id_lists_iterator;
 
   ExodusII_IO_Helper::ElementMaps em;
 
   // FIXME: We already built this list once, we should reuse that information!
-  std::vector<dof_id_type > bndry_elem_list;
-  std::vector<unsigned short int > bndry_side_list;
-  std::vector<boundary_id_type > bndry_id_list;
-
-  mesh.get_boundary_info().build_side_list
-    (bndry_elem_list, bndry_side_list, bndry_id_list);
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>> bndry_elem_side_id_list =
+    mesh.get_boundary_info().build_side_list();
 
   // Integer looping, skipping non-local elements
-  for (std::size_t i=0; i<bndry_elem_list.size(); ++i)
+  for (std::size_t i=0; i<bndry_elem_side_id_list.size(); ++i)
     {
       // Get pointer to current Elem
-      const Elem * elem = mesh.elem_ptr(bndry_elem_list[i]);
+      const Elem * elem = mesh.elem_ptr(std::get<0>(bndry_elem_side_id_list[i]));
 
       std::vector<const Elem *> family;
 #ifdef LIBMESH_ENABLE_AMR
       // We need to build up active elements if AMR is enabled and add
       // them to the exodus sidesets instead of the potentially inactive "parent" elements
       // Technically we don't need to "reset" the tree since the vector was just created.
-      elem->active_family_tree_by_side(family, bndry_side_list[i], /*reset tree=*/false);
+      elem->active_family_tree_by_side(family, std::get<1>(bndry_elem_side_id_list[i]), /*reset tree=*/false);
 #else
       // If AMR is not even enabled, just push back the element itself
       family.push_back( elem );
@@ -2217,8 +2170,8 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
               std::map<int,int>::iterator it = this->libmesh_elem_num_to_exodus.find( f_id );
               if (it != this->libmesh_elem_num_to_exodus.end())
                 {
-                  local_elem_boundary_id_lists[ bndry_id_list[i] ].push_back( it->second );
-                  local_elem_boundary_id_side_lists[ bndry_id_list[i] ].push_back(conv.get_inverse_side_map( bndry_side_list[i] ));
+                  local_elem_boundary_id_lists[ std::get<2>(bndry_elem_side_id_list[i]) ].push_back( it->second );
+                  local_elem_boundary_id_side_lists[ std::get<2>(bndry_elem_side_id_list[i]) ].push_back(conv.get_inverse_side_map( std::get<1>(bndry_elem_side_id_list[i]) ));
                 }
               else
                 libmesh_error_msg("Error, no Exodus mapping for Elem " \
@@ -2239,7 +2192,8 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
       for (std::size_t i=0; i<this->global_sideset_ids.size(); ++i)
         {
           const std::string & current_ss_name =
-            mesh.get_boundary_info().get_sideset_name(global_sideset_ids[i]);
+            mesh.get_boundary_info().get_sideset_name
+              (cast_int<boundary_id_type>(global_sideset_ids[i]));
 
           // Store this name in a data structure that will be used to
           // write sideset names to file.
@@ -2264,7 +2218,7 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
           */
 
           // Try to find this boundary ID in the local list we created
-          local_elem_boundary_id_lists_iterator it =
+          auto it =
             local_elem_boundary_id_lists.find (cast_int<boundary_id_type>(this->global_sideset_ids[i]));
 
           // No sides found for this boundary ID on this processor
@@ -2286,7 +2240,7 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
           else // Boundary ID *was* found in list
             {
               // Get iterator to sides vector as well
-              local_elem_boundary_id_lists_iterator it_sides =
+              auto it_sides =
                 local_elem_boundary_id_side_lists.find (cast_int<boundary_id_type>(this->global_sideset_ids[i]));
 
               libmesh_assert (it_sides != local_elem_boundary_id_side_lists.end());
@@ -2308,8 +2262,8 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
               // Call Exodus interface to write the actual side IDs for this boundary ID
               this->ex_err = exII::ex_put_side_set(this->ex_id,
                                                    exodus_id,
-                                                   &current_sideset_elem_ids[0],
-                                                   &current_sideset_side_ids[0]);
+                                                   current_sideset_elem_ids.data(),
+                                                   current_sideset_side_ids.data());
 
               EX_CHECK_ERR(this->ex_err, "Error writing sidesets in Nemesis");
             }
@@ -2330,18 +2284,14 @@ void Nemesis_IO_Helper::write_sidesets(const MeshBase & mesh)
 
 void Nemesis_IO_Helper::write_nodal_coordinates(const MeshBase & mesh, bool /*use_discontinuous*/)
 {
-  // Make sure that the reference passed in is really a DistributedMesh
-  // const DistributedMesh & pmesh = cast_ref<const DistributedMesh &>(mesh);
-
-  unsigned local_num_nodes =
-    cast_int<unsigned int>(this->exodus_node_num_to_libmesh.size());
+  auto local_num_nodes = this->exodus_node_num_to_libmesh.size();
 
   x.resize(local_num_nodes);
   y.resize(local_num_nodes);
   z.resize(local_num_nodes);
 
   // Just loop over our list outputting the nodes the way we built the map
-  for (unsigned int i=0; i<local_num_nodes; ++i)
+  for (auto i : IntRange<int>(0, local_num_nodes))
     {
       const Point & pt = mesh.point(this->exodus_node_num_to_libmesh[i]);
       x[i]=pt(0);
@@ -2358,25 +2308,31 @@ void Nemesis_IO_Helper::write_nodal_coordinates(const MeshBase & mesh, bool /*us
             y_single(y.begin(), y.end()),
             z_single(z.begin(), z.end());
 
-          ex_err = exII::ex_put_coord(ex_id, &x_single[0], &y_single[0], &z_single[0]);
+          ex_err = exII::ex_put_coord(ex_id,
+                                      x_single.data(),
+                                      y_single.data(),
+                                      z_single.data());
         }
       else
         {
           // Call Exodus API to write nodal coordinates...
-          ex_err = exII::ex_put_coord(ex_id, &x[0], &y[0], &z[0]);
+          ex_err = exII::ex_put_coord(ex_id,
+                                      x.data(),
+                                      y.data(),
+                                      z.data());
         }
       EX_CHECK_ERR(ex_err, "Error writing node coordinates");
 
       // And write the nodal map we created for them
-      ex_err = exII::ex_put_node_num_map(ex_id, &(this->exodus_node_num_to_libmesh[0]));
+      ex_err = exII::ex_put_node_num_map(ex_id, this->exodus_node_num_to_libmesh.data());
       EX_CHECK_ERR(ex_err, "Error writing node num map");
     }
   else // Does the Exodus API want us to write empty nodal coordinates?
     {
-      ex_err = exII::ex_put_coord(ex_id, libmesh_nullptr, libmesh_nullptr, libmesh_nullptr);
+      ex_err = exII::ex_put_coord(ex_id, nullptr, nullptr, nullptr);
       EX_CHECK_ERR(ex_err, "Error writing empty node coordinates");
 
-      ex_err = exII::ex_put_node_num_map(ex_id, libmesh_nullptr);
+      ex_err = exII::ex_put_node_num_map(ex_id, nullptr);
       EX_CHECK_ERR(ex_err, "Error writing empty node num map");
     }
 }
@@ -2396,14 +2352,15 @@ void Nemesis_IO_Helper::write_elements(const MeshBase & mesh, bool /*use_discont
 
       // Loop over all blocks, even if we don't have elements in each block.
       // If we don't have elements we need to write out a 0 for that block...
-      for (unsigned int i=0; i<static_cast<unsigned>(this->num_elem_blks_global); ++i)
+      for (auto i : IntRange<int>(0, this->num_elem_blks_global))
         {
           // Even if there are no elements for this block on the current
           // processor, we still want to write its name to file, if
           // possible. MeshBase::subdomain_name() will just return an
           // empty string if there is no name associated with the current
           // block.
-          names_table.push_back_entry(mesh.subdomain_name(this->global_elem_blk_ids[i]));
+          names_table.push_back_entry
+            (mesh.subdomain_name(cast_int<subdomain_id_type>(this->global_elem_blk_ids[i])));
 
           // Search for the current global block ID in the map
           std::map<int, std::vector<int>>::iterator it =
@@ -2428,7 +2385,7 @@ void Nemesis_IO_Helper::write_elements(const MeshBase & mesh, bool /*use_discont
               subdomain_id_type block =
                 cast_int<subdomain_id_type>(it->first);
               std::vector<int> & this_block_connectivity = it->second;
-              std::vector<unsigned int> & elements_in_this_block = subdomain_map[block];
+              std::vector<dof_id_type> & elements_in_this_block = subdomain_map[block];
 
               ExodusII_IO_Helper::ElementMaps em;
 
@@ -2451,14 +2408,14 @@ void Nemesis_IO_Helper::write_elements(const MeshBase & mesh, bool /*use_discont
 
               ex_err = exII::ex_put_elem_conn(ex_id,
                                               block,
-                                              &this_block_connectivity[0]);
+                                              this_block_connectivity.data());
               EX_CHECK_ERR(ex_err, "Error writing element connectivities from Nemesis.");
             }
         } // end loop over global block IDs
 
       // Only call this once, not in the loop above!
       ex_err = exII::ex_put_elem_num_map(ex_id,
-                                         exodus_elem_num_to_libmesh.empty() ? libmesh_nullptr : &exodus_elem_num_to_libmesh[0]);
+                                         exodus_elem_num_to_libmesh.empty() ? nullptr : exodus_elem_num_to_libmesh.data());
       EX_CHECK_ERR(ex_err, "Error writing element map");
 
       // Write the element block names to file.
@@ -2511,44 +2468,41 @@ void Nemesis_IO_Helper::write_nodal_solution(const std::vector<Number> & values,
 
 void Nemesis_IO_Helper::write_nodal_solution(const NumericVector<Number> & parallel_soln,
                                              const std::vector<std::string> & names,
-                                             int timestep)
+                                             int timestep,
+                                             const std::vector<std::string> & output_names)
 {
   int num_vars = cast_int<int>(names.size());
 
+  for (int c=0; c<num_vars; c++)
+    {
+      // Find the position of names[c] in the output_names vector, if it exists.
+      auto pos = std::find(output_names.begin(), output_names.end(), names[c]);
+
+      // Skip names[c] if it's not supposed to be output.
+      if (pos == output_names.end())
+        continue;
+
+      // Compute the (zero-based) index which determines which
+      // variable this will be as far as Nemesis is concerned.  This
+      // will be used below in the write_nodal_values() call.
+      int variable_name_position =
+        cast_int<int>(std::distance(output_names.begin(), pos));
+
+      // Fill up a std::vector with the dofs for the current variable
+      std::vector<numeric_index_type> required_indices(num_nodes);
+
+      for (int i=0; i<num_nodes; i++)
+        required_indices[i] = static_cast<dof_id_type>(this->exodus_node_num_to_libmesh[i]) * num_vars + c;
+
+      // Get the dof values required to write just our local part of
+      // the solution vector.
+      std::vector<Number> local_soln;
+      parallel_soln.localize(local_soln, required_indices);
+
 #ifndef LIBMESH_USE_COMPLEX_NUMBERS
-
-  for (int c=0; c<num_vars; c++)
-    {
-      // Fill up a std::vector with the dofs for the current variable
-      std::vector<numeric_index_type> required_indices(num_nodes);
-
-      for (int i=0; i<num_nodes; i++)
-        required_indices[i] = this->exodus_node_num_to_libmesh[i]*num_vars + c;
-
-      // Get the dof values required to write just our local part of
-      // the solution vector.
-      std::vector<Number> local_soln;
-      parallel_soln.localize(local_soln, required_indices);
-
       // Call the ExodusII_IO_Helper function to write the data.
-      write_nodal_values(c+1, local_soln, timestep);
-    }
-
-#else // LIBMESH_USE_COMPLEX_NUMBERS
-
-  for (int c=0; c<num_vars; c++)
-    {
-      // Fill up a std::vector with the dofs for the current variable
-      std::vector<numeric_index_type> required_indices(num_nodes);
-
-      for (int i=0; i<num_nodes; i++)
-        required_indices[i] = this->exodus_node_num_to_libmesh[i]*num_vars + c;
-
-      // Get the dof values required to write just our local part of
-      // the solution vector.
-      std::vector<Number> local_soln;
-      parallel_soln.localize(local_soln, required_indices);
-
+      write_nodal_values(variable_name_position + 1, local_soln, timestep);
+#else
       // We have the local (complex) values. Now extract the real,
       // imaginary, and magnitude values from them.
       std::vector<Real> real_parts(num_nodes);
@@ -2563,16 +2517,131 @@ void Nemesis_IO_Helper::write_nodal_solution(const NumericVector<Number> & paral
         }
 
       // Write the real, imaginary, and magnitude values to file.
-      write_nodal_values(3*c+1, real_parts, timestep);
-      write_nodal_values(3*c+2, imag_parts, timestep);
-      write_nodal_values(3*c+3, magnitudes, timestep);
-    }
-
+      write_nodal_values(3 * variable_name_position + 1, real_parts, timestep);
+      write_nodal_values(3 * variable_name_position + 2, imag_parts, timestep);
+      write_nodal_values(3 * variable_name_position + 3, magnitudes, timestep);
 #endif
-
-
+    }
 }
 
+
+
+
+void
+Nemesis_IO_Helper::initialize_element_variables(std::vector<std::string> names,
+                                                const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains)
+{
+  // Quick return if there are no element variables to write
+  if (names.size() == 0)
+    return;
+
+  // Quick return if we have already called this function
+  if (_elem_vars_initialized)
+    return;
+
+  // Be sure that variables in the file match what we are asking for
+  if (num_elem_vars > 0)
+    {
+      this->check_existing_vars(ELEMENTAL, names, this->elem_var_names);
+      return;
+    }
+
+  // Set the flag so we can skip this stuff on subsequent calls to
+  // initialize_element_variables()
+  _elem_vars_initialized = true;
+
+  this->write_var_names(ELEMENTAL, names);
+
+  // Create a truth table from global_elem_blk_ids and the information
+  // in vars_active_subdomains. Create a truth table of
+  // size global_elem_blk_ids.size() * names.size().
+  std::vector<int> truth_tab(global_elem_blk_ids.size() * names.size());
+  for (unsigned int blk=0; blk<global_elem_blk_ids.size(); ++blk)
+    for (unsigned int var=0; var<names.size(); ++var)
+      if (vars_active_subdomains[var].empty() ||
+          vars_active_subdomains[var].count
+            (cast_int<subdomain_id_type>(global_elem_blk_ids[blk])))
+        truth_tab[names.size()*blk + var] = 1;
+
+  // Write truth table to file.
+  if (truth_tab.size())
+    {
+      ex_err = exII::ex_put_elem_var_tab(ex_id,
+                                         cast_int<int>(global_elem_blk_ids.size()),
+                                         cast_int<int>(names.size()),
+                                         truth_tab.data());
+      EX_CHECK_ERR(ex_err, "Error writing element truth table.");
+    }
+}
+
+
+
+void
+Nemesis_IO_Helper::write_element_values(const MeshBase & mesh,
+                                        const NumericVector<Number> & parallel_soln,
+                                        const std::vector<std::string> & names,
+                                        int timestep,
+                                        const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains)
+{
+  // The total number of elements in the mesh. We need this for
+  // indexing into parallel_soln.
+  dof_id_type parallel_n_elem = mesh.parallel_n_elem();
+
+  // For each variable in names,
+  //   For each subdomain in subdomain_map,
+  //     If this (subdomain, variable) combination is active
+  //       Extract our values into local_soln (localize is a collective)
+  //       Write local_soln to file
+  for (unsigned int v=0; v<names.size(); ++v)
+    {
+      // Get list of active subdomains for variable v
+      const auto & active_subdomains = vars_active_subdomains[v];
+
+      // Loop over all subdomain blocks, even ones for which we have
+      // no elements, so we localize in sync
+      for (const int sbd_id_int : global_elem_blk_ids)
+        {
+          const subdomain_id_type sbd_id =
+            cast_int<subdomain_id_type>(sbd_id_int);
+          auto it = subdomain_map.find(sbd_id);
+          const std::vector<dof_id_type> empty_vec;
+          const std::vector<dof_id_type> & elem_ids =
+            (it == subdomain_map.end()) ? empty_vec : it->second;
+
+          // Possibly skip this (variable, subdomain) combination
+          if (active_subdomains.empty() || active_subdomains.count(sbd_id))
+            {
+              std::vector<numeric_index_type> required_indices;
+              required_indices.reserve(elem_ids.size());
+
+              for (const auto & id : elem_ids)
+                required_indices.push_back(v * parallel_n_elem + id);
+
+              std::vector<Number> local_soln;
+              parallel_soln.localize(local_soln, required_indices);
+
+              // It's possible that there's nothing for us to write:
+              // we may not be responsible for any elements on the
+              // current subdomain.  We did still have to participate
+              // in the localize() call above, however, since it is a
+              // collective.
+              if (local_soln.size())
+                {
+                  ex_err = exII::ex_put_elem_var(ex_id,
+                                                 timestep,
+                                                 static_cast<int>(v+1),
+                                                 static_cast<int>(sbd_id),
+                                                 static_cast<int>(local_soln.size()),
+                                                 local_soln.data());
+                  EX_CHECK_ERR(ex_err, "Error writing element values.");
+                }
+            }
+        }
+    } // end loop over vars
+
+  ex_err = exII::ex_update(ex_id);
+  EX_CHECK_ERR(ex_err, "Error flushing buffers to file.");
+}
 
 
 

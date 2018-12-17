@@ -56,6 +56,7 @@
 #include "libmesh/dirichlet_boundaries.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/getpot.h"
+#include "libmesh/enum_solver_package.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -305,7 +306,7 @@ void assemble_elasticity(EquationSystems & es,
 
       {
         for (auto side : elem->side_index_range())
-          if (elem->neighbor_ptr(side) == libmesh_nullptr)
+          if (elem->neighbor_ptr(side) == nullptr)
             {
               const std::vector<std::vector<Real>> & phi_face = fe_face->get_phi();
               const std::vector<Real> & JxW_face = fe_face->get_JxW();

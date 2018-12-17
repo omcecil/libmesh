@@ -40,11 +40,13 @@ class MeshBase;
  * 1.) Draw the domain and triangulate it in the GUI
  * 2.) Export the mesh to matlab using Mesh->Export Mesh
  * 3.) Create a file with this script:
- *     fid = fopen('filename', 'w');
- *     fprintf(fid, '%d %d \n', length(p), length(t));
- *     fprintf(fid, '%f %f \n', p);
- *     fprintf(fid, '%d %d %d %d \n', t);
- *     fclose(fid);
+ * \code
+ * fid = fopen('filename', 'w');
+ * fprintf(fid, '%d %d \n', length(p), length(t));
+ * fprintf(fid, '%f %f \n', p);
+ * fprintf(fid, '%d %d %d %d \n', t);
+ * fclose(fid);
+ * \endcode
  *
  * What's going on here?
  * There is no standard for exporting PDE toolkit meshes
@@ -94,7 +96,7 @@ public:
    * Reads in a matlab data file based on the string
    * you pass it.
    */
-  virtual void read (const std::string & name) libmesh_override;
+  virtual void read (const std::string & name) override;
 
 private:
   /**

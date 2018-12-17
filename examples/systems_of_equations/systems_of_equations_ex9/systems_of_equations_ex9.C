@@ -63,6 +63,7 @@
 #include "libmesh/petsc_macro.h"
 #include "libmesh/periodic_boundaries.h"
 #include "libmesh/periodic_boundary.h"
+#include "libmesh/enum_solver_package.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -151,7 +152,7 @@ public:
    * define how one finds corresponding nodes on the periodic
    * boundary pair.
    */
-  virtual Point get_corresponding_pos(const Point & pt) const libmesh_override
+  virtual Point get_corresponding_pos(const Point & pt) const override
   {
     DenseVector<Real> translated_pt(3);
     for(unsigned int i=0; i<3; i++)
@@ -178,7 +179,7 @@ public:
    * store them in the underlying map, this class must be clone'able,
    * i.e. have a kind of virtual construction mechanism.
    */
-  virtual std::unique_ptr<PeriodicBoundaryBase> clone(TransformationType t = FORWARD) const libmesh_override
+  virtual std::unique_ptr<PeriodicBoundaryBase> clone(TransformationType t = FORWARD) const override
   {
     return libmesh_make_unique<AzimuthalPeriodicBoundary>(*this, t);
   }
@@ -347,6 +348,11 @@ int main (int argc, char ** argv)
   // This example requires a linear solver package.
   libmesh_example_requires(libMesh::default_solver_package() != INVALID_SOLVER_PACKAGE,
                            "--enable-petsc, --enable-trilinos, or --enable-eigen");
+
+#ifndef LIBMESH_HAVE_EXODUS_API
+  // example requires ExodusII to load the mesh
+  libmesh_example_requires(false, "--enable-exodus");
+#endif
 
   // Initialize the cantilever mesh
   const unsigned int dim = 3;

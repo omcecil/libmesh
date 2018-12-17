@@ -22,12 +22,13 @@
 #if defined(LIBMESH_HAVE_LASPACK)
 
 
-// C++ includes
-
 // Local Includes
 #include "libmesh/laspack_linear_solver.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/string_to_enum.h"
+#include "libmesh/enum_solver_type.h"
+#include "libmesh/enum_preconditioner_type.h"
+#include "libmesh/enum_convergence_flags.h"
 
 namespace libMesh
 {
@@ -488,7 +489,7 @@ void LaspackLinearSolver<T>::set_laspack_preconditioner_type ()
   switch (this->_preconditioner_type)
     {
     case IDENTITY_PRECOND:
-      _precond_type = libmesh_nullptr; return;
+      _precond_type = nullptr; return;
 
     case ILU_PRECOND:
       _precond_type = ILUPrecond; return;

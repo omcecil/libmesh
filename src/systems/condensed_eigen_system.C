@@ -22,10 +22,12 @@
 #if defined(LIBMESH_HAVE_SLEPC)
 
 #include "libmesh/condensed_eigen_system.h"
+
+#include "libmesh/dof_map.h"
+#include "libmesh/equation_systems.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/numeric_vector.h"
-#include "libmesh/equation_systems.h"
-#include "libmesh/dof_map.h"
 #include "libmesh/parallel.h"
 
 namespace libMesh
@@ -53,31 +55,15 @@ CondensedEigenSystem::initialize_condensed_dofs(const std::set<dof_id_type> & gl
       local_non_condensed_dofs_set.insert(i);
 
   // Now erase the condensed dofs
-  std::set<dof_id_type>::iterator iter     = global_dirichlet_dofs_set.begin();
-  std::set<dof_id_type>::iterator iter_end = global_dirichlet_dofs_set.end();
-
-  for ( ; iter != iter_end ; ++iter)
-    {
-      dof_id_type condensed_dof_index = *iter;
-      if ( (this->get_dof_map().first_dof() <= condensed_dof_index) &&
-           (condensed_dof_index < this->get_dof_map().end_dof()) )
-        {
-          local_non_condensed_dofs_set.erase(condensed_dof_index);
-        }
-    }
+  for (const auto & dof : global_dirichlet_dofs_set)
+    if ((this->get_dof_map().first_dof() <= dof) && (dof < this->get_dof_map().end_dof()))
+      local_non_condensed_dofs_set.erase(dof);
 
   // Finally, move local_non_condensed_dofs_set over to a vector for convenience in solve()
-  iter     = local_non_condensed_dofs_set.begin();
-  iter_end = local_non_condensed_dofs_set.end();
-
   this->local_non_condensed_dofs_vector.clear();
 
-  for ( ; iter != iter_end; ++iter)
-    {
-      dof_id_type non_condensed_dof_index = *iter;
-
-      this->local_non_condensed_dofs_vector.push_back(non_condensed_dof_index);
-    }
+  for (const auto & dof : local_non_condensed_dofs_set)
+    this->local_non_condensed_dofs_vector.push_back(dof);
 
   condensed_dofs_initialized = true;
 }
@@ -90,7 +76,8 @@ dof_id_type CondensedEigenSystem::n_global_non_condensed_dofs() const
     }
   else
     {
-      dof_id_type n_global_non_condensed_dofs = local_non_condensed_dofs_vector.size();
+      dof_id_type n_global_non_condensed_dofs =
+        cast_int<dof_id_type>(local_non_condensed_dofs_vector.size());
       this->comm().sum(n_global_non_condensed_dofs);
 
       return n_global_non_condensed_dofs;
@@ -199,7 +186,8 @@ std::pair<Real, Real> CondensedEigenSystem::get_eigenpair(dof_id_type i)
   // This function assumes that condensed_solve has just been called.
   // If this is not the case, then we will trip an asset in get_eigenpair
   std::unique_ptr<NumericVector<Number>> temp = NumericVector<Number>::build(this->comm());
-  dof_id_type n_local = local_non_condensed_dofs_vector.size();
+  const dof_id_type n_local =
+    cast_int<dof_id_type>(local_non_condensed_dofs_vector.size());
   dof_id_type n       = n_local;
   this->comm().sum(n);
 
@@ -209,9 +197,9 @@ std::pair<Real, Real> CondensedEigenSystem::get_eigenpair(dof_id_type i)
 
   // Now map temp to solution. Loop over local entries of local_non_condensed_dofs_vector
   this->solution->zero();
-  for (std::size_t j=0; j<local_non_condensed_dofs_vector.size(); j++)
+  for (auto j : IntRange<dof_id_type>(0, n_local))
     {
-      dof_id_type index = local_non_condensed_dofs_vector[j];
+      const dof_id_type index = local_non_condensed_dofs_vector[j];
       solution->set(index,(*temp)(temp->first_local_index()+j));
     }
 

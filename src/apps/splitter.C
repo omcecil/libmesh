@@ -58,7 +58,7 @@ int main (int argc, char ** argv)
 
   std::string filename = libMesh::command_line_value("--mesh", std::string());
 
-  std::vector<int> all_n_procs;
+  std::vector<processor_id_type> all_n_procs;
   libMesh::command_line_vector("--n-procs", all_n_procs);
 
   unsigned int num_ghost_layers = libMesh::command_line_value("--num-ghost-layers", 1);
@@ -77,9 +77,8 @@ int main (int argc, char ** argv)
 
   mesh.read(filename);
 
-  for (std::size_t i = 0; i < all_n_procs.size(); i++)
+  for (const auto & n_procs : all_n_procs)
     {
-      processor_id_type n_procs = all_n_procs[i];
       libMesh::out << "splitting " << n_procs << " ways..." << std::endl;
 
       auto cpr = split_mesh(mesh, n_procs);

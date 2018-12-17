@@ -61,8 +61,34 @@ class ParsedFunction : public FunctionBase<Output>
 public:
   explicit
   ParsedFunction (const std::string & expression,
-                  const std::vector<std::string> * additional_vars=libmesh_nullptr,
-                  const std::vector<Output> * initial_vals=libmesh_nullptr);
+                  const std::vector<std::string> * additional_vars=nullptr,
+                  const std::vector<Output> * initial_vals=nullptr);
+
+  /**
+   * This class cannot be (default) copy assigned because the
+   * underlying FunctionParserADBase class does not define a custom
+   * copy assignment operator, and manually manages memory.
+   */
+  ParsedFunction & operator= (const ParsedFunction &) = delete;
+
+  /**
+   * The remaining special functions can be defaulted for this class.
+   *
+   * \note Despite the fact that the underlying FunctionParserADBase
+   * class is not move-assignable or move-constructible, it is still
+   * possible for _this_ class to be move-assigned and
+   * move-constructed, because FunctionParserADBase objects only
+   * appear within std::vectors in this class, and std::vectors can
+   * generally still be move-assigned and move-constructed even when
+   * their contents cannot. There are some allocator-specific
+   * exceptions to this, but it should be guaranteed to work for
+   * std::allocator in C++14 and beyond. See also:
+   * https://stackoverflow.com/q/42051917/659433
+   */
+  ParsedFunction (const ParsedFunction &) = default;
+  ParsedFunction (ParsedFunction &&) = default;
+  ParsedFunction & operator= (ParsedFunction &&) = default;
+  virtual ~ParsedFunction () = default;
 
   /**
    * Re-parse with new expression.
@@ -70,7 +96,7 @@ public:
   void reparse (const std::string & expression);
 
   virtual Output operator() (const Point & p,
-                             const Real time = 0) libmesh_override;
+                             const Real time = 0) override;
 
   /**
    * Query if the automatic derivative generation was successful.
@@ -85,11 +111,11 @@ public:
 
   virtual void operator() (const Point & p,
                            const Real time,
-                           DenseVector<Output> & output) libmesh_override;
+                           DenseVector<Output> & output) override;
 
   virtual Output component (unsigned int i,
                             const Point & p,
-                            Real time) libmesh_override;
+                            Real time) override;
 
   const std::string & expression() { return _expression; }
 
@@ -98,7 +124,7 @@ public:
    */
   virtual Output & getVarAddress(const std::string & variable_name);
 
-  virtual std::unique_ptr<FunctionBase<Output>> clone() const libmesh_override;
+  virtual std::unique_ptr<FunctionBase<Output>> clone() const override;
 
   /**
    * \returns The value of an inline variable.
@@ -360,7 +386,7 @@ ParsedFunction<Output,OutputGradient>::get_inline_value (const std::string & inl
       libmesh_assert_not_equal_to(assignment_i, std::string::npos);
 
       libmesh_assert_equal_to(subexpression[assignment_i+1], '=');
-      for (unsigned int i = varname_i+1; i != assignment_i; ++i)
+      for (std::size_t i = varname_i+1; i != assignment_i; ++i)
         libmesh_assert_equal_to(subexpression[i], ' ');
 
       std::size_t end_assignment_i =
@@ -436,7 +462,7 @@ ParsedFunction<Output,OutputGradient>::set_inline_value (const std::string & inl
       libmesh_assert_not_equal_to(assignment_i, std::string::npos);
 
       libmesh_assert_equal_to(subexpression[assignment_i+1], '=');
-      for (unsigned int i = varname_i+1; i != assignment_i; ++i)
+      for (std::size_t i = varname_i+1; i != assignment_i; ++i)
         libmesh_assert_equal_to(subexpression[i], ' ');
 
       std::size_t end_assignment_i =
@@ -629,7 +655,7 @@ ParsedFunction<Output,OutputGradient>::eval (FunctionParserADBase<Output> & pars
                                              unsigned int libmesh_dbg_var(component_idx)) const
 {
 #ifndef NDEBUG
-  Output result = parser.Eval(&_spacetime[0]);
+  Output result = parser.Eval(_spacetime.data());
   int error_code = parser.EvalError();
   if (error_code)
     {
@@ -671,7 +697,7 @@ ParsedFunction<Output,OutputGradient>::eval (FunctionParserADBase<Output> & pars
 
   return result;
 #else
-  return parser.Eval(&_spacetime[0]);
+  return parser.Eval(_spacetime.data());
 #endif
 }
 
@@ -689,11 +715,21 @@ class ParsedFunction : public FunctionBase<Output>
 {
 public:
   ParsedFunction (const std::string & /* expression */,
-                  const std::vector<std::string> * = libmesh_nullptr,
-                  const std::vector<Output> * = libmesh_nullptr) : _dummy(0)
+                  const std::vector<std::string> * = nullptr,
+                  const std::vector<Output> * = nullptr) : _dummy(0)
   {
     libmesh_not_implemented();
   }
+
+  /**
+   * When !LIBMESH_HAVE_FPARSER, this class is not implemented, so
+   * let's make that explicit by deleting the special functions.
+   */
+  ParsedFunction (ParsedFunction &&) = delete;
+  ParsedFunction (const ParsedFunction &) = delete;
+  ParsedFunction & operator= (const ParsedFunction &) = delete;
+  ParsedFunction & operator= (ParsedFunction &&) = delete;
+  virtual ~ParsedFunction () = default;
 
   virtual Output operator() (const Point &,
                              const Real /* time */ = 0)

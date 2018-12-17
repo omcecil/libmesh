@@ -24,7 +24,15 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/parallel.h"
 #include "libmesh/system_norm.h"
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ErrorEstimatorType : int;
+}
+#else
 #include "libmesh/enum_error_estimator_type.h"
+#endif
 
 // C++ includes
 #include <cstddef>
@@ -61,14 +69,17 @@ public:
    * Constructor.  Empty.  Derived classes should reset error_norm as
    * appropriate.
    */
-  ErrorEstimator() :
-    error_norm()
-  {}
+  ErrorEstimator() = default;
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  virtual ~ErrorEstimator() {}
+  ErrorEstimator (const ErrorEstimator &) = default;
+  ErrorEstimator (ErrorEstimator &&) = default;
+  ErrorEstimator & operator= (const ErrorEstimator &) = default;
+  ErrorEstimator & operator= (ErrorEstimator &&) = default;
+  virtual ~ErrorEstimator() = default;
 
 
   /**
@@ -76,7 +87,7 @@ public:
    * in derived classes to compute the error for each
    * active element and place it in the "error_per_cell" vector.
    *
-   * If solution_vector is not libmesh_nullptr, the estimator will
+   * If solution_vector is not nullptr, the estimator will
    * (if able) attempt to estimate an error in that field
    * instead of in system.solution.
    *
@@ -86,7 +97,7 @@ public:
    */
   virtual void estimate_error (const System & system,
                                ErrorVector & error_per_cell,
-                               const NumericVector<Number> * solution_vector = libmesh_nullptr,
+                               const NumericVector<Number> * solution_vector = nullptr,
                                bool estimate_parent_error = false) = 0;
 
   /**
@@ -103,7 +114,7 @@ public:
   virtual void estimate_errors (const EquationSystems & equation_systems,
                                 ErrorVector & error_per_cell,
                                 const std::map<const System *, SystemNorm> & error_norms,
-                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = libmesh_nullptr,
+                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = nullptr,
                                 bool estimate_parent_error = false);
 
   /**
@@ -126,7 +137,7 @@ public:
    */
   virtual void estimate_errors (const EquationSystems & equation_systems,
                                 ErrorMap & errors_per_cell,
-                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = libmesh_nullptr,
+                                const std::map<const System *, const NumericVector<Number> *> * solution_vectors = nullptr,
                                 bool estimate_parent_error = false);
 
   /**

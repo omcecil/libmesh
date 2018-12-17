@@ -225,6 +225,8 @@ AC_DEFUN([DETERMINE_CXX_BRAND],
                 [
                   GXX_VERSION_STRING="`($CXX -V 2>&1) | grep 'Version '`"
                   AS_CASE("$GXX_VERSION_STRING",
+                  [*19.*], [AC_MSG_RESULT(<<< C++ compiler is Intel(R) icc 19 >>>)
+                            GXX_VERSION=intel_icc_v19.x],
                   [*18.*], [AC_MSG_RESULT(<<< C++ compiler is Intel(R) icc 18 >>>)
                             GXX_VERSION=intel_icc_v18.x],
                   [*17.*], [AC_MSG_RESULT(<<< C++ compiler is Intel(R) icc 17 >>>)
@@ -274,7 +276,7 @@ AC_DEFUN([DETERMINE_CXX_BRAND],
   dnl Portland Group C++?
   AS_IF([test "x$compiler_brand_detected" = "xno"],
         [
-          is_pgcc="`($CXX -V 2>&1) | grep 'Portland Group'`"
+          is_pgcc="`($CXX -V 2>&1) | grep 'Portland Group\|PGI'`"
           AS_IF([test "x$is_pgcc" != "x"],
           [
             AC_MSG_RESULT(<<< C++ compiler is Portland Group C++ >>>)
@@ -312,6 +314,8 @@ AC_DEFUN([DETERMINE_CXX_BRAND],
 # CPPFLAGS_DBG    : preprocessor flags for debug mode
 # PROFILING_FLAGS : flags to enable code profiling
 # ASSEMBLY_FLAGS  : flags to enable assembly language output
+# WERROR_FLAGS    : flags to turn compiler warnings into errors
+# PARANOID_FLAGS  : flags to turn on many more compiler warnings
 #
 # Usage: SET_CXX_FLAGS
 #
@@ -329,11 +333,21 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
   # be changed at a later stage
   RPATHFLAG="-Wl,-rpath,"
 
-  # Flag for profiling mode; can me modified at a later stage
+  # Flag for profiling mode; can be modified at a later stage
   PROFILING_FLAGS="-pg"
 
-  # Flag for assembly-output mode; can me modified at a later stage
+  # Flag for assembly-output mode; can be modified at a later stage
   ASSEMBLY_FLAGS="-S"
+
+  # Flag to turn warnings into errors; can be modified at a later stage
+  WERROR_FLAGS="-Werror"
+
+  # Flags to add every additional warning we expect the library itself
+  # to not trigger
+  #
+  # These can be fairly compiler-specific so the default is blank: we
+  # only add warnings within specific compiler version tests.
+  PARANOID_FLAGS=""
 
   # The -g flag is necessary for OProfile to produce annotations
   # -fno-omit-frame-pointer flag turns off an optimization that
@@ -454,6 +468,17 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
           CFLAGS_DBG="-g -Wimplicit"
           ASSEMBLY_FLAGS="$ASSEMBLY_FLAGS -fverbose-asm"
 
+          dnl Tested on gcc 4.8.5; hopefully the other 4.8.x and all
+          dnl later versions support these too:
+          PARANOID_FLAGS="-Wall -Wextra -Wcast-align -Wcast-qual -Wdisabled-optimization -Wformat=2"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Wformat-nonliteral -Wformat-security -Wformat-y2k"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Winvalid-pch -Wlogical-op -Wmissing-field-initializers"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Wmissing-include-dirs -Wpacked -Wredundant-decls"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Wshadow -Wstack-protector -Wstrict-aliasing -Wswitch-default"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Wtrigraphs -Wunreachable-code -Wunused-label"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Wunused-parameter -Wunused-value -Wvariadic-macros"
+          PARANOID_FLAGS="$PARANOID_FLAGS -Wvolatile-register-var -Wwrite-strings"
+
           AS_IF([test "x$enableglibcxxdebugging" = "xyes"],
                 [CPPFLAGS_DBG="$CPPFLAGS_DBG -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC"])
 
@@ -498,6 +523,16 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
                           dnl The -g flag is all OProfile needs to produce annotations
                           OPROFILE_FLAGS="-g"
 
+                          dnl A dozen or so g++-supported warnings aren't supported on
+                          dnl all icpc versions
+                          PARANOID_FLAGS="-Wall -Wextra -Wdisabled-optimization -Wformat=2"
+                          PARANOID_FLAGS="$PARANOID_FLAGS -Wformat-security"
+                          PARANOID_FLAGS="$PARANOID_FLAGS -Winvalid-pch"
+                          PARANOID_FLAGS="$PARANOID_FLAGS -Wmissing-include-dirs"
+                          PARANOID_FLAGS="$PARANOID_FLAGS -Wtrigraphs"
+                          PARANOID_FLAGS="$PARANOID_FLAGS -Wunused-parameter"
+                          PARANOID_FLAGS="$PARANOID_FLAGS -Wwrite-strings"
+
                           dnl Disable some warning messages on Intel compilers:
                           dnl 161:  unrecognized pragma GCC diagnostic warning "-Wdeprecated-declarations"
                           dnl 175:  subscript out of range
@@ -532,15 +567,15 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
                        ],
 
             [portland_group], [
-                                CXXFLAGS_DBG="-g --no_using_std"
-                                CXXFLAGS_OPT="-O2 --no_using_std -fast -Minform=severe"
+                                CXXFLAGS_DBG="$CXXFLAGS_DBG -g --no_using_std"
+                                CXXFLAGS_OPT="$CXXFLAGS_OPT -O2 --no_using_std -fast -Minform=severe"
                                 CXXFLAGS_DEVEL="$CXXFLAGS_DBG"
 
                                 dnl PG C++ definitely doesnt understand -Wno-deprecated...
                                 NODEPRECATEDFLAG=""
 
-                                CFLAGS_DBG="-g"
-                                CFLAGS_OPT="-O2"
+                                CFLAGS_DBG="$CFLAGS_DBG -g"
+                                CFLAGS_OPT="$CFLAGS_OPT -O2"
                                 CFLAGS_DEVEL="$CFLAGS_DBG"
 
                                 dnl Disable exception handling if we dont use it
@@ -570,6 +605,16 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
                        CXXFLAGS_DBG="$CXXFLAGS_DBG -O0 -felide-constructors -g -pedantic -W -Wall -Wextra -Wno-long-long"
                        CXXFLAGS_DBG="$CXXFLAGS_DBG -Wunused-parameter -Wunused -Wpointer-arith -Wformat -Wparentheses -Qunused-arguments -Woverloaded-virtual -fno-limit-debug-info"
                        NODEPRECATEDFLAG="-Wno-deprecated"
+
+                       dnl Tested on clang 3.4.2
+                       PARANOID_FLAGS="-Wall -Wextra -Wcast-align -Wdisabled-optimization -Wformat=2"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Wformat-nonliteral -Wformat-security -Wformat-y2k"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Winvalid-pch -Wmissing-field-initializers"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Wmissing-include-dirs -Wpacked"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Wstack-protector -Wtrigraphs"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Wunreachable-code -Wunused-label"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Wunused-parameter -Wunused-value -Wvariadic-macros"
+                       PARANOID_FLAGS="$PARANOID_FLAGS -Wvolatile-register-var -Wwrite-strings"
 
                        CFLAGS_OPT="-O2 -Qunused-arguments -Wunused"
                        CFLAGS_DEVEL="$CFLAGS_OPT -g -Wimplicit -fno-limit-debug-info -Wunused"

@@ -52,18 +52,24 @@ public:
 
   /**
    * Constructor.  Responsible for initializing the _bc_function function
-   * pointer to libmesh_nullptr.  Defaults to L2 norm; changes to system norm are
+   * pointer to nullptr.  Defaults to L2 norm; changes to system norm are
    * ignored.
    */
-  DiscontinuityMeasure() :
-    JumpErrorEstimator(),
-    _bc_function(libmesh_nullptr)
-  { error_norm = L2; }
+  DiscontinuityMeasure();
 
   /**
-   * Destructor.
+   * This class cannot be (default) copy constructed/assigned because
+   * its base class has unique_ptr members.
    */
-  ~DiscontinuityMeasure() {}
+  DiscontinuityMeasure (const DiscontinuityMeasure &) = delete;
+  DiscontinuityMeasure & operator= (const DiscontinuityMeasure &) = delete;
+
+  /**
+   * Defaulted move ctor, move assignment operator, and destructor.
+   */
+  DiscontinuityMeasure (DiscontinuityMeasure &&) = default;
+  DiscontinuityMeasure & operator= (DiscontinuityMeasure &&) = default;
+  virtual ~DiscontinuityMeasure() = default;
 
   /**
    * Register a user function to use in computing the essential BCs.
@@ -72,8 +78,7 @@ public:
                                                                const Point & p,
                                                                const std::string & var_name));
 
-  virtual ErrorEstimatorType type() const libmesh_override
-  { return DISCONTINUITY_MEASURE;}
+  virtual ErrorEstimatorType type() const override;
 
 protected:
 
@@ -81,13 +86,13 @@ protected:
    * An initialization function, for requesting specific data from the FE
    * objects
    */
-  virtual void init_context(FEMContext & c) libmesh_override;
+  virtual void init_context(FEMContext & c) override;
 
   /**
    * The function which calculates a normal derivative jump based error
    * term on an internal side
    */
-  virtual void internal_side_integration() libmesh_override;
+  virtual void internal_side_integration() override;
 
   /**
    * The function which calculates a normal derivative jump based error
@@ -95,7 +100,7 @@ protected:
    *
    * \returns \p true if the flux bc function is in fact defined on the current side.
    */
-  virtual bool boundary_side_integration() libmesh_override;
+  virtual bool boundary_side_integration() override;
 
   /**
    * Pointer to function that provides BC information.

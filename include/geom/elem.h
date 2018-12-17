@@ -27,10 +27,7 @@
 #include "libmesh/id_types.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/node.h"
-#include "libmesh/enum_elem_type.h"
-#include "libmesh/enum_elem_quality.h"
-#include "libmesh/enum_order.h"
-#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_elem_type.h" // INVALID_ELEM
 #include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/multi_predicates.h"
 #include "libmesh/pointer_to_pointer_iter.h"
@@ -38,6 +35,19 @@
 #include "libmesh/simple_range.h"
 #include "libmesh/variant_filter_iterator.h"
 #include "libmesh/hashword.h" // Used in compute_key() functions
+
+#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
+namespace libMesh
+{
+enum ElemQuality : int;
+enum IOPackage : int;
+enum Order : int;
+}
+#else
+#include "libmesh/enum_elem_quality.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
+#endif
 
 // C++ includes
 #include <algorithm>
@@ -105,6 +115,20 @@ protected:
         Node ** nodelinkdata);
 
 public:
+
+  /**
+   * Elems are responsible for allocating and deleting their children
+   * during refinement, so they cannot be (default) copied or
+   * assigned. We therefore explicitly delete these operations.  Note
+   * that because _children is a C-style array, an Elem cannot even be
+   * safely default move-constructed (we would have to maintain a
+   * custom move constructor that explicitly sets _children to nullptr
+   * to do this safely).
+   */
+  Elem (Elem &&) = delete;
+  Elem (const Elem &) = delete;
+  Elem & operator= (const Elem &) = delete;
+  Elem & operator= (Elem &&) = delete;
 
   /**
    * Destructor.  Frees all the memory associated with the element.
@@ -272,11 +296,11 @@ public:
 
   /**
    * \returns A const pointer to the \f$ i^{th} \f$ neighbor of this
-   * element, or \p NULL if \p MeshBase::find_neighbors() has not been
+   * element, or \p nullptr if \p MeshBase::find_neighbors() has not been
    * called.
    *
    * \note If \p MeshBase::find_neighbors() has been called and this
-   * function still returns \p NULL, then the side is on a boundary of
+   * function still returns \p nullptr, then the side is on a boundary of
    * the domain.
    */
   const Elem * neighbor_ptr (unsigned int i) const;
@@ -357,19 +381,19 @@ public:
 
   /**
    * \returns If \p elem is a neighbor of a child of this element, a
-   * pointer to that child, otherwise \p NULL.
+   * pointer to that child, otherwise \p nullptr.
    */
   Elem * child_neighbor (Elem * elem);
 
   /**
    * \returns If \p elem is a neighbor of a child of this element, a
-   * pointer to that child, otherwise \p NULL.
+   * pointer to that child, otherwise \p nullptr.
    */
   const Elem * child_neighbor (const Elem * elem) const;
 
   /**
    * \returns \p true if this element has a side coincident
-   * with a boundary (indicated by a \p NULL neighbor), \p false
+   * with a boundary (indicated by a \p nullptr neighbor), \p false
    * otherwise.
    */
   bool on_boundary () const;
@@ -525,7 +549,7 @@ public:
    * processor.  Local elements are required to have valid neighbors,
    * and these ghost elements may have remote neighbors for data
    * structure consistency.  The use of remote elements helps ensure
-   * that any element we may access has a \p NULL neighbor only if it
+   * that any element we may access has a \p nullptr neighbor only if it
    * lies on the physical boundary of the domain.
    */
   virtual bool is_remote () const
@@ -556,7 +580,7 @@ public:
   /**
    * \returns The dimensionality of the object.
    */
-  virtual unsigned int dim () const = 0;
+  virtual unsigned short dim () const = 0;
 
   /**
    * This array maps the integer representation of the \p ElemType enum
@@ -568,6 +592,12 @@ public:
    * \returns The number of nodes this element contains.
    */
   virtual unsigned int n_nodes () const = 0;
+
+  /**
+   * The maximum number of nodes *any* element can contain.
+   * This is useful for replacing heap vectors with stack arrays.
+   */
+  static const unsigned int max_n_nodes = 27;
 
   /**
    * \returns An integer range from 0 up to (but not including)
@@ -690,6 +720,11 @@ public:
                                const unsigned int s) const = 0;
 
   /**
+   * \returns the (local) node numbers on the specified side
+   */
+  virtual std::vector<unsigned int> nodes_on_side(const unsigned int /*s*/) const = 0;
+
+  /**
    * \returns \p true if the specified (local) node number is on the
    * specified edge.
    */
@@ -741,6 +776,25 @@ public:
   std::unique_ptr<const Elem> side_ptr (unsigned int i) const;
 
   /**
+   * Resets the loose element \p side, which may currently point to a
+   * different side than \p i or even a different element than \p
+   * this, to point to side \p i on \p this.  If \p side is currently
+   * an element of the wrong type, it will be freed and a new element
+   * allocated; otherwise no memory allocation will occur.
+   *
+   * This should not be called with proxy Side elements.  This will
+   * cause \p side to be a minimum-ordered element, even if it is
+   * handed a higher-ordered element that must be replaced.
+   *
+   * The const version of this function is non-virtual; it simply
+   * calls the virtual non-const version and const_casts the return
+   * type.
+   */
+  virtual void side_ptr (std::unique_ptr<Elem> & side, const unsigned int i) = 0;
+  void side_ptr (std::unique_ptr<const Elem> & side, const unsigned int i) const;
+
+
+  /**
    * \returns A proxy element coincident with side \p i.
    *
    * \deprecated This method will eventually be removed since it
@@ -775,6 +829,24 @@ public:
    */
   virtual std::unique_ptr<Elem> build_side_ptr (const unsigned int i, bool proxy=true) = 0;
   std::unique_ptr<const Elem> build_side_ptr (const unsigned int i, bool proxy=true) const;
+
+  /**
+   * Resets the loose element \p side, which may currently point to a
+   * different side than \p i or even a different element than \p
+   * this, to point to side \p i on \p this.  If \p side is currently
+   * an element of the wrong type, it will be freed and a new element
+   * allocated; otherwise no memory allocation will occur.
+   *
+   * This should not be called with proxy Side elements.  This will
+   * cause \p side to be a full-ordered element, even if it is handed
+   * a lower-ordered element that must be replaced.
+   *
+   * The const version of this function is non-virtual; it simply
+   * calls the virtual non-const version and const_casts the return
+   * type.
+   */
+  virtual void build_side_ptr (std::unique_ptr<Elem> & side, const unsigned int i) = 0;
+  void build_side_ptr (std::unique_ptr<const Elem> & side, const unsigned int i) const;
 
   /**
    * \returns A proxy element coincident with side \p i.
@@ -972,13 +1044,13 @@ public:
   bool is_ancestor_of(const Elem * descendant) const;
 
   /**
-   * \returns A const pointer to the element's parent, or \p NULL if
+   * \returns A const pointer to the element's parent, or \p nullptr if
    * the element was not created via refinement.
    */
   const Elem * parent () const;
 
   /**
-   * \returns A pointer to the element's parent, or \p NULL if
+   * \returns A pointer to the element's parent, or \p nullptr if
    * the element was not created via refinement.
    */
   Elem * parent ();
@@ -1099,7 +1171,7 @@ public:
   /**
    * \returns The refinement level of the current element.
    *
-   * If the element's parent is \p NULL then by convention it is at
+   * If the element's parent is \p nullptr then by convention it is at
    * level 0, otherwise it is simply at one level greater than its
    * parent.
    */
@@ -1489,7 +1561,7 @@ public:
    * \returns An Elem of type \p type wrapped in a smart pointer.
    */
   static std::unique_ptr<Elem> build (const ElemType type,
-                                      Elem * p=libmesh_nullptr);
+                                      Elem * p=nullptr);
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -1567,6 +1639,21 @@ protected:
                                   dof_id_type n2,
                                   dof_id_type n3);
 
+  /**
+   * An implementation for simple (all sides equal) elements
+   */
+  template <typename Subclass>
+  void simple_build_side_ptr(std::unique_ptr<Elem> & side,
+                             const unsigned int i,
+                             ElemType sidetype);
+
+  /**
+   * An implementation for simple (all sides equal) elements
+   */
+  template <typename Subclass, typename Mapclass>
+  void simple_side_ptr(std::unique_ptr<Elem> & side,
+                       const unsigned int i,
+                       ElemType sidetype);
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -1603,7 +1690,7 @@ protected:
 public:
 
   /**
-   * Replaces this element with \p NULL for all of its neighbors.
+   * Replaces this element with \p nullptr for all of its neighbors.
    * This is useful when deleting an element.
    */
   void nullify_neighbors ();
@@ -1737,7 +1824,7 @@ Elem::Elem(const unsigned int nn,
   _nodes(nodelinkdata),
   _elemlinks(elemlinkdata),
 #ifdef LIBMESH_ENABLE_AMR
-  _children(libmesh_nullptr),
+  _children(nullptr),
 #endif
   _sbd_id(0)
 #ifdef LIBMESH_ENABLE_AMR
@@ -1749,11 +1836,14 @@ Elem::Elem(const unsigned int nn,
 {
   this->processor_id() = DofObject::invalid_processor_id;
 
+  // If this ever legitimately fails we need to increase max_n_nodes
+  libmesh_assert_less_equal(nn, max_n_nodes);
+
   // Initialize the nodes data structure
   if (_nodes)
     {
       for (unsigned int n=0; n<nn; n++)
-        _nodes[n] = libmesh_nullptr;
+        _nodes[n] = nullptr;
     }
 
   // Initialize the neighbors/parent data structure
@@ -1764,11 +1854,11 @@ Elem::Elem(const unsigned int nn,
       _elemlinks[0] = p;
 
       for (unsigned int n=1; n<ns+1; n++)
-        _elemlinks[n] = libmesh_nullptr;
+        _elemlinks[n] = nullptr;
     }
 
   // Optionally initialize data from the parent
-  if (this->parent() != libmesh_nullptr)
+  if (this->parent() != nullptr)
     {
       this->subdomain_id() = this->parent()->subdomain_id();
       this->processor_id() = this->parent()->processor_id();
@@ -1788,18 +1878,18 @@ Elem::~Elem()
   // Deleting my parent/neighbor/nodes storage isn't necessary since it's
   // handled by the subclass
 
-  // if (_nodes != libmesh_nullptr)
+  // if (_nodes != nullptr)
   //   delete [] _nodes;
-  // _nodes = libmesh_nullptr;
+  // _nodes = nullptr;
 
   // delete [] _elemlinks;
 
 #ifdef LIBMESH_ENABLE_AMR
 
   // Delete my children's storage
-  if (_children != libmesh_nullptr)
+  if (_children != nullptr)
     delete [] _children;
-  _children = libmesh_nullptr;
+  _children = nullptr;
 
 #endif
 }
@@ -2026,7 +2116,7 @@ Elem * Elem::child_neighbor (Elem * elem)
     if (n && n->parent() == this)
       return n;
 
-  return libmesh_nullptr;
+  return nullptr;
 }
 
 
@@ -2038,7 +2128,7 @@ const Elem * Elem::child_neighbor (const Elem * elem) const
     if (n && n->parent() == this)
       return n;
 
-  return libmesh_nullptr;
+  return nullptr;
 }
 
 
@@ -2101,6 +2191,20 @@ std::unique_ptr<const Elem> Elem::side_ptr (unsigned int i) const
 
 
 
+inline
+void
+Elem::side_ptr (std::unique_ptr<const Elem> & elem,
+                const unsigned int i) const
+{
+  // Hand off to the non-const version of this function
+  Elem * me = const_cast<Elem *>(this);
+  std::unique_ptr<Elem> e {const_cast<Elem *>(elem.release())};
+  me->side_ptr(e, i);
+  elem.reset(e.release());
+}
+
+
+
 #ifdef LIBMESH_ENABLE_DEPRECATED
 inline
 std::unique_ptr<Elem> Elem::side (const unsigned int i) const
@@ -2127,6 +2231,20 @@ Elem::build_side_ptr (const unsigned int i, bool proxy) const
 
 
 
+inline
+void
+Elem::build_side_ptr (std::unique_ptr<const Elem> & elem,
+                      const unsigned int i) const
+{
+  // Hand off to the non-const version of this function
+  Elem * me = const_cast<Elem *>(this);
+  std::unique_ptr<Elem> e {const_cast<Elem *>(elem.release())};
+  me->build_side_ptr(e, i);
+  elem.reset(e.release());
+}
+
+
+
 #ifdef LIBMESH_ENABLE_DEPRECATED
 inline
 std::unique_ptr<Elem>
@@ -2138,6 +2256,56 @@ Elem::build_side (const unsigned int i, bool proxy) const
   return std::unique_ptr<Elem>(s);
 }
 #endif
+
+
+
+template <typename Subclass>
+inline
+void
+Elem::simple_build_side_ptr (std::unique_ptr<Elem> & side,
+                             const unsigned int i,
+                             ElemType sidetype)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  if (!side.get() || side->type() != sidetype)
+    {
+      Subclass & real_me = cast_ref<Subclass&>(*this);
+      side = real_me.Subclass::build_side_ptr(i, false);
+    }
+  else
+    {
+      side->subdomain_id() = this->subdomain_id();
+
+      for (auto n : side->node_index_range())
+        side->set_node(n) = this->node_ptr(Subclass::side_nodes_map[i][n]);
+    }
+}
+
+
+
+template <typename Subclass, typename Mapclass>
+inline
+void
+Elem::simple_side_ptr (std::unique_ptr<Elem> & side,
+                       const unsigned int i,
+                       ElemType sidetype)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  if (!side.get() || side->type() != sidetype)
+    {
+      Subclass & real_me = cast_ref<Subclass&>(*this);
+      side = real_me.Subclass::side_ptr(i);
+    }
+  else
+    {
+      side->subdomain_id() = this->subdomain_id();
+
+      for (auto n : side->node_index_range())
+        side->set_node(n) = this->node_ptr(Mapclass::side_nodes_map[i][n]);
+    }
+}
 
 
 
@@ -2172,8 +2340,8 @@ inline
 bool Elem::on_boundary () const
 {
   // By convention, the element is on the boundary
-  // if it has a NULL neighbor.
-  return this->has_neighbor(libmesh_nullptr);
+  // if it has a nullptr neighbor.
+  return this->has_neighbor(nullptr);
 }
 
 
@@ -2281,7 +2449,7 @@ bool Elem::subactive() const
   if (!this->has_children())
     return true;
   for (const Elem * my_ancestor = this->parent();
-       my_ancestor != libmesh_nullptr;
+       my_ancestor != nullptr;
        my_ancestor = my_ancestor->parent())
     if (my_ancestor->active())
       return true;
@@ -2296,7 +2464,7 @@ inline
 bool Elem::has_children() const
 {
 #ifdef LIBMESH_ENABLE_AMR
-  if (_children == libmesh_nullptr)
+  if (_children == nullptr)
     return false;
   else
     return true;
@@ -2310,7 +2478,7 @@ inline
 bool Elem::has_ancestor_children() const
 {
 #ifdef LIBMESH_ENABLE_AMR
-  if (_children == libmesh_nullptr)
+  if (_children == nullptr)
     return false;
   else
     for (auto & c : child_ref_range())
@@ -2374,7 +2542,7 @@ const Elem * Elem::top_parent () const
 
   // Keep getting the element's parent
   // until that parent is at level-0
-  while (tp->parent() != libmesh_nullptr)
+  while (tp->parent() != nullptr)
     tp = tp->parent();
 
   libmesh_assert(tp);
@@ -2394,7 +2562,7 @@ unsigned int Elem::level() const
   // created directly from file
   // or by the user, so I am a
   // level-0 element
-  if (this->parent() == libmesh_nullptr)
+  if (this->parent() == nullptr)
     return 0;
 
   // if the parent and this element are of different
@@ -2437,7 +2605,7 @@ inline
 const Elem * Elem::raw_child_ptr (unsigned int i) const
 {
   if (!_children)
-    return libmesh_nullptr;
+    return nullptr;
 
   return _children[i];
 }
@@ -2560,7 +2728,7 @@ inline
 void Elem::set_p_level(unsigned int p)
 {
   // Maintain the parent's p level as the minimum of it's children
-  if (this->parent() != libmesh_nullptr)
+  if (this->parent() != nullptr)
     {
       unsigned int parent_p_level = this->parent()->p_level();
 
@@ -2712,7 +2880,7 @@ public:
   SideIter(const unsigned int side_number,
            Elem * parent)
     : _side(),
-      _side_ptr(libmesh_nullptr),
+      _side_ptr(nullptr),
       _parent(parent),
       _side_number(side_number)
   {}
@@ -2721,8 +2889,8 @@ public:
   // Empty constructor.
   SideIter()
     : _side(),
-      _side_ptr(libmesh_nullptr),
-      _parent(libmesh_nullptr),
+      _side_ptr(nullptr),
+      _parent(nullptr),
       _side_number(libMesh::invalid_uint)
   {}
 
@@ -2730,7 +2898,7 @@ public:
   // Copy constructor
   SideIter(const SideIter & other)
     : _side(),
-      _side_ptr(libmesh_nullptr),
+      _side_ptr(nullptr),
       _parent(other._parent),
       _side_number(other._side_number)
   {}
@@ -2772,11 +2940,11 @@ public:
 
   // Consults the parent Elem to determine if the side
   // is a boundary side.  Note: currently side N is a
-  // boundary side if neighbor N is NULL.  Be careful,
+  // boundary side if neighbor N is nullptr.  Be careful,
   // this could possibly change in the future?
   bool side_on_boundary() const
   {
-    return this->_parent->neighbor_ptr(_side_number) == libmesh_nullptr;
+    return this->_parent->neighbor_ptr(_side_number) == nullptr;
   }
 
 private:
@@ -2874,7 +3042,7 @@ SimpleRange<Elem::ConstNeighborPtrIter> Elem::neighbor_ptr_range() const
 #define LIBMESH_ENABLE_TOPOLOGY_CACHES                                  \
   virtual                                                               \
   std::vector<std::vector<std::vector<std::vector<std::pair<unsigned char, unsigned char>>>>> & \
-  _get_bracketing_node_cache() const libmesh_override                   \
+  _get_bracketing_node_cache() const override                   \
   {                                                                     \
     static std::vector<std::vector<std::vector<std::vector<std::pair<unsigned char, unsigned char>>>>> c; \
     return c;                                                           \
@@ -2882,7 +3050,7 @@ SimpleRange<Elem::ConstNeighborPtrIter> Elem::neighbor_ptr_range() const
                                                                         \
   virtual                                                               \
   std::vector<std::vector<std::vector<signed char>>> &                  \
-  _get_parent_indices_cache() const libmesh_override                    \
+  _get_parent_indices_cache() const override                    \
   {                                                                     \
     static std::vector<std::vector<std::vector<signed char>>> c;        \
     return c;                                                           \

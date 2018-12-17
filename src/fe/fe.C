@@ -25,6 +25,7 @@
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/quadrature.h"
 #include "libmesh/tensor_value.h"
+#include "libmesh/enum_elem_type.h"
 
 namespace libMesh
 {
@@ -32,6 +33,19 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // FE class members
+template <unsigned int Dim, FEFamily T>
+FE<Dim,T>::FE (const FEType & fet) :
+  FEGenericBase<typename FEOutputType<T>::type> (Dim,fet),
+  last_side(INVALID_ELEM),
+  last_edge(libMesh::invalid_uint)
+{
+  // Sanity check.  Make sure the
+  // Family specified in the template instantiation
+  // matches the one in the FEType object
+  libmesh_assert_equal_to (T, this->get_family());
+}
+
+
 template <unsigned int Dim, FEFamily T>
 unsigned int FE<Dim,T>::n_shape_functions () const
 {
@@ -132,7 +146,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
     {
       // Initialize the shape functions at the user-specified
       // points
-      if (pts != libmesh_nullptr)
+      if (pts != nullptr)
         {
           // Set the type and p level for this element
           this->elem_type = elem->type();
@@ -246,9 +260,9 @@ void FE<Dim,T>::reinit(const Elem * elem,
     }
 
   // Compute the map for this element.
-  if (pts != libmesh_nullptr)
+  if (pts != nullptr)
     {
-      if (weights != libmesh_nullptr)
+      if (weights != nullptr)
         {
           this->_fe_map->compute_map (this->dim, *weights, elem, this->calculate_d2phi);
         }
@@ -267,7 +281,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
   // quadrature points.
   if (!cached_nodes_still_fit)
     {
-      if (pts != libmesh_nullptr)
+      if (pts != nullptr)
         this->compute_shape_functions (elem,*pts);
       else
         this->compute_shape_functions(elem,this->qrule->get_points());

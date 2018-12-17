@@ -72,6 +72,7 @@
 
 // The definition of a geometric element
 #include "libmesh/elem.h"
+#include "libmesh/enum_solver_package.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -336,12 +337,14 @@ void assemble (EquationSystems & es,
       // the last element.  Note that this will be the case if the
       // element type is different (i.e. the last element was a
       // triangle, now we are on a quadrilateral).
-      Ke.resize (dof_indices.size(),
-                 dof_indices.size());
+      const unsigned int n_dofs =
+        cast_int<unsigned int>(dof_indices.size());
 
-      Fe.resize (dof_indices.size());
-      Ve.resize (dof_indices.size());
-      We.resize (dof_indices.size());
+      Ke.resize (n_dofs, n_dofs);
+
+      Fe.resize (n_dofs);
+      Ve.resize (n_dofs);
+      We.resize (n_dofs);
 
       // Now we will build the element matrix and right-hand-side.
       // Constructing the RHS requires the solution and its
@@ -352,12 +355,12 @@ void assemble (EquationSystems & es,
       for (unsigned int qp=0; qp<qrule.n_points(); qp++)
         {
           // Now compute the element matrix and RHS contributions.
-          for (std::size_t i=0; i<phi.size(); i++)
+          for (unsigned int i=0; i<n_dofs; i++)
             {
               // The RHS contribution
               Fe(i) += JxW[qp]*phi[i][qp];
 
-              for (std::size_t j=0; j<phi.size(); j++)
+              for (unsigned int j=0; j<n_dofs; j++)
                 {
                   // The matrix contribution
                   Ke(i,j) += JxW[qp]*(
@@ -389,15 +392,15 @@ void assemble (EquationSystems & es,
         // If the element has no neighbor on a side then that
         // side MUST live on a boundary of the domain.
         for (auto s : elem->side_index_range())
-          if (elem->neighbor_ptr(s) == libmesh_nullptr)
+          if (elem->neighbor_ptr(s) == nullptr)
             {
               fe_face->reinit(elem, s);
 
               for (unsigned int qp=0; qp<qface.n_points(); qp++)
                 {
                   // Matrix contribution
-                  for (std::size_t i=0; i<psi.size(); i++)
-                    for (std::size_t j=0; j<psi.size(); j++)
+                  for (unsigned int i=0; i<n_dofs; i++)
+                    for (unsigned int j=0; j<n_dofs; j++)
                       Ke(i,j) += penalty*JxW_face[qp]*psi[i][qp]*psi[j][qp];
                 }
             }

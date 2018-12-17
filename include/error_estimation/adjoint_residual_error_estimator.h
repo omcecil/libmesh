@@ -57,9 +57,19 @@ public:
   AdjointResidualErrorEstimator();
 
   /**
-   * Destructor.
+   * This class cannot be (default) copy constructed/assigned because
+   * it has unique_ptr members. Explicitly deleting these functions is
+   * the best way to document this fact.
    */
-  ~AdjointResidualErrorEstimator() {}
+  AdjointResidualErrorEstimator (const AdjointResidualErrorEstimator &) = delete;
+  AdjointResidualErrorEstimator & operator= (const AdjointResidualErrorEstimator &) = delete;
+
+  /**
+   * Defaulted move ctor, move assignment operator, and destructor.
+   */
+  AdjointResidualErrorEstimator (AdjointResidualErrorEstimator &&) = default;
+  AdjointResidualErrorEstimator & operator= (AdjointResidualErrorEstimator &&) = default;
+  virtual ~AdjointResidualErrorEstimator() = default;
 
   /**
    * Access to the "subestimator" (default: PatchRecovery) to use on
@@ -106,11 +116,10 @@ public:
    */
   virtual void estimate_error (const System & system,
                                ErrorVector & error_per_cell,
-                               const NumericVector<Number> * solution_vector = libmesh_nullptr,
-                               bool estimate_parent_error = false) libmesh_override;
+                               const NumericVector<Number> * solution_vector = nullptr,
+                               bool estimate_parent_error = false) override;
 
-  virtual ErrorEstimatorType type() const libmesh_override
-  { return ADJOINT_RESIDUAL;}
+  virtual ErrorEstimatorType type() const override;
 
 protected:
 

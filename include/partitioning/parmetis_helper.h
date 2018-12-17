@@ -55,9 +55,14 @@ class ParmetisHelper
 {
 public:
   /**
-   * Constructor.
+   * Defaulted constructors, assignment operators, and destructor.
    */
-  ParmetisHelper () {}
+  ParmetisHelper () = default;
+  ParmetisHelper (const ParmetisHelper &) = default;
+  ParmetisHelper (ParmetisHelper &&) = default;
+  ParmetisHelper & operator= (const ParmetisHelper &) = default;
+  ParmetisHelper & operator= (ParmetisHelper &&) = default;
+  ~ParmetisHelper () = default;
 
 #ifdef LIBMESH_HAVE_PARMETIS
 
@@ -68,7 +73,16 @@ public:
   std::vector<Parmetis::idx_t>  vtxdist;
   std::vector<Parmetis::idx_t>  xadj;
   std::vector<Parmetis::idx_t>  adjncy;
-  std::vector<Parmetis::idx_t>  part;
+
+  // We use dof_id_type for part so we can pass it directly to
+  // Partitioner:: methods expecting that type.
+  std::vector<dof_id_type>  part;
+
+  // But we plan to pass a pointer to part as a buffer to ParMETIS, so
+  // it had better be using a simply reinterpretable type!
+  static_assert(sizeof(Parmetis::idx_t) == sizeof(dof_id_type),
+                "ParMETIS and libMesh ID sizes must match!");
+
   std::vector<Parmetis::real_t> tpwgts;
   std::vector<Parmetis::real_t> ubvec;
   std::vector<Parmetis::idx_t>  options;

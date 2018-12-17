@@ -80,10 +80,14 @@ public:
   SparseMatrix (const Parallel::Communicator & comm);
 
   /**
-   * Destructor. Free all memory, but do not release the memory of the
-   * sparsity structure.
+   * The 5 special functions can be defaulted for this class, as it
+   * does not manage any memory itself.
    */
-  virtual ~SparseMatrix ();
+  SparseMatrix (SparseMatrix &&) = default;
+  SparseMatrix (const SparseMatrix &) = default;
+  SparseMatrix & operator= (const SparseMatrix &) = default;
+  SparseMatrix & operator= (SparseMatrix &&) = default;
+  virtual ~SparseMatrix () = default;
 
   /**
    * Builds a \p SparseMatrix<T> using the linear solver package specified by
@@ -253,7 +257,7 @@ public:
   /**
    * Compute \f$ A \leftarrow A + a*X \f$ for scalar \p a, matrix \p X.
    */
-  virtual void add (const T a, SparseMatrix<T> & X) = 0;
+  virtual void add (const T a, const SparseMatrix<T> & X) = 0;
 
   /**
    * \returns A copy of matrix entry \p (i,j).

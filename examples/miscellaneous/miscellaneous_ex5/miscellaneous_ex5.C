@@ -52,8 +52,8 @@
 #include "libmesh/kelly_error_estimator.h"
 #include "libmesh/discontinuity_measure.h"
 #include "libmesh/string_to_enum.h"
-
 #include "libmesh/exact_solution.h"
+#include "libmesh/enum_solver_package.h"
 //#define QORDER TWENTYSIXTH
 
 // Bring in everything from the libMesh namespace
@@ -241,7 +241,8 @@ void assemble_ellipticdg(EquationSystems & es,
       // matrix and right-hand-side this element will
       // contribute to.
       dof_map.dof_indices (elem, dof_indices);
-      const unsigned int n_dofs = dof_indices.size();
+      const unsigned int n_dofs =
+        cast_int<unsigned int>(dof_indices.size());
 
       // Compute the element-specific data for the current
       // element.  This involves computing the location of the
@@ -271,7 +272,7 @@ void assemble_ellipticdg(EquationSystems & es,
       // side MUST live on a boundary of the domain.
       for (auto side : elem->side_index_range())
         {
-          if (elem->neighbor_ptr(side) == libmesh_nullptr)
+          if (elem->neighbor_ptr(side) == nullptr)
             {
               // Pointer to the element face
               fe_elem_face->reinit(elem, side);
@@ -377,7 +378,8 @@ void assemble_ellipticdg(EquationSystems & es,
                   // matrix this neighbor will contribute to.
                   std::vector<dof_id_type> neighbor_dof_indices;
                   dof_map.dof_indices (neighbor, neighbor_dof_indices);
-                  const unsigned int n_neighbor_dofs = neighbor_dof_indices.size();
+                  const unsigned int n_neighbor_dofs =
+                    cast_int<unsigned int>(neighbor_dof_indices.size());
 
                   // Zero the element and neighbor side matrix before
                   // summing them.  We use the resize member here because

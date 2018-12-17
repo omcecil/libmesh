@@ -16,29 +16,22 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
+// libMesh includes
 #include "libmesh/quadrature_monomial.h"
+#include "libmesh/enum_quadrature_type.h"
 
 namespace libMesh
 {
 
 
 // See the files:
-
 // quadrature_monomial_2D.C
 // quadrature_monomial_3D.C
-
 // for implementation of specific element types.
 
-// Constructor
-QMonomial::QMonomial(const unsigned int d,
-                     const Order o) : QBase(d,o)
+QuadratureType QMonomial::type() const
 {
-}
-
-
-// Destructor
-QMonomial::~QMonomial()
-{
+  return QMONOMIAL;
 }
 
 void QMonomial::wissmann_rule(const Real rule_data[][3],

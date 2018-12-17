@@ -75,12 +75,12 @@ public:
   /**
    * This method implements reading a mesh from a specified file.
    */
-  virtual void read (const std::string &) libmesh_override;
+  virtual void read (const std::string &) override;
 
   /**
    * This method implements writing a mesh to a specified file.
    */
-  virtual void write (const std::string &) libmesh_override;
+  virtual void write (const std::string &) override;
 
   /**
    * Set the flag indicating if we should be verbose.
@@ -97,7 +97,7 @@ public:
    * \returns A pointer the values associated with the node \p node,
    * as read in by the read_dataset() method.
    *
-   * If no values exist for the node in question, a libmesh_nullptr is
+   * If no values exist for the node in question, a nullptr is
    * returned instead.  It is up to the user to check the return value
    * before using it.
    */

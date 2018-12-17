@@ -68,11 +68,21 @@ public:
   CentroidPartitioner (const CentroidSortMethod sm=X) : _sort_method(sm) {}
 
   /**
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this class.
+   */
+  CentroidPartitioner (const CentroidPartitioner &) = default;
+  CentroidPartitioner (CentroidPartitioner &&) = default;
+  CentroidPartitioner & operator= (const CentroidPartitioner &) = default;
+  CentroidPartitioner & operator= (CentroidPartitioner &&) = default;
+  virtual ~CentroidPartitioner() = default;
+
+  /**
    * \returns A copy of this partitioner wrapped in a smart pointer.
    */
-  virtual std::unique_ptr<Partitioner> clone () const libmesh_override
+  virtual std::unique_ptr<Partitioner> clone () const override
   {
-    return libmesh_make_unique<CentroidPartitioner>(sort_method());
+    return libmesh_make_unique<CentroidPartitioner>(*this);
   }
 
   /**
@@ -91,7 +101,7 @@ public:
   virtual void partition_range(MeshBase & mesh,
                                MeshBase::element_iterator it,
                                MeshBase::element_iterator end,
-                               const unsigned int n) libmesh_override;
+                               const unsigned int n) override;
 
 protected:
 
@@ -99,7 +109,7 @@ protected:
    * Partitions the mesh into n subdomains.
    */
   virtual void _do_partition (MeshBase & mesh,
-                              const unsigned int n) libmesh_override;
+                              const unsigned int n) override;
 
 private:
 

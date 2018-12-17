@@ -4,7 +4,6 @@
 # details which are not required for the public interface
 noinst_HEADERS =  \
         base/libmesh_augment_std_namespace.h \
-        mesh/exodusII_io_helper.h \
         mesh/nemesis_io_helper.h \
         numerics/laspack_matrix.h \
         numerics/laspack_vector.h \
@@ -169,6 +168,7 @@ include_HEADERS =  \
         mesh/distributed_mesh.h \
         mesh/ensight_io.h \
         mesh/exodusII_io.h \
+        mesh/exodusII_io_helper.h \
         mesh/fro_io.h \
         mesh/gmsh_io.h \
         mesh/gmv_io.h \
@@ -256,6 +256,7 @@ include_HEADERS =  \
         numerics/trilinos_epetra_matrix.h \
         numerics/trilinos_epetra_vector.h \
         numerics/trilinos_preconditioner.h \
+        numerics/tuple_of.h \
         numerics/type_n_tensor.h \
         numerics/type_tensor.h \
         numerics/type_vector.h \
@@ -282,8 +283,12 @@ include_HEADERS =  \
         parallel/parallel_object.h \
         parallel/parallel_only.h \
         parallel/parallel_sort.h \
+        parallel/parallel_sync.h \
         parallel/post_wait_copy_buffer.h \
         parallel/post_wait_delete_buffer.h \
+        parallel/post_wait_dereference_shared_ptr.h \
+        parallel/post_wait_dereference_tag.h \
+        parallel/post_wait_free_buffer.h \
         parallel/post_wait_unpack_buffer.h \
         parallel/post_wait_work.h \
         parallel/request.h \
@@ -371,6 +376,7 @@ include_HEADERS =  \
         solvers/optimization_solver.h \
         solvers/petsc_auto_fieldsplit.h \
         solvers/petsc_diff_solver.h \
+        solvers/petsc_dm_wrapper.h \
         solvers/petsc_linear_solver.h \
         solvers/petsc_nonlinear_solver.h \
         solvers/petscdmlibmesh.h \

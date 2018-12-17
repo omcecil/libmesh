@@ -67,7 +67,7 @@ public:
                 const NumericVector<Number> & vec,
                 const DofMap & dof_map,
                 const std::vector<unsigned int> & vars,
-                const FunctionBase<Number> * master=libmesh_nullptr);
+                const FunctionBase<Number> * master=nullptr);
 
   /**
    * Constructor for mesh based functions with a number
@@ -81,7 +81,21 @@ public:
                 const NumericVector<Number> & vec,
                 const DofMap & dof_map,
                 const unsigned int var,
-                const FunctionBase<Number> * master=libmesh_nullptr);
+                const FunctionBase<Number> * master=nullptr);
+
+  /**
+   * This class is sometimes responsible for cleaning up the
+   * _point_locator, so it can't be default (shallow) copy constructed
+   * or move constructed.
+   */
+  MeshFunction (MeshFunction &&) = delete;
+  MeshFunction (const MeshFunction &) = delete;
+
+  /**
+   * This class contains const references so it can't be assigned.
+   */
+  MeshFunction & operator= (const MeshFunction &) = delete;
+  MeshFunction & operator= (MeshFunction &&) = delete;
 
   /**
    * Destructor.
@@ -93,7 +107,7 @@ public:
    * own and specifying the Trees::NODES method.  specifies the method
    * to use when building a \p PointLocator
    */
-  virtual void init () libmesh_override { this->init(Trees::NODES); }
+  virtual void init () override { this->init(Trees::NODES); }
 
   /**
    * The actual initialization process.  Takes an optional argument which
@@ -104,7 +118,7 @@ public:
   /**
    * Clears the function.
    */
-  virtual void clear () libmesh_override;
+  virtual void clear () override;
 
   /**
    * \returns A new copy of the function.
@@ -115,14 +129,14 @@ public:
    * \note This implies the copy should not be used after the
    * original is destroyed.
    */
-  virtual std::unique_ptr<FunctionBase<Number>> clone () const libmesh_override;
+  virtual std::unique_ptr<FunctionBase<Number>> clone () const override;
 
   /**
    * \returns The value of variable 0 at point \p p and for \p time,
    * which defaults to zero.
    */
   Number operator() (const Point & p,
-                     const Real time=0.) libmesh_override;
+                     const Real time=0.) override;
 
   /**
    * \returns A map of values of variable 0 at point
@@ -168,7 +182,7 @@ public:
    */
   void operator() (const Point & p,
                    const Real time,
-                   DenseVector<Number> & output) libmesh_override;
+                   DenseVector<Number> & output) override;
 
   /**
    * Computes values at coordinate \p p and for time \p time,
@@ -208,7 +222,7 @@ public:
   void gradient (const Point & p,
                  const Real time,
                  std::vector<Gradient> & output,
-                 const std::set<subdomain_id_type> * subdomain_ids = libmesh_nullptr);
+                 const std::set<subdomain_id_type> * subdomain_ids = nullptr);
 
   /**
    * Similar to gradient, but with the difference
@@ -238,7 +252,7 @@ public:
   void hessian (const Point & p,
                 const Real time,
                 std::vector<Tensor> & output,
-                const std::set<subdomain_id_type> * subdomain_ids = libmesh_nullptr);
+                const std::set<subdomain_id_type> * subdomain_ids = nullptr);
 
   /**
    * \returns The current \p PointLocator object, for use elsewhere.
@@ -296,7 +310,7 @@ protected:
    * Helper function to reduce code duplication
    */
   const Elem * find_element(const Point & p,
-                            const std::set<subdomain_id_type> * subdomain_ids = libmesh_nullptr) const;
+                            const std::set<subdomain_id_type> * subdomain_ids = nullptr) const;
 
   /**
    * \returns All elements that are close to a point \p p.
@@ -305,7 +319,7 @@ protected:
    * is on the boundary.
    */
   std::set<const Elem *> find_elements(const Point & p,
-                                       const std::set<subdomain_id_type> * subdomain_ids = libmesh_nullptr) const;
+                                       const std::set<subdomain_id_type> * subdomain_ids = nullptr) const;
 
   /**
    * The equation systems handler, from which

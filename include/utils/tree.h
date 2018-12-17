@@ -64,17 +64,17 @@ public:
   /**
    * Prints the nodes.
    */
-  virtual void print_nodes(std::ostream & my_out=libMesh::out) const libmesh_override;
+  virtual void print_nodes(std::ostream & my_out=libMesh::out) const override;
 
   /**
    * Prints the nodes.
    */
-  virtual void print_elements(std::ostream & my_out=libMesh::out) const libmesh_override;
+  virtual void print_elements(std::ostream & my_out=libMesh::out) const override;
 
   /**
    * \returns The number of active bins.
    */
-  virtual unsigned int n_active_bins() const libmesh_override
+  virtual unsigned int n_active_bins() const override
   { return root.n_active_bins(); }
 
   /**
@@ -83,8 +83,8 @@ public:
    * optionally using a non-zero relative tolerance for searches.
    */
   virtual const Elem * find_element(const Point & p,
-                                    const std::set<subdomain_id_type> * allowed_subdomains = libmesh_nullptr,
-                                    Real relative_tol = TOLERANCE) const libmesh_override;
+                                    const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
+                                    Real relative_tol = TOLERANCE) const override;
 
   /**
    * \returns A pointer to the element containing point p,
@@ -92,7 +92,7 @@ public:
    * optionally using a non-zero relative tolerance for searches.
    */
   const Elem * operator() (const Point & p,
-                           const std::set<subdomain_id_type> * allowed_subdomains = libmesh_nullptr,
+                           const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
                            Real relative_tol = TOLERANCE) const;
 
 private:

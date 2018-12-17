@@ -78,7 +78,7 @@ void HeatSystem::init_context(DiffContext & context)
 {
   FEMContext & c = cast_ref<FEMContext &>(context);
 
-  FEBase * elem_fe = libmesh_nullptr;
+  FEBase * elem_fe = nullptr;
   c.get_element_fe(0, elem_fe);
 
   // Now make sure we have requested all the data
@@ -116,7 +116,7 @@ bool HeatSystem::element_time_derivative (bool request_jacobian,
 
   // First we get some references to cell-specific data that
   // will be used to assemble the linear system.
-  FEBase * elem_fe = libmesh_nullptr;
+  FEBase * elem_fe = nullptr;
   c.get_element_fe(0, elem_fe);
 
   // Element Jacobian * quadrature weights for interior integration
@@ -125,11 +125,8 @@ bool HeatSystem::element_time_derivative (bool request_jacobian,
   // Element basis functions
   const std::vector<std::vector<RealGradient>> & dphi = elem_fe->get_dphi();
 
-  // Workaround for weird FC6 bug
-  optassert(c.get_dof_indices().size() > 0);
-
   // The number of local degrees of freedom in each variable
-  const unsigned int n_u_dofs = c.get_dof_indices(0).size();
+  const unsigned int n_u_dofs = c.n_dof_indices(0);
 
   // The subvectors and submatrices we need to fill:
   DenseSubMatrix<Number> & K = c.get_elem_jacobian(0, 0);
@@ -162,11 +159,9 @@ bool HeatSystem::element_time_derivative (bool request_jacobian,
 // Perturb and accumulate dual weighted residuals
 void HeatSystem::perturb_accumulate_residuals(ParameterVector & parameters_in)
 {
-  const unsigned int Np = parameters_in.size();
-
   this->update();
 
-  for (unsigned int j=0; j != Np; ++j)
+  for (std::size_t j=0, Np = parameters_in.size(); j != Np; ++j)
     {
       Number old_parameter = *parameters_in[j];
 

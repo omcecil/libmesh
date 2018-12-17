@@ -67,16 +67,21 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
-    if (solver->objective_object != libmesh_nullptr)
+    // Enforce constraints (if any) exactly on the
+    // current_local_solution.  This is the solution vector that is
+    // actually used in the computation of the objective function
+    // below, and is not locked by debug-enabled PETSc the way that
+    // the solution vector is.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->objective_object != nullptr)
       (*objective) = solver->objective_object->objective(*(sys.current_local_solution), sys);
     else
       libmesh_error_msg("Objective function not defined in __libmesh_tao_objective");
@@ -110,13 +115,11 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
     // We'll also pass the gradient in to the assembly routine
@@ -126,7 +129,10 @@ extern "C"
     // Clear the gradient prior to assembly
     gradient.zero();
 
-    if (solver->gradient_object != libmesh_nullptr)
+    // Enforce constraints exactly on the current_local_solution.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->gradient_object != nullptr)
       solver->gradient_object->gradient(*(sys.current_local_solution), gradient, sys);
     else
       libmesh_error_msg("Gradient function not defined in __libmesh_tao_gradient");
@@ -161,13 +167,11 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
     // Let's also wrap pc and h in PetscMatrix objects for convenience
@@ -176,7 +180,10 @@ extern "C"
     PC.attach_dof_map(sys.get_dof_map());
     hessian.attach_dof_map(sys.get_dof_map());
 
-    if (solver->hessian_object != libmesh_nullptr)
+    // Enforce constraints exactly on the current_local_solution.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->hessian_object != nullptr)
       {
         // Following PetscNonlinearSolver by passing in PC. It's not clear
         // why we pass in PC and not hessian though?
@@ -216,13 +223,11 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
     // We'll also pass the constraints vector ce into the assembly routine
@@ -232,7 +237,10 @@ extern "C"
     // Clear the gradient prior to assembly
     eq_constraints.zero();
 
-    if (solver->equality_constraints_object != libmesh_nullptr)
+    // Enforce constraints exactly on the current_local_solution.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->equality_constraints_object != nullptr)
       solver->equality_constraints_object->equality_constraints(*(sys.current_local_solution), eq_constraints, sys);
     else
       libmesh_error_msg("Constraints function not defined in __libmesh_tao_equality_constraints");
@@ -267,20 +275,21 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
     // Let's also wrap J and Jpre in PetscMatrix objects for convenience
     PetscMatrix<Number> J_petsc(J, sys.comm());
     PetscMatrix<Number> Jpre_petsc(Jpre, sys.comm());
 
-    if (solver->equality_constraints_jacobian_object != libmesh_nullptr)
+    // Enforce constraints exactly on the current_local_solution.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->equality_constraints_jacobian_object != nullptr)
       solver->equality_constraints_jacobian_object->equality_constraints_jacobian(*(sys.current_local_solution), J_petsc, sys);
     else
       libmesh_error_msg("Constraints function not defined in __libmesh_tao_equality_constraints_jacobian");
@@ -315,13 +324,11 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
     // We'll also pass the constraints vector ce into the assembly routine
@@ -331,7 +338,10 @@ extern "C"
     // Clear the gradient prior to assembly
     ineq_constraints.zero();
 
-    if (solver->inequality_constraints_object != libmesh_nullptr)
+    // Enforce constraints exactly on the current_local_solution.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->inequality_constraints_object != nullptr)
       solver->inequality_constraints_object->inequality_constraints(*(sys.current_local_solution), ineq_constraints, sys);
     else
       libmesh_error_msg("Constraints function not defined in __libmesh_tao_inequality_constraints");
@@ -366,20 +376,21 @@ extern "C"
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X(x, sys.comm());
 
-    // Perform a swap so that sys.solution points to X
+    // Perform a swap so that sys.solution points to the input vector
+    // "x", update sys.current_local_solution based on "x", then swap
+    // back.
     X.swap(X_sys);
-    // Impose constraints on X
-    sys.get_dof_map().enforce_constraints_exactly(sys);
-    // Update sys.current_local_solution based on X
     sys.update();
-    // Swap back
     X.swap(X_sys);
 
     // Let's also wrap J and Jpre in PetscMatrix objects for convenience
     PetscMatrix<Number> J_petsc(J, sys.comm());
     PetscMatrix<Number> Jpre_petsc(Jpre, sys.comm());
 
-    if (solver->inequality_constraints_jacobian_object != libmesh_nullptr)
+    // Enforce constraints exactly on the current_local_solution.
+    sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
+
+    if (solver->inequality_constraints_jacobian_object != nullptr)
       solver->inequality_constraints_jacobian_object->inequality_constraints_jacobian(*(sys.current_local_solution), J_petsc, sys);
     else
       libmesh_error_msg("Constraints function not defined in __libmesh_tao_inequality_constraints_jacobian");
@@ -582,6 +593,12 @@ void TaoOptimizationSolver<T>::solve ()
   // Perform the optimization
   ierr = TaoSolve(_tao);
   LIBMESH_CHKERR(ierr);
+
+  // Enforce constraints exactly now that the solve is done.  We have
+  // been enforcing them on the current_local_solution during the
+  // solve, but now need to be sure they are enforced on the parallel
+  // solution vector as well.
+  this->system().get_dof_map().enforce_constraints_exactly(this->system());
 
   // Store the convergence/divergence reason
   ierr = TaoGetConvergedReason(_tao, &_reason);

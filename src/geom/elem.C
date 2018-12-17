@@ -19,6 +19,7 @@
 
 // C++ includes
 #include <algorithm> // for std::sort
+#include <array>
 #include <iterator>  // for std::ostream_iterator
 #include <sstream>
 #include <limits>    // for std::numeric_limits<>
@@ -68,6 +69,9 @@
 #include "libmesh/reference_elem.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/threads.h"
+#include "libmesh/enum_elem_quality.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 #ifdef LIBMESH_ENABLE_PERIODIC
 #include "libmesh/mesh.h"
@@ -84,6 +88,8 @@ Threads::spin_mutex parent_bracketing_nodes_mutex;
 const subdomain_id_type Elem::invalid_subdomain_id = std::numeric_limits<subdomain_id_type>::max();
 
 // Initialize static member variables
+const unsigned int Elem::max_n_nodes;
+
 const unsigned int Elem::type_to_n_nodes_map [] =
   {
     2,  // EDGE2
@@ -396,16 +402,16 @@ dof_id_type Elem::key () const
 {
   const unsigned short n_n = this->n_nodes();
 
-  std::vector<dof_id_type> node_ids(n_n);
+  std::array<dof_id_type, Elem::max_n_nodes> node_ids;
 
   for (unsigned short n=0; n != n_n; ++n)
     node_ids[n] = this->node_id(n);
 
   // Always sort, so that different local node numberings hash to the
   // same value.
-  std::sort (node_ids.begin(), node_ids.end());
+  std::sort (node_ids.begin(), node_ids.begin()+n_n);
 
-  return Utility::hashword(node_ids);
+  return Utility::hashword(node_ids.data(), n_n);
 }
 
 
@@ -419,11 +425,9 @@ bool Elem::operator == (const Elem & rhs) const
   const unsigned short n_n = this->n_nodes();
   libmesh_assert_equal_to(n_n, rhs.n_nodes());
 
-  // Make two sorted vectors of global node ids and compare them for
+  // Make two sorted arrays of global node ids and compare them for
   // equality.
-  std::vector<dof_id_type>
-    this_ids(n_n),
-    rhs_ids(n_n);
+  std::array<dof_id_type, Elem::max_n_nodes> this_ids, rhs_ids;
 
   for (unsigned short n = 0; n != n_n; n++)
     {
@@ -432,11 +436,14 @@ bool Elem::operator == (const Elem & rhs) const
     }
 
   // Sort the vectors to rule out different local node numberings.
-  std::sort(this_ids.begin(), this_ids.end());
-  std::sort(rhs_ids.begin(), rhs_ids.end());
+  std::sort(this_ids.begin(), this_ids.begin()+n_n);
+  std::sort(rhs_ids.begin(), rhs_ids.begin()+n_n);
 
   // If the node ids match, the elements are equal!
-  return this_ids == rhs_ids;
+  for (unsigned short n = 0; n != n_n; ++n)
+    if (this_ids[n] != rhs_ids[n])
+      return false;
+  return true;
 }
 
 
@@ -447,15 +454,9 @@ bool Elem::is_semilocal(const processor_id_type my_pid) const
 
   this->find_point_neighbors(point_neighbors);
 
-  std::set<const Elem *>::const_iterator       it  = point_neighbors.begin();
-  const std::set<const Elem *>::const_iterator end = point_neighbors.end();
-
-  for (; it != end; ++it)
-    {
-      const Elem * elem = *it;
-      if (elem->processor_id() == my_pid)
-        return true;
-    }
+  for (const auto & elem : point_neighbors)
+    if (elem->processor_id() == my_pid)
+      return true;
 
   return false;
 }
@@ -510,13 +511,7 @@ void Elem::find_point_neighbors(const Point & p,
     {
       // Loop over all the elements in the patch that haven't already
       // been tested
-      std::set<const Elem *>::const_iterator       it  = untested_set.begin();
-      const std::set<const Elem *>::const_iterator end = untested_set.end();
-
-      for (; it != end; ++it)
-        {
-          const Elem * elem = *it;
-
+      for (const auto & elem : untested_set)
           for (auto current_neighbor : elem->neighbor_ptr_range())
             {
               if (current_neighbor &&
@@ -543,13 +538,7 @@ void Elem::find_point_neighbors(const Point & p,
                       current_neighbor->active_family_tree_by_neighbor
                         (active_neighbor_children, elem);
 
-                      std::vector<const Elem *>::const_iterator
-                        child_it = active_neighbor_children.begin();
-                      const std::vector<const Elem *>::const_iterator
-                        child_end = active_neighbor_children.end();
-                      for (; child_it != child_end; ++child_it)
-                        {
-                          const Elem * current_child = *child_it;
+                      for (const auto & current_child : active_neighbor_children)
                           if (current_child->contains_point(p))
                             {
                               // Make sure we'll test it
@@ -558,12 +547,10 @@ void Elem::find_point_neighbors(const Point & p,
 
                               neighbor_set.insert (current_child);
                             }
-                        }
                     }
 #endif // #ifdef LIBMESH_ENABLE_AMR
                 }
             }
-        }
       untested_set.swap(next_untested_set);
       next_untested_set.clear();
     }
@@ -596,13 +583,7 @@ void Elem::find_point_neighbors(std::set<const Elem *> & neighbor_set,
     {
       // Loop over all the elements in the patch that haven't already
       // been tested
-      std::set<const Elem *>::const_iterator       it  = untested_set.begin();
-      const std::set<const Elem *>::const_iterator end = untested_set.end();
-
-      for (; it != end; ++it)
-        {
-          const Elem * elem = *it;
-
+      for (const auto & elem : untested_set)
           for (auto current_neighbor : elem->neighbor_ptr_range())
             {
               if (current_neighbor &&
@@ -630,13 +611,8 @@ void Elem::find_point_neighbors(std::set<const Elem *> & neighbor_set,
                       current_neighbor->active_family_tree_by_neighbor
                         (active_neighbor_children, elem);
 
-                      std::vector<const Elem *>::const_iterator
-                        child_it = active_neighbor_children.begin();
-                      const std::vector<const Elem *>::const_iterator
-                        child_end = active_neighbor_children.end();
-                      for (; child_it != child_end; ++child_it)
+                      for (const auto & current_child : active_neighbor_children)
                         {
-                          const Elem * current_child = *child_it;
                           if (this->contains_vertex_of(current_child) ||
                               (current_child)->contains_vertex_of(this))
                             {
@@ -651,7 +627,6 @@ void Elem::find_point_neighbors(std::set<const Elem *> & neighbor_set,
 #endif // #ifdef LIBMESH_ENABLE_AMR
                 }
             }
-        }
       untested_set.swap(next_untested_set);
       next_untested_set.clear();
     }
@@ -675,13 +650,12 @@ void Elem::find_edge_neighbors(const Point & p1,
 
   while (it != end)
     {
-      std::set<const Elem *>::iterator current = it++;
-
-      const Elem * elem = *current;
-      // This won't invalidate iterator it, because it is already
-      // pointing to the next element
-      if (!elem->contains_point(p2))
-        neighbor_set.erase(current);
+      // As of C++11, set::erase returns an iterator to the element
+      // following the erased element, or end.
+      if (!(*it)->contains_point(p2))
+        it = neighbor_set.erase(it);
+      else
+        ++it;
     }
 }
 
@@ -699,13 +673,8 @@ void Elem::find_edge_neighbors(std::set<const Elem *> & neighbor_set) const
     {
       // Loop over all the elements in the patch that haven't already
       // been tested
-      std::set<const Elem *>::const_iterator       it  = untested_set.begin();
-      const std::set<const Elem *>::const_iterator end = untested_set.end();
-
-      for (; it != end; ++it)
+      for (const auto & elem : untested_set)
         {
-          const Elem * elem = *it;
-
           for (auto current_neighbor : elem->neighbor_ptr_range())
             {
               if (current_neighbor &&
@@ -733,23 +702,15 @@ void Elem::find_edge_neighbors(std::set<const Elem *> & neighbor_set) const
                       current_neighbor->active_family_tree_by_neighbor
                         (active_neighbor_children, elem);
 
-                      std::vector<const Elem *>::const_iterator
-                        child_it = active_neighbor_children.begin();
-                      const std::vector<const Elem *>::const_iterator
-                        child_end = active_neighbor_children.end();
-                      for (; child_it != child_end; ++child_it)
-                        {
-                          const Elem * current_child = *child_it;
-                          if (this->contains_edge_of(*child_it) ||
-                              (*child_it)->contains_edge_of(this))
-                            {
-                              // Make sure we'll test it
-                              if (!neighbor_set.count(current_child))
-                                next_untested_set.insert (current_child);
+                      for (const auto & current_child : active_neighbor_children)
+                        if (this->contains_edge_of(current_child) || current_child->contains_edge_of(this))
+                          {
+                            // Make sure we'll test it
+                            if (!neighbor_set.count(current_child))
+                              next_untested_set.insert (current_child);
 
-                              neighbor_set.insert (current_child);
-                            }
-                        }
+                            neighbor_set.insert (current_child);
+                          }
                     }
 #endif // #ifdef LIBMESH_ENABLE_AMR
                 }
@@ -922,12 +883,12 @@ Elem * Elem::topological_neighbor (const unsigned int i,
   libmesh_assert_less (i, this->n_neighbors());
 
   Elem * neighbor_i = this->neighbor_ptr(i);
-  if (neighbor_i != libmesh_nullptr)
+  if (neighbor_i != nullptr)
     return neighbor_i;
 
   if (pb)
     {
-      // Since the neighbor is NULL it must be on a boundary. We need
+      // Since the neighbor is nullptr it must be on a boundary. We need
       // see if this is a periodic boundary in which case it will have a
       // topological neighbor
       std::vector<boundary_id_type> bc_ids;
@@ -951,7 +912,7 @@ Elem * Elem::topological_neighbor (const unsigned int i,
           }
     }
 
-  return libmesh_nullptr;
+  return nullptr;
 }
 
 
@@ -964,12 +925,12 @@ const Elem * Elem::topological_neighbor (const unsigned int i,
   libmesh_assert_less (i, this->n_neighbors());
 
   const Elem * neighbor_i = this->neighbor_ptr(i);
-  if (neighbor_i != libmesh_nullptr)
+  if (neighbor_i != nullptr)
     return neighbor_i;
 
   if (pb)
     {
-      // Since the neighbor is NULL it must be on a boundary. We need
+      // Since the neighbor is nullptr it must be on a boundary. We need
       // see if this is a periodic boundary in which case it will have a
       // topological neighbor
       std::vector<boundary_id_type> bc_ids;
@@ -989,7 +950,7 @@ const Elem * Elem::topological_neighbor (const unsigned int i,
           }
     }
 
-  return libmesh_nullptr;
+  return nullptr;
 }
 
 
@@ -1149,9 +1110,12 @@ void Elem::make_links_to_me_local(unsigned int n)
     neigh_family.push_back(neigh);
 
   // And point them to elem
-  for (std::size_t i = 0; i != neigh_family.size(); ++i)
+  for (auto & const_elem : neigh_family)
     {
-      Elem * neigh_family_member = const_cast<Elem *>(neigh_family[i]);
+      // This const_cast is necessary until we have a version of
+      // family_tree_by_side that returns a vector of non-constant
+      // pointers when called on a non-constant Elem.
+      Elem * neigh_family_member = const_cast<Elem *>(const_elem);
 
       // Only subactive elements point to other subactive elements
       if (this->subactive() && !neigh_family_member->subactive())
@@ -1170,7 +1134,7 @@ void Elem::make_links_to_me_local(unsigned int n)
                        neigh_family_member->neighbor_ptr(nn)->is_ancestor_of(this))) ||
                      (neigh_family_member->neighbor_ptr(nn) == remote_elem) ||
                      ((this->refinement_flag() == JUST_REFINED) &&
-                      (this->parent() != libmesh_nullptr) &&
+                      (this->parent() != nullptr) &&
                       (neigh_family_member->neighbor_ptr(nn) == this->parent())));
 #else
       libmesh_assert((neigh_family_member->neighbor_ptr(nn) == this) ||
@@ -1214,9 +1178,9 @@ void Elem::make_links_to_me_remote()
               // FIXME - There's a lot of ugly const_casts here; we
               // may want to make remote_elem non-const and create
               // non-const versions of the family_tree methods
-              for (std::size_t i=0; i != family.size(); ++i)
+              for (auto & const_elem : family)
                 {
-                  Elem * n = const_cast<Elem *>(family[i]);
+                  Elem * n = const_cast<Elem *>(const_elem);
                   libmesh_assert (n);
                   if (n == remote_elem)
                     continue;
@@ -1260,9 +1224,9 @@ void Elem::make_links_to_me_remote()
               // FIXME - There's a lot of ugly const_casts here; we
               // may want to make remote_elem non-const and create
               // non-const versions of the family_tree methods
-              for (std::size_t i=0; i != family.size(); ++i)
+              for (auto & const_elem : family)
                 {
-                  Elem * n = const_cast<Elem *>(family[i]);
+                  Elem * n = const_cast<Elem *>(const_elem);
                   libmesh_assert (n);
                   if (n == remote_elem)
                     continue;
@@ -1323,22 +1287,22 @@ void Elem::remove_links_to_me()
               // FIXME - There's a lot of ugly const_casts here; we
               // may want to make remote_elem non-const and create
               // non-const versions of the family_tree methods
-              for (std::size_t i=0; i != family.size(); ++i)
+              for (auto & const_elem : family)
                 {
-                  Elem * n = const_cast<Elem *>(family[i]);
+                  Elem * n = const_cast<Elem *>(const_elem);
                   libmesh_assert (n);
                   if (n == remote_elem)
                     continue;
                   unsigned int my_s = n->which_neighbor_am_i(this);
                   libmesh_assert_less (my_s, n->n_neighbors());
                   libmesh_assert_equal_to (n->neighbor_ptr(my_s), this);
-                  n->set_neighbor(my_s, libmesh_nullptr);
+                  n->set_neighbor(my_s, nullptr);
                 }
 #else
               unsigned int my_s = neigh->which_neighbor_am_i(this);
               libmesh_assert_less (my_s, neigh->n_neighbors());
               libmesh_assert_equal_to (neigh->neighbor(my_s), this);
-              neigh->set_neighbor(my_s, libmesh_nullptr);
+              neigh->set_neighbor(my_s, nullptr);
 #endif
             }
 #ifdef LIBMESH_ENABLE_AMR
@@ -1369,16 +1333,16 @@ void Elem::remove_links_to_me()
               // FIXME - There's a lot of ugly const_casts here; we
               // may want to make remote_elem non-const and create
               // non-const versions of the family_tree methods
-              for (std::size_t i=0; i != family.size(); ++i)
+              for (auto & const_elem : family)
                 {
-                  Elem * n = const_cast<Elem *>(family[i]);
+                  Elem * n = const_cast<Elem *>(const_elem);
                   libmesh_assert (n);
                   if (n == remote_elem)
                     continue;
                   unsigned int my_s = n->which_neighbor_am_i(this);
                   libmesh_assert_less (my_s, n->n_neighbors());
                   libmesh_assert_equal_to (n->neighbor_ptr(my_s), this);
-                  n->set_neighbor(my_s, libmesh_nullptr);
+                  n->set_neighbor(my_s, nullptr);
                 }
             }
 #endif
@@ -1498,17 +1462,17 @@ void Elem::add_child (Elem * elem)
 {
   const unsigned int nc = this->n_children();
 
-  if (_children == libmesh_nullptr)
+  if (_children == nullptr)
     {
       _children = new Elem *[nc];
 
       for (unsigned int c = 0; c != nc; c++)
-        this->set_child(c, libmesh_nullptr);
+        this->set_child(c, nullptr);
     }
 
   for (unsigned int c = 0; c != nc; c++)
     {
-      if (this->_children[c] == libmesh_nullptr || this->_children[c] == remote_elem)
+      if (this->_children[c] == nullptr || this->_children[c] == remote_elem)
         {
           libmesh_assert_equal_to (this, elem->parent());
           this->set_child(c, elem);
@@ -1529,10 +1493,10 @@ void Elem::add_child (Elem * elem, unsigned int c)
       _children = new Elem *[nc];
 
       for (unsigned int i = 0; i != nc; i++)
-        this->set_child(i, libmesh_nullptr);
+        this->set_child(i, nullptr);
     }
 
-  libmesh_assert (this->_children[c] == libmesh_nullptr || this->child_ptr(c) == remote_elem);
+  libmesh_assert (this->_children[c] == nullptr || this->child_ptr(c) == remote_elem);
   libmesh_assert (elem == remote_elem || this == elem->parent());
 
   this->set_child(c, elem);
@@ -1988,7 +1952,7 @@ unsigned int Elem::as_parent_node (unsigned int child,
 
   if (child >= cached_parent_indices[em_vers].size())
     {
-      const unsigned int nn = this->n_nodes();
+      const signed char nn = cast_int<signed char>(this->n_nodes());
 
       cached_parent_indices[em_vers].resize(nc);
 
@@ -1998,7 +1962,7 @@ unsigned int Elem::as_parent_node (unsigned int child,
           cached_parent_indices[em_vers][c].resize(ncn);
           for (unsigned int cn = 0; cn != ncn; ++cn)
             {
-              for (unsigned int n = 0; n != nn; ++n)
+              for (signed char n = 0; n != nn; ++n)
                 {
                   const float em_val = this->embedding_matrix
                     (c, cn, n);
@@ -2247,12 +2211,12 @@ Elem::bracketing_nodes(unsigned int child,
   const std::vector<std::pair<unsigned char, unsigned char>> & pbc =
     this->parent_bracketing_nodes(child,child_node);
 
-  for (std::size_t i = 0; i != pbc.size(); ++i)
+  for (const auto & pb : pbc)
     {
       const unsigned short n_n = this->n_nodes();
-      if (pbc[i].first < n_n && pbc[i].second < n_n)
-        returnval.push_back(std::make_pair(this->node_id(pbc[i].first),
-                                           this->node_id(pbc[i].second)));
+      if (pb.first < n_n && pb.second < n_n)
+        returnval.push_back(std::make_pair(this->node_id(pb.first),
+                                           this->node_id(pb.second)));
       else
         {
           // We must be on a non-full-order higher order element...
@@ -2285,7 +2249,7 @@ Elem::bracketing_nodes(unsigned int child,
                 if (c == child && n == child_node)
                   break;
 
-                if (pbc[i].first == full_elem->as_parent_node(c,n))
+                if (pb.first == full_elem->as_parent_node(c,n))
                   {
                     // We should be consistent
                     if (pt1 != DofObject::invalid_id)
@@ -2294,7 +2258,7 @@ Elem::bracketing_nodes(unsigned int child,
                     pt1 = this->child_ptr(c)->node_id(n);
                   }
 
-                if (pbc[i].second == full_elem->as_parent_node(c,n))
+                if (pb.second == full_elem->as_parent_node(c,n))
                   {
                     // We should be consistent
                     if (pt2 != DofObject::invalid_id)
@@ -2518,13 +2482,20 @@ std::string Elem::get_info () const
       if (this->neighbor_ptr(s))
         oss << this->neighbor_ptr(s)->id() << '\n';
       else
-        oss << "NULL\n";
+        oss << "nullptr\n";
     }
 
-  oss << "   hmin()=" << this->hmin()
-      << ", hmax()=" << this->hmax()                               << '\n'
-      << "   volume()=" << this->volume()                          << '\n'
-      << "   active()=" << this->active()
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+  if (!this->infinite())
+    {
+#endif
+    oss << "   hmin()=" << this->hmin()
+        << ", hmax()=" << this->hmax()                             << '\n'
+        << "   volume()=" << this->volume()                        << '\n';
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+    }
+#endif
+    oss << "   active()=" << this->active()
       << ", ancestor()=" << this->ancestor()
       << ", subactive()=" << this->subactive()
       << ", has_children()=" << this->has_children()               << '\n'
@@ -2532,7 +2503,7 @@ std::string Elem::get_info () const
   if (this->parent())
     oss << this->parent()->id() << '\n';
   else
-    oss << "NULL\n";
+    oss << "nullptr\n";
   oss << "   level()=" << this->level()
       << ", p_level()=" << this->p_level()                         << '\n'
 #ifdef LIBMESH_ENABLE_AMR
@@ -2574,8 +2545,8 @@ void Elem::nullify_neighbors ()
             {
               const unsigned int w_n_a_i = current_neighbor->which_neighbor_am_i(this);
               libmesh_assert_less (w_n_a_i, current_neighbor->n_neighbors());
-              current_neighbor->set_neighbor(w_n_a_i, libmesh_nullptr);
-              this->set_neighbor(n, libmesh_nullptr);
+              current_neighbor->set_neighbor(w_n_a_i, nullptr);
+              this->set_neighbor(n, nullptr);
             }
         }
     }
@@ -2614,6 +2585,8 @@ ElemType Elem::first_order_equivalent_type (const ElemType et)
 {
   switch (et)
     {
+    case NODEELEM:
+      return NODEELEM;
     case EDGE2:
     case EDGE3:
     case EDGE4:
@@ -2648,6 +2621,8 @@ ElemType Elem::first_order_equivalent_type (const ElemType et)
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 
+    case INFEDGE2:
+      return INFEDGE2;
     case INFQUAD4:
     case INFQUAD6:
       return INFQUAD4;
@@ -2672,13 +2647,10 @@ ElemType Elem::first_order_equivalent_type (const ElemType et)
 ElemType Elem::second_order_equivalent_type (const ElemType et,
                                              const bool full_ordered)
 {
-  /* for second-order elements, always return \p INVALID_ELEM
-   * since second-order elements should not be converted
-   * into something else.  Only linear elements should
-   * return something sensible here
-   */
   switch (et)
     {
+    case NODEELEM:
+      return NODEELEM;
     case EDGE2:
     case EDGE3:
       {
@@ -2783,7 +2755,7 @@ ElemType Elem::second_order_equivalent_type (const ElemType et,
       // infinite elements
     case INFEDGE2:
       {
-        return INVALID_ELEM;
+        return INFEDGE2;
       }
 
     case INFQUAD4:
@@ -2920,8 +2892,7 @@ bool Elem::is_vertex_on_parent(unsigned int c,
 #else
 
   // No AMR?
-  libmesh_ignore(c);
-  libmesh_ignore(n);
+  libmesh_ignore(c,n);
   libmesh_error_msg("ERROR: AMR disabled, how did we get here?");
   return true;
 

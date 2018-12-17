@@ -16,12 +16,11 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/cell_tet.h"
 #include "libmesh/cell_tet4.h"
 #include "libmesh/face_tri3.h"
+#include "libmesh/enum_elem_quality.h"
 
 namespace libMesh
 {
@@ -85,6 +84,15 @@ std::unique_ptr<Elem> Tet::side_ptr (const unsigned int i)
 
   return face;
 }
+
+
+
+void Tet::side_ptr (std::unique_ptr<Elem> & side,
+                    const unsigned int i)
+{
+  this->simple_side_ptr<Tet,Tet4>(side, i, TRI3);
+}
+
 
 
 void Tet::select_diagonal (const Diagonal diag) const

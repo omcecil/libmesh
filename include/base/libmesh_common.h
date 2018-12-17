@@ -76,8 +76,8 @@ extern "C" {
 #  include "libmesh/libmesh_augment_std_namespace.h"
 #endif
 
-// Make sure the C++03 compatible libmesh_nullptr is available
-// throughout the library.
+// Make sure the libmesh_nullptr define is available for backwards
+// compatibility, although we no longer use it in the library.
 #include "libmesh/libmesh_nullptr.h"
 
 namespace libMesh
@@ -458,7 +458,7 @@ extern bool warned_about_auto_ptr;
 // A function template for ignoring unused variables.  This is a way
 // to shut up unused variable compiler warnings on a case by case
 // basis.
-template<class T> inline void libmesh_ignore( const T & ) { }
+template<class ...Args> inline void libmesh_ignore( const Args&... ) { }
 
 
 // cast_ref and cast_ptr do a dynamic cast and assert
@@ -477,7 +477,7 @@ inline Tnew cast_ref(Told & oldvar)
       Tnew newvar = dynamic_cast<Tnew>(oldvar);
       return newvar;
     }
-  catch (std::bad_cast)
+  catch (std::bad_cast &)
     {
       libMesh::err << "Failed to convert " << typeid(Told).name()
                    << " reference to " << typeid(Tnew).name()
@@ -563,32 +563,17 @@ inline Tnew libmesh_cast_int (Told oldvar)
 #define LIBMESH_VERSION_ID(major,minor,patch) (((major) << 16) | ((minor) << 8) | ((patch) & 0xFF))
 
 
-/**
- * Allow for marking functions with \p override if the compiler
- * supports it.
- *
- * \note \p override ensures that the function is virtual and is
- * overriding a virtual function from the base class.
- */
-#ifdef LIBMESH_HAVE_CXX11_OVERRIDE
+// libmesh_override is simply a synonym for override as we now require
+// a C++11 compiler that supports this keyword.
 #define libmesh_override override
-#else
-#define libmesh_override
-#endif
 
-// Define C++03 backwards-compatible function deletion keyword.
-#ifdef LIBMESH_HAVE_CXX11_DELETED_FUNCTIONS
+// libmesh_delete is simply a synonym for '=delete' as we now require
+// a C++11 compiler that supports this keyword.
 #define libmesh_delete =delete
-#else
-#define libmesh_delete
-#endif
 
-// Define C++03 backwards-compatible final keyword.
-#ifdef LIBMESH_HAVE_CXX11_FINAL
+// libmesh_final is simply a synonym for 'final' as we now require
+// a C++11 compiler that supports this keyword.
 #define libmesh_final final
-#else
-#define libmesh_final
-#endif
 
 // Define backwards-compatible fallthrough attribute.  We could
 // eventually also add support for other compiler-specific fallthrough

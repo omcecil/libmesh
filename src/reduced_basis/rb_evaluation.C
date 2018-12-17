@@ -47,7 +47,7 @@ RBEvaluation::RBEvaluation (const Parallel::Communicator & comm_in)
   ParallelObject(comm_in),
   evaluate_RB_error_bound(true),
   compute_RB_inner_product(false),
-  rb_theta_expansion(libmesh_nullptr)
+  rb_theta_expansion(nullptr)
 {
 
 }
@@ -622,18 +622,14 @@ void RBEvaluation::legacy_write_offline_data_to_files(const std::string & direct
         file_name << directory_name << "/greedy_params" << suffix;
         Xdr greedy_params_out(file_name.str(), mode);
 
-        for (std::size_t i=0; i<greedy_param_list.size(); i++)
-          {
-            RBParameters::const_iterator it     = greedy_param_list[i].begin();
-            RBParameters::const_iterator it_end = greedy_param_list[i].end();
-            for ( ; it != it_end; ++it)
-              {
-                // Need to make a copy of the value so that it's not const
-                // Xdr is not templated on const's
-                Real param_value = it->second;
-                greedy_params_out << param_value;
-              }
-          }
+        for (const auto & param : greedy_param_list)
+          for (const auto & pr : param)
+            {
+              // Need to make a copy of the value so that it's not const
+              // Xdr is not templated on const's
+              Real param_value = pr.second;
+              greedy_params_out << param_value;
+            }
         greedy_params_out.close();
       }
 
@@ -868,7 +864,7 @@ void RBEvaluation::legacy_read_offline_data_from_files(const std::string & direc
 
   // Resize basis_functions even if we don't read them in so that
   // get_n_bfs() returns the correct value. Initialize the pointers
-  // to NULL
+  // to nullptr.
   basis_functions.clear();
   set_n_basis_functions(n_bfs);
 }
@@ -1000,8 +996,8 @@ void RBEvaluation::read_in_vectors_from_multiple_files(System & sys,
 {
   LOG_SCOPE("read_in_vectors_from_multiple_files()", "RBEvaluation");
 
-  unsigned int n_files = multiple_vectors.size();
-  unsigned int n_directories = multiple_directory_names.size();
+  std::size_t n_files = multiple_vectors.size();
+  std::size_t n_directories = multiple_directory_names.size();
   libmesh_assert((n_files == n_directories) && (n_files == multiple_data_names.size()));
 
   if (n_files == 0)
@@ -1018,17 +1014,17 @@ void RBEvaluation::read_in_vectors_from_multiple_files(System & sys,
   // all the vectors that we read in.
   MeshTools::Private::globally_renumber_nodes_and_elements(sys.get_mesh());
 
-  for (unsigned int data_index=0; data_index<n_directories; data_index++)
+  for (std::size_t data_index=0; data_index<n_directories; data_index++)
     {
       std::vector<std::unique_ptr<NumericVector<Number>>> & vectors = *multiple_vectors[data_index];
 
       // Allocate storage for each vector
       for (std::size_t i=0; i<vectors.size(); i++)
         {
-          // vectors should all be NULL, otherwise we get a memory leak when
+          // vectors should all be nullptr, otherwise we get a memory leak when
           // we create the new vectors in RBEvaluation::read_in_vectors.
           if (vectors[i])
-            libmesh_error_msg("Non-NULL vector passed to read_in_vectors_from_multiple_files");
+            libmesh_error_msg("Non-nullptr vector passed to read_in_vectors_from_multiple_files");
 
           vectors[i] = NumericVector<Number>::build(sys.comm());
 

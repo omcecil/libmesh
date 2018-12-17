@@ -42,7 +42,9 @@
 #include <unordered_map>
 
 #ifdef LIBMESH_HAVE_GZSTREAM
+# include "libmesh/ignore_warnings.h" // shadowing in gzstream.h
 # include "gzstream.h" // For reading/writing compressed streams
+# include "libmesh/restore_warnings.h"
 #endif
 
 
@@ -484,9 +486,7 @@ void UNVIO::groups_in (std::istream & in_file)
                            << std::endl;
 
             // Try to find this ID in the map from UNV element ids to libmesh ids.
-            std::map<unsigned, unsigned>::iterator it =
-              _unv_elem_id_to_libmesh_elem_id.find(entity_tag);
-
+            auto it = _unv_elem_id_to_libmesh_elem_id.find(entity_tag);
             if (it != _unv_elem_id_to_libmesh_elem_id.end())
               {
                 unsigned libmesh_elem_id = it->second;
@@ -646,7 +646,7 @@ void UNVIO::elements_in (std::istream & in_file)
         in_file >> node_labels[j];
 
       // element pointer, to be allocated
-      Elem * elem = libmesh_nullptr;
+      Elem * elem = nullptr;
 
       switch (fe_descriptor_id)
         {
@@ -830,9 +830,7 @@ void UNVIO::elements_in (std::istream & in_file)
       for (dof_id_type j=1; j<=n_nodes; j++)
         {
           // Map the UNV node ID to the libmesh node ID
-          std::map<dof_id_type, Node *>::iterator it =
-            _unv_node_id_to_libmesh_node_ptr.find(node_labels[j]);
-
+          auto it = _unv_node_id_to_libmesh_node_ptr.find(node_labels[j]);
           if (it != _unv_node_id_to_libmesh_node_ptr.end())
             elem->set_node(assign_elem_nodes[j]) = it->second;
           else
@@ -1295,8 +1293,7 @@ void UNVIO::read_dataset(std::string file_name)
                 } // end loop data_cnt
 
               // Get a pointer to the Node associated with the UNV node id.
-              std::map<dof_id_type, Node *>::const_iterator it =
-                _unv_node_id_to_libmesh_node_ptr.find(f_n_id);
+              auto it = _unv_node_id_to_libmesh_node_ptr.find(f_n_id);
 
               if (it == _unv_node_id_to_libmesh_node_ptr.end())
                 libmesh_error_msg("UNV node id " << f_n_id << " was not found.");
@@ -1316,11 +1313,10 @@ void UNVIO::read_dataset(std::string file_name)
 const std::vector<Number> *
 UNVIO::get_data (Node * node) const
 {
-  std::map<Node *, std::vector<Number>>::const_iterator
-    it = _node_data.find(node);
+  auto it = _node_data.find(node);
 
   if (it == _node_data.end())
-    return libmesh_nullptr;
+    return nullptr;
   else
     return &(it->second);
 }

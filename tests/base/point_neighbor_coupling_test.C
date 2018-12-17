@@ -35,8 +35,8 @@ Number cubic_point_neighbor_coupling_test (const Point& p,
                                            const std::string&)
 {
   const Real & x = p(0);
-  const Real & y = p(1);
-  const Real & z = p(2);
+  const Real & y = LIBMESH_DIM > 1 ? p(1) : 0;
+  const Real & z = LIBMESH_DIM > 2 ? p(2) : 0;
 
   return x*(1-x)*(1-x) + x*x*(1-y) + x*(1-y)*(1-z) + y*(1-y)*z + z*(1-z)*(1-z);
 }
@@ -48,9 +48,13 @@ public:
   CPPUNIT_TEST_SUITE( PointNeighborCouplingTest );
 
   CPPUNIT_TEST( testCouplingOnEdge3 );
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testCouplingOnQuad9 );
   CPPUNIT_TEST( testCouplingOnTri6 );
+#endif
+#if LIBMESH_DIM > 2
   CPPUNIT_TEST( testCouplingOnHex27 );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -82,17 +86,17 @@ public:
 
     // This just re-sets the default; real users may want a real
     // coupling matrix instead.
-    point_neighbor_coupling.set_dof_coupling(NULL);
+    point_neighbor_coupling.set_dof_coupling(nullptr);
 
     point_neighbor_coupling.set_n_levels(3);
 
     sys.get_dof_map().add_algebraic_ghosting_functor
       (point_neighbor_coupling);
 
-    const unsigned n_elem_per_side = 5;
+    const unsigned int n_elem_per_side = 5;
     const std::unique_ptr<Elem> test_elem = Elem::build(elem_type);
-    const Real ymax = test_elem->dim() > 1;
-    const Real zmax = test_elem->dim() > 2;
+    const unsigned int ymax = test_elem->dim() > 1;
+    const unsigned int zmax = test_elem->dim() > 2;
     const unsigned int ny = ymax * n_elem_per_side;
     const unsigned int nz = zmax * n_elem_per_side;
 
@@ -106,7 +110,7 @@ public:
                                        elem_type);
 
     es.init();
-    sys.project_solution(cubic_point_neighbor_coupling_test, NULL, es.parameters);
+    sys.project_solution(cubic_point_neighbor_coupling_test, nullptr, es.parameters);
 
     for (const auto & elem : mesh.active_local_element_ptr_range())
       for (unsigned int s1=0; s1 != elem->n_neighbors(); ++s1)

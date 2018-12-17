@@ -15,12 +15,12 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-// C++ includes
-
 // Local includes
 #include "libmesh/side.h"
 #include "libmesh/edge_edge2.h"
 #include "libmesh/face_tri3.h"
+#include "libmesh/enum_io_package.h"
+#include "libmesh/enum_order.h"
 
 namespace libMesh
 {
@@ -29,7 +29,12 @@ namespace libMesh
 
 // ------------------------------------------------------------
 // Tri3 class static member initializations
-const unsigned int Tri3::side_nodes_map[3][2] =
+const int Tri3::num_nodes;
+const int Tri3::num_sides;
+const int Tri3::num_children;
+const int Tri3::nodes_per_side;
+
+const unsigned int Tri3::side_nodes_map[Tri3::num_sides][Tri3::nodes_per_side] =
   {
     {0, 1}, // Side 0
     {1, 2}, // Side 1
@@ -39,7 +44,7 @@ const unsigned int Tri3::side_nodes_map[3][2] =
 
 #ifdef LIBMESH_ENABLE_AMR
 
-const float Tri3::_embedding_matrix[4][3][3] =
+const float Tri3::_embedding_matrix[Tri3::num_children][Tri3::num_nodes][Tri3::num_nodes] =
   {
     // embedding matrix for child 0
     {
@@ -100,10 +105,21 @@ bool Tri3::is_node_on_side(const unsigned int n,
                            const unsigned int s) const
 {
   libmesh_assert_less (s, n_sides());
-  for (unsigned int i = 0; i != 2; ++i)
-    if (side_nodes_map[s][i] == n)
-      return true;
-  return false;
+  return std::find(std::begin(side_nodes_map[s]),
+                   std::end(side_nodes_map[s]),
+                   n) != std::end(side_nodes_map[s]);
+}
+
+std::vector<unsigned>
+Tri3::nodes_on_side(const unsigned int s) const
+{
+  libmesh_assert_less(s, n_sides());
+  return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
+}
+
+Order Tri3::default_order() const
+{
+  return FIRST;
 }
 
 std::unique_ptr<Elem> Tri3::build_side_ptr (const unsigned int i,
@@ -126,6 +142,15 @@ std::unique_ptr<Elem> Tri3::build_side_ptr (const unsigned int i,
       return edge;
     }
 }
+
+
+
+void Tri3::build_side_ptr (std::unique_ptr<Elem> & side,
+                           const unsigned int i)
+{
+  this->simple_build_side_ptr<Tri3>(side, i, EDGE2);
+}
+
 
 
 void Tri3::connectivity(const unsigned int libmesh_dbg_var(sf),
@@ -229,5 +254,12 @@ bool Tri3::contains_point (const Point & p, Real tol) const
   // Check if point is in triangle
   return (u > -tol) && (v > -tol) && (u + v < 1 + tol);
 }
+
+BoundingBox
+Tri3::loose_bounding_box () const
+{
+  return Elem::loose_bounding_box();
+}
+
 
 } // namespace libMesh

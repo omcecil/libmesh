@@ -38,34 +38,39 @@ namespace libMesh
  * \date 2014
  * \brief Implements 1D and 2/3D tensor product Gauss-Lobatto quadrature rules.
  */
-class QGaussLobatto libmesh_final : public QBase
+class QGaussLobatto final : public QBase
 {
 public:
 
   /**
    * Constructor.  Declares the order of the quadrature rule.
    */
-  QGaussLobatto (const unsigned int _dim,
-                 const Order _order=INVALID_ORDER);
+  QGaussLobatto (unsigned int dim,
+                 Order order=INVALID_ORDER);
 
   /**
-   * Destructor.
+   * Copy/move ctor, copy/move assignment operator, and destructor are
+   * all explicitly defaulted for this simple class.
    */
-  ~QGaussLobatto();
+  QGaussLobatto (const QGaussLobatto &) = default;
+  QGaussLobatto (QGaussLobatto &&) = default;
+  QGaussLobatto & operator= (const QGaussLobatto &) = default;
+  QGaussLobatto & operator= (QGaussLobatto &&) = default;
+  virtual ~QGaussLobatto() = default;
 
   /**
    * \returns \p QGAUSS_LOBATTO.
    */
-  virtual QuadratureType type() const libmesh_override { return QGAUSS_LOBATTO; }
+  virtual QuadratureType type() const override;
 
 private:
 
   virtual void init_1D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
   virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) libmesh_override;
+                        unsigned int p_level=0) override;
 };
 
 } // namespace libMesh

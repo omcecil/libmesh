@@ -50,7 +50,7 @@
 #include "libmesh/perfmon.h"
 #include "libmesh/statistics.h"
 #include "libmesh/string_to_enum.h"
-
+#include "libmesh/enum_elem_quality.h"
 
 using namespace libMesh;
 
@@ -458,9 +458,9 @@ void process_cmd_line(int argc,
 // and this is just one way to get them...
 void construct_mesh_of_active_elements(Mesh & new_mesh, const Mesh & mesh)
 {
-  MeshBase::const_element_iterator       it     = mesh.active_elements_begin();
-  const MeshBase::const_element_iterator it_end = mesh.active_elements_end();
-  mesh.create_submesh(new_mesh, it, it_end);
+  mesh.create_submesh(new_mesh,
+                      mesh.active_elements_begin(),
+                      mesh.active_elements_end());
 }
 
 
@@ -873,7 +873,7 @@ int main (int argc, char ** argv)
             if (verbose)
               libMesh::out << " Mesh got refined, will write only _active_ elements." << std::endl;
 
-            Mesh new_mesh (init.comm(), mesh.mesh_dimension());
+            Mesh new_mesh (init.comm(), cast_int<unsigned char>(mesh.mesh_dimension()));
 
             construct_mesh_of_active_elements(new_mesh, mesh);
 

@@ -24,6 +24,7 @@
 #include "libmesh/trilinos_epetra_matrix.h"
 #include "libmesh/trilinos_epetra_vector.h"
 #include "libmesh/libmesh_common.h"
+#include "libmesh/enum_preconditioner_type.h"
 
 #include "libmesh/ignore_warnings.h"
 #ifdef LIBMESH_TRILINOS_HAVE_IFPACK
@@ -85,11 +86,11 @@ void
 TrilinosPreconditioner<T>::compute()
 {
 #ifdef LIBMESH_TRILINOS_HAVE_IFPACK
-  Ifpack_Preconditioner * ifpack = libmesh_nullptr;
+  Ifpack_Preconditioner * ifpack = nullptr;
 #endif
 
 #ifdef LIBMESH_TRILINOS_HAVE_ML
-  ML_Epetra::MultiLevelPreconditioner * ml = libmesh_nullptr;
+  ML_Epetra::MultiLevelPreconditioner * ml = nullptr;
 #endif
 
   switch (this->_preconditioner_type)
@@ -125,11 +126,11 @@ void
 TrilinosPreconditioner<T>::set_preconditioner_type (const PreconditionerType & preconditioner_type)
 {
 #ifdef LIBMESH_TRILINOS_HAVE_IFPACK
-  Ifpack_Preconditioner * pc = libmesh_nullptr;
+  Ifpack_Preconditioner * pc = nullptr;
 #endif
 
 #ifdef LIBMESH_TRILINOS_HAVE_ML
-  ML_Epetra::MultiLevelPreconditioner * ml = libmesh_nullptr;
+  ML_Epetra::MultiLevelPreconditioner * ml = nullptr;
 #endif
 
   switch (preconditioner_type)

@@ -46,6 +46,44 @@ MessageTag::MessageTag(const MessageTag & other)
 }
 
 
+MessageTag::MessageTag(MessageTag && other)
+  : _tagvalue(other._tagvalue), _comm(other._comm)
+{
+  // I stole your tag reference!
+  other._comm = nullptr;
+}
+
+
+MessageTag & MessageTag::operator= (const MessageTag & other)
+{
+  if (_comm)
+    _comm->dereference_unique_tag(_tagvalue);
+
+  _tagvalue = other._tagvalue;
+  _comm = other._comm;
+
+  if (_comm)
+    _comm->reference_unique_tag(_tagvalue);
+
+  return *this;
+}
+
+
+MessageTag & MessageTag::operator= (MessageTag && other)
+{
+  if (_comm)
+    _comm->dereference_unique_tag(_tagvalue);
+
+  _tagvalue = other._tagvalue;
+  _comm = other._comm;
+
+  // I stole your tag reference!
+  other._comm = nullptr;
+
+  return *this;
+}
+
+
 } // namespace Parallel
 
 } // namespace libMesh

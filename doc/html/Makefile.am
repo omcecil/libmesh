@@ -49,14 +49,10 @@ support.html: src/$@ src/simple_header.html src/simple_footer.html
 
 #
 # doxygen documentation - be sure to generate symlinks in include/libmesh!
-# doxygen does not correctly handle 'libmesh_final' directives in class declarations,
-# so we do a pre/postprocessing step with perl to temporarily remove these.
 doc html: doxygen
 doxygen:
-	@cd $(top_builddir)/include/libmesh && $(MAKE)
-	perl -pli -e 's/ libmesh_final : / \/\*\*\/ : /g' $(top_srcdir)/include/*/*.h
+	@$(MAKE) -C $(top_builddir)/include/libmesh
 	$(DOXYGEN) $(top_builddir)/doc/Doxyfile
-	perl -pli -e 's/ \/\*\*\/ : / libmesh_final : /g' $(top_srcdir)/include/*/*.h
 
 #  need to link files for VPATH builds
 if LIBMESH_VPATH_BUILD
@@ -79,3 +75,8 @@ clean-local:
 	-rm -rf doxygen
 
 endif
+
+# Mark doxygen as a phony target to build the documentation even when the
+# doxygen directory already exists.
+.PHONY: doxygen
+

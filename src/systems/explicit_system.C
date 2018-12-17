@@ -33,7 +33,7 @@ ExplicitSystem::ExplicitSystem (EquationSystems & es,
                                 const std::string & name_in,
                                 const unsigned int number_in) :
   Parent (es, name_in, number_in),
-  rhs(libmesh_nullptr)
+  rhs(nullptr)
 
 {
   // Add the system RHS.
@@ -57,7 +57,7 @@ void ExplicitSystem::assemble_qoi (const QoISet & qoi_indices)
 {
   // The user quantity of interest assembly gets to expect to
   // accumulate on initially zero values
-  for (std::size_t i=0; i != qoi.size(); ++i)
+  for (unsigned int i=0; i != this->n_qois(); ++i)
     if (qoi_indices.has_index(i))
       qoi[i] = 0;
 
@@ -72,7 +72,7 @@ void ExplicitSystem::assemble_qoi_derivative (const QoISet & qoi_indices,
 {
   // The user quantity of interest derivative assembly gets to expect
   // to accumulate on initially zero vectors
-  for (std::size_t i=0; i != qoi.size(); ++i)
+  for (unsigned int i=0; i != this->n_qois(); ++i)
     if (qoi_indices.has_index(i))
       this->add_adjoint_rhs(i).zero();
 
@@ -96,14 +96,14 @@ void ExplicitSystem::solve ()
 void ExplicitSystem::add_system_rhs ()
 {
   // Possible that we cleared the _vectors but
-  // forgot to NULL-out the rhs?
+  // forgot to update the rhs pointer?
   if (this->n_vectors() == 0)
-    rhs = libmesh_nullptr;
+    rhs = nullptr;
 
 
   // Only need to add the rhs if it isn't there
   // already!
-  if (rhs == libmesh_nullptr)
+  if (rhs == nullptr)
     rhs = &(this->add_vector ("RHS Vector", false));
 
   libmesh_assert(rhs);

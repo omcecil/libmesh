@@ -175,7 +175,7 @@ PetscErrorCode DMlibMeshGetBlocks(DM dm, PetscInt * n, char *** blocknames)
   if (!islibmesh) SETERRQ2(((PetscObject)dm)->comm, PETSC_ERR_ARG_WRONG, "Got DM of type %s, not of type %s", ((PetscObject)dm)->type_name, DMLIBMESH);
   DM_libMesh * dlm = (DM_libMesh *)(dm->data);
   PetscValidPointer(n,2);
-  *n = dlm->blockids->size();
+  *n = cast_int<unsigned int>(dlm->blockids->size());
   if (!blocknames) PetscFunctionReturn(0);
   ierr = PetscMalloc(*n*sizeof(char *), blocknames); CHKERRQ(ierr);
   i = 0;
@@ -200,7 +200,7 @@ PetscErrorCode DMlibMeshGetVariables(DM dm, PetscInt * n, char *** varnames)
   if (!islibmesh) SETERRQ2(((PetscObject)dm)->comm, PETSC_ERR_ARG_WRONG, "Got DM of type %s, not of type %s", ((PetscObject)dm)->type_name, DMLIBMESH);
   DM_libMesh * dlm = (DM_libMesh *)(dm->data);
   PetscValidPointer(n,2);
-  *n = dlm->varids->size();
+  *n = cast_int<unsigned int>(dlm->varids->size());
   if (!varnames) PetscFunctionReturn(0);
   ierr = PetscMalloc(*n*sizeof(char *), varnames); CHKERRQ(ierr);
   i = 0;
@@ -273,7 +273,7 @@ static PetscErrorCode  DMCreateFieldDecomposition_libMesh(DM dm, PetscInt * len,
   IS emb;
   if (dlm->decomposition_type != DMLIBMESH_FIELD_DECOMPOSITION) PetscFunctionReturn(0);
 
-  *len = dlm->decomposition->size();
+  *len = cast_int<unsigned int>(dlm->decomposition->size());
   if (namelist) {ierr = PetscMalloc(*len*sizeof(char *), namelist);  CHKERRQ(ierr);}
   if (islist)   {ierr = PetscMalloc(*len*sizeof(IS),    islist);    CHKERRQ(ierr);}
   if (dmlist)   {ierr = PetscMalloc(*len*sizeof(DM),    dmlist);    CHKERRQ(ierr);}
@@ -294,9 +294,10 @@ static PetscErrorCode  DMCreateFieldDecomposition_libMesh(DM dm, PetscInt * len,
       if (!islist) continue;
       // Iterate only over this DM's blocks.
       for (const auto & pr : *(dlm->blockids)) {
+        const subdomain_id_type sbd_id = cast_int<subdomain_id_type>(pr.second);
         for (const auto & elem :
-               as_range(sys->get_mesh().active_local_subdomain_elements_begin(pr.second),
-                        sys->get_mesh().active_local_subdomain_elements_end(pr.second))) {
+               as_range(sys->get_mesh().active_local_subdomain_elements_begin(sbd_id),
+                        sys->get_mesh().active_local_subdomain_elements_end(sbd_id))) {
           //unsigned int e_subdomain = elem->subdomain_id();
           std::vector<numeric_index_type> evindices;
           // Get the degree of freedom indices for the given variable off the current element.
@@ -321,7 +322,10 @@ static PetscErrorCode  DMCreateFieldDecomposition_libMesh(DM dm, PetscInt * len,
         darray[i] = id;
         ++i;
       }
-      ierr = ISCreateGeneral(((PetscObject)dm)->comm, dindices.size(),darray, PETSC_OWN_POINTER, &dis); CHKERRQ(ierr);
+      ierr = ISCreateGeneral(((PetscObject)dm)->comm,
+                             cast_int<PetscInt>(dindices.size()),
+                             darray, PETSC_OWN_POINTER, &dis);
+      CHKERRQ(ierr);
       if (dlm->embedding) {
         /* Create a relative embedding into the parent's index space. */
 #if PETSC_RELEASE_LESS_THAN(3,3,1)
@@ -375,7 +379,7 @@ static PetscErrorCode  DMCreateDomainDecomposition_libMesh(DM dm, PetscInt * len
   NonlinearImplicitSystem * sys = dlm->sys;
   IS emb;
   if (dlm->decomposition_type != DMLIBMESH_DOMAIN_DECOMPOSITION) PetscFunctionReturn(0);
-  *len = dlm->decomposition->size();
+  *len = cast_int<unsigned int>(dlm->decomposition->size());
   if (namelist)      {ierr = PetscMalloc(*len*sizeof(char *), namelist);  CHKERRQ(ierr);}
   if (innerislist)   {ierr = PetscMalloc(*len*sizeof(IS),    innerislist);    CHKERRQ(ierr);}
   if (outerislist)   *outerislist = PETSC_NULL; /* FIX: allow mesh-based overlap. */
@@ -394,8 +398,9 @@ static PetscErrorCode  DMCreateDomainDecomposition_libMesh(DM dm, PetscInt * len
       else   dname += "_" + bname;
       ++dbcount;
       if (!innerislist) continue;
-      MeshBase::const_element_iterator       el     = sys->get_mesh().active_local_subdomain_elements_begin(b);
-      const MeshBase::const_element_iterator end_el = sys->get_mesh().active_local_subdomain_elements_end(b);
+      const subdomain_id_type b_sbd_id = cast_int<subdomain_id_type>(b);
+      MeshBase::const_element_iterator       el     = sys->get_mesh().active_local_subdomain_elements_begin(b_sbd_id);
+      const MeshBase::const_element_iterator end_el = sys->get_mesh().active_local_subdomain_elements_end(b_sbd_id);
       for ( ; el != end_el; ++el) {
         const Elem * elem = *el;
         std::vector<numeric_index_type> evindices;
@@ -422,7 +427,10 @@ static PetscErrorCode  DMCreateDomainDecomposition_libMesh(DM dm, PetscInt * len
         darray[i] = id;
         ++i;
       }
-      ierr = ISCreateGeneral(((PetscObject)dm)->comm, dindices.size(),darray, PETSC_OWN_POINTER, &dis); CHKERRQ(ierr);
+      ierr = ISCreateGeneral(((PetscObject)dm)->comm,
+                             cast_int<PetscInt>(dindices.size()),
+                             darray, PETSC_OWN_POINTER, &dis);
+      CHKERRQ(ierr);
       if (dlm->embedding) {
         /* Create a relative embedding into the parent's index space. */
 #if PETSC_RELEASE_LESS_THAN(3,3,1)
@@ -805,17 +813,17 @@ static PetscErrorCode DMlibMeshFunction(DM dm, Vec x, Vec r)
   if (_sys->nonlinear_solver->matvec && _sys->nonlinear_solver->residual_and_jacobian_object)
     libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
-  if (_sys->nonlinear_solver->residual != libmesh_nullptr)
+  if (_sys->nonlinear_solver->residual != nullptr)
     _sys->nonlinear_solver->residual(*(_sys->current_local_solution.get()), R, *_sys);
 
-  else if (_sys->nonlinear_solver->residual_object != libmesh_nullptr)
+  else if (_sys->nonlinear_solver->residual_object != nullptr)
     _sys->nonlinear_solver->residual_object->residual(*(_sys->current_local_solution.get()), R, *_sys);
 
-  else if (_sys->nonlinear_solver->matvec   != libmesh_nullptr)
-    _sys->nonlinear_solver->matvec(*(_sys->current_local_solution.get()), &R, libmesh_nullptr, *_sys);
+  else if (_sys->nonlinear_solver->matvec   != nullptr)
+    _sys->nonlinear_solver->matvec(*(_sys->current_local_solution.get()), &R, nullptr, *_sys);
 
-  else if (_sys->nonlinear_solver->residual_and_jacobian_object != libmesh_nullptr)
-    _sys->nonlinear_solver->residual_and_jacobian_object->residual_and_jacobian(*(_sys->current_local_solution.get()), &R, libmesh_nullptr, *_sys);
+  else if (_sys->nonlinear_solver->residual_and_jacobian_object != nullptr)
+    _sys->nonlinear_solver->residual_and_jacobian_object->residual_and_jacobian(*(_sys->current_local_solution.get()), &R, nullptr, *_sys);
 
   else
     libmesh_error_msg("Error! Unable to compute residual and/or Jacobian!");
@@ -885,17 +893,17 @@ static PetscErrorCode DMlibMeshJacobian(
   if (sys.nonlinear_solver->matvec && sys.nonlinear_solver->residual_and_jacobian_object)
     libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
-  if (sys.nonlinear_solver->jacobian != libmesh_nullptr)
+  if (sys.nonlinear_solver->jacobian != nullptr)
     sys.nonlinear_solver->jacobian(*(sys.current_local_solution.get()), the_pc, sys);
 
-  else if (sys.nonlinear_solver->jacobian_object != libmesh_nullptr)
+  else if (sys.nonlinear_solver->jacobian_object != nullptr)
     sys.nonlinear_solver->jacobian_object->jacobian(*(sys.current_local_solution.get()), the_pc, sys);
 
-  else if (sys.nonlinear_solver->matvec != libmesh_nullptr)
-    sys.nonlinear_solver->matvec(*(sys.current_local_solution.get()), libmesh_nullptr, &the_pc, sys);
+  else if (sys.nonlinear_solver->matvec != nullptr)
+    sys.nonlinear_solver->matvec(*(sys.current_local_solution.get()), nullptr, &the_pc, sys);
 
-  else if (sys.nonlinear_solver->residual_and_jacobian_object != libmesh_nullptr)
-    sys.nonlinear_solver->residual_and_jacobian_object->residual_and_jacobian(*(sys.current_local_solution.get()), libmesh_nullptr, &the_pc, sys);
+  else if (sys.nonlinear_solver->residual_and_jacobian_object != nullptr)
+    sys.nonlinear_solver->residual_and_jacobian_object->residual_and_jacobian(*(sys.current_local_solution.get()), nullptr, &the_pc, sys);
 
   else
     libmesh_error_msg("Error! Unable to compute residual and/or Jacobian!");
@@ -950,9 +958,9 @@ static PetscErrorCode DMVariableBounds_libMesh(DM dm, Vec xl, Vec xu)
   ierr = VecSet(xl, PETSC_NINFINITY);CHKERRQ(ierr);
   ierr = VecSet(xu, PETSC_INFINITY);CHKERRQ(ierr);
 #endif
-  if (sys.nonlinear_solver->bounds != libmesh_nullptr)
+  if (sys.nonlinear_solver->bounds != nullptr)
     sys.nonlinear_solver->bounds(XL,XU,sys);
-  else if (sys.nonlinear_solver->bounds_object != libmesh_nullptr)
+  else if (sys.nonlinear_solver->bounds_object != nullptr)
     sys.nonlinear_solver->bounds_object->bounds(XL,XU, sys);
   else
     SETERRQ(((PetscObject)dm)->comm, PETSC_ERR_ARG_WRONG, "No bounds calculation in this libMesh object");

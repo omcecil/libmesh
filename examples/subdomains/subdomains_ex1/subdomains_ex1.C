@@ -72,6 +72,7 @@
 
 #include "libmesh/string_to_enum.h"
 #include "libmesh/getpot.h"
+#include "libmesh/enum_solver_package.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -563,7 +564,7 @@ void assemble_poisson(EquationSystems & es,
             // is different from 1, the side is also located on the
             // boundary.
             for (auto side : elem->side_index_range())
-              if ((elem->neighbor_ptr(side) == libmesh_nullptr) ||
+              if ((elem->neighbor_ptr(side) == nullptr) ||
                   (elem->neighbor_ptr(side)->subdomain_id()!=1))
                 {
 

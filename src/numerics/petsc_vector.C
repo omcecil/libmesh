@@ -18,6 +18,7 @@
 
 
 // C++ includes
+#include <numeric> // std::iota
 
 // Local Includes
 #include "libmesh/petsc_vector.h"
@@ -29,7 +30,6 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/parallel.h"
 #include "libmesh/petsc_macro.h"
-#include "libmesh/utility.h"
 
 namespace libMesh
 {
@@ -205,7 +205,7 @@ void PetscVector<T>::add_vector (const T * v,
   this->_restore_array();
 
   PetscErrorCode ierr=0;
-  const PetscInt * i_val = reinterpret_cast<const PetscInt *>(&dof_indices[0]);
+  const PetscInt * i_val = reinterpret_cast<const PetscInt *>(dof_indices.data());
   const PetscScalar * petsc_value = static_cast<const PetscScalar *>(v);
 
   ierr = VecSetValues (_vec, cast_int<PetscInt>(dof_indices.size()),
@@ -386,8 +386,9 @@ void PetscVector<T>::insert (const T * v,
   this->_restore_array();
 
   PetscErrorCode ierr=0;
-  PetscInt * idx_values = numeric_petsc_cast(&dof_indices[0]);
-  ierr = VecSetValues (_vec, dof_indices.size(), idx_values, v, INSERT_VALUES);
+  PetscInt * idx_values = numeric_petsc_cast(dof_indices.data());
+  ierr = VecSetValues (_vec, cast_int<PetscInt>(dof_indices.size()),
+                       idx_values, v, INSERT_VALUES);
   LIBMESH_CHKERR(ierr);
 
   this->_is_closed = false;
@@ -423,7 +424,7 @@ void PetscVector<T>::scale (const T factor_in)
 }
 
 template <typename T>
-NumericVector<T> & PetscVector<T>::operator /= (NumericVector<T> & v)
+NumericVector<T> & PetscVector<T>::operator /= (const NumericVector<T> & v)
 {
   PetscErrorCode ierr = 0;
 
@@ -673,13 +674,14 @@ void PetscVector<T>::localize (NumericVector<T> & v_local_in) const
   VecScatter scatter;
 
   // Create idx, idx[i] = i;
-  std::vector<PetscInt> idx(n); Utility::iota (idx.begin(), idx.end(), 0);
+  std::vector<PetscInt> idx(n);
+  std::iota (idx.begin(), idx.end(), 0);
 
   // Create the index set & scatter object
-  ierr = ISCreateLibMesh(this->comm().get(), n, &idx[0], PETSC_USE_POINTER, &is);
+  ierr = ISCreateLibMesh(this->comm().get(), n, idx.data(), PETSC_USE_POINTER, &is);
   LIBMESH_CHKERR(ierr);
 
-  ierr = VecScatterCreate(_vec,          is,
+  ierr = LibMeshVecScatterCreate(_vec,          is,
                           v_local->_vec, is,
                           &scatter);
   LIBMESH_CHKERR(ierr);
@@ -747,15 +749,12 @@ void PetscVector<T>::localize (NumericVector<T> & v_local_in,
     idx[n_sl+i] = i + this->first_local_index();
 
   // Create the index set & scatter object
-  if (idx.empty())
-    ierr = ISCreateLibMesh(this->comm().get(),
-                           n_sl+this->local_size(), PETSC_NULL, PETSC_USE_POINTER, &is);
-  else
-    ierr = ISCreateLibMesh(this->comm().get(),
-                           n_sl+this->local_size(), &idx[0], PETSC_USE_POINTER, &is);
+  PetscInt * idxptr = idx.empty() ? nullptr : idx.data();
+  ierr = ISCreateLibMesh(this->comm().get(), n_sl+this->local_size(),
+                         idxptr, PETSC_USE_POINTER, &is);
   LIBMESH_CHKERR(ierr);
 
-  ierr = VecScatterCreate(_vec,          is,
+  ierr = LibMeshVecScatterCreate(_vec,          is,
                           v_local->_vec, is,
                           &scatter);
   LIBMESH_CHKERR(ierr);
@@ -793,26 +792,25 @@ void PetscVector<T>::localize (std::vector<T> & v_local,
 
   // Create a sequential destination Vec with the right number of entries on each proc.
   Vec dest;
-  ierr = VecCreateSeq(PETSC_COMM_SELF, indices.size(), &dest);
+  ierr = VecCreateSeq(PETSC_COMM_SELF, cast_int<PetscInt>(indices.size()), &dest);
   LIBMESH_CHKERR(ierr);
 
   // Create an IS using the libmesh routine.  PETSc does not own the
   // IS memory in this case, it is automatically cleaned up by the
   // std::vector destructor.
+  PetscInt * idxptr =
+    indices.empty() ? nullptr : numeric_petsc_cast(indices.data());
   IS is;
-  ierr = ISCreateLibMesh(this->comm().get(),
-                         indices.size(),
-                         numeric_petsc_cast(&indices[0]),
-                         PETSC_USE_POINTER,
-                         &is);
+  ierr = ISCreateLibMesh(this->comm().get(), cast_int<PetscInt>(indices.size()), idxptr,
+                         PETSC_USE_POINTER, &is);
   LIBMESH_CHKERR(ierr);
 
-  // Create the VecScatter object.  "NULL" means "use the identity IS".
+  // Create the VecScatter object. "PETSC_NULL" means "use the identity IS".
   VecScatter scatter;
-  ierr = VecScatterCreate(_vec,
+  ierr = LibMeshVecScatterCreate(_vec,
                           /*src is=*/is,
                           /*dest vec=*/dest,
-                          /*dest is=*/NULL,
+                          /*dest is=*/PETSC_NULL,
                           &scatter);
   LIBMESH_CHKERR(ierr);
 
@@ -888,14 +886,14 @@ void PetscVector<T>::localize (const numeric_index_type first_local_idx,
 
     // Create idx, idx[i] = i+first_local_idx;
     std::vector<PetscInt> idx(my_local_size);
-    Utility::iota (idx.begin(), idx.end(), first_local_idx);
+    std::iota (idx.begin(), idx.end(), first_local_idx);
 
     // Create the index set & scatter object
     ierr = ISCreateLibMesh(this->comm().get(), my_local_size,
-                           my_local_size ? &idx[0] : libmesh_nullptr, PETSC_USE_POINTER, &is);
+                           my_local_size ? idx.data() : nullptr, PETSC_USE_POINTER, &is);
     LIBMESH_CHKERR(ierr);
 
-    ierr = VecScatterCreate(_vec,              is,
+    ierr = LibMeshVecScatterCreate(_vec,              is,
                             parallel_vec._vec, is,
                             &scatter);
     LIBMESH_CHKERR(ierr);
@@ -1041,7 +1039,7 @@ void PetscVector<Real>::localize_to_one (std::vector<Real> & v_local,
           }
 
 
-          MPI_Reduce (&local_values[0], &v_local[0], n, MPI_REAL, MPI_SUM,
+          MPI_Reduce (local_values.data(), v_local.data(), n, MPI_REAL, MPI_SUM,
                       pid, this->comm().get());
         }
     }
@@ -1119,11 +1117,13 @@ void PetscVector<Complex>::localize_to_one (std::vector<Complex> & v_local,
       std::vector<Real> imag_v_local(n);
 
       // collect entries from other proc's in real_v_local, imag_v_local
-      MPI_Reduce (&real_local_values[0], &real_v_local[0], n,
+      MPI_Reduce (real_local_values.data(),
+                  real_v_local.data(), n,
                   MPI_REAL, MPI_SUM,
                   pid, this->comm().get());
 
-      MPI_Reduce (&imag_local_values[0], &imag_v_local[0], n,
+      MPI_Reduce (imag_local_values.data(),
+                  imag_v_local.data(), n,
                   MPI_REAL, MPI_SUM,
                   pid, this->comm().get());
 
@@ -1299,25 +1299,25 @@ void PetscVector<T>::create_subvector(NumericVector<T> & subvector,
 
   // Use iota to fill an array with entries [0,1,2,3,4,...rows.size()]
   std::vector<PetscInt> idx(rows.size());
-  Utility::iota (idx.begin(), idx.end(), 0);
+  std::iota (idx.begin(), idx.end(), 0);
 
   // Construct index sets
   ierr = ISCreateLibMesh(this->comm().get(),
-                         rows.size(),
-                         numeric_petsc_cast(&rows[0]),
+                         cast_int<PetscInt>(rows.size()),
+                         numeric_petsc_cast(rows.data()),
                          PETSC_USE_POINTER,
                          &parent_is);
   LIBMESH_CHKERR(ierr);
 
   ierr = ISCreateLibMesh(this->comm().get(),
-                         rows.size(),
-                         &idx[0],
+                         cast_int<PetscInt>(rows.size()),
+                         idx.data(),
                          PETSC_USE_POINTER,
                          &subvector_is);
   LIBMESH_CHKERR(ierr);
 
   // Construct the scatter object
-  ierr = VecScatterCreate(this->_vec,
+  ierr = LibMeshVecScatterCreate(this->_vec,
                           parent_is,
                           petsc_subvector->_vec,
                           subvector_is,
@@ -1485,7 +1485,7 @@ void PetscVector<T>::_restore_array() const
 #endif
 
               LIBMESH_CHKERR(ierr);
-              _values = libmesh_nullptr;
+              _values = nullptr;
             }
           else
             {
@@ -1501,10 +1501,10 @@ void PetscVector<T>::_restore_array() const
                 ierr = VecRestoreArray (_local_form, &_values);
 #endif
               LIBMESH_CHKERR(ierr);
-              _values = libmesh_nullptr;
+              _values = nullptr;
               ierr = VecGhostRestoreLocalForm (_vec,&_local_form);
               LIBMESH_CHKERR(ierr);
-              _local_form = libmesh_nullptr;
+              _local_form = nullptr;
               _local_size = 0;
             }
 #ifdef LIBMESH_HAVE_CXX11_THREAD

@@ -186,6 +186,9 @@
 /* Flag indicating if the library should have warnings enabled */
 #undef ENABLE_WARNINGS
 
+/* Flag indicating if the library uses forward declared enumerations */
+#undef FORWARD_DECLARE_ENUMS
+
 /* Enable fparser debugging functions */
 #undef FPARSER_SUPPORT_DEBUGGING
 
@@ -231,6 +234,9 @@
 /* Flag indicating whether compiler supports decltype */
 #undef HAVE_CXX11_DECLTYPE
 
+/* Flag indicating whether compiler supports defaulted functions */
+#undef HAVE_CXX11_DEFAULTED_FUNCTIONS
+
 /* Flag indicating whether compiler supports f() = delete; */
 #undef HAVE_CXX11_DELETED_FUNCTIONS
 
@@ -240,8 +246,11 @@
 /* Flag indicating whether compiler supports f() final; */
 #undef HAVE_CXX11_FINAL
 
-/* Compiler supports final keyword, but it is disabled in libmesh */
-#undef HAVE_CXX11_FINAL_BUT_DISABLED
+/* Flag indicating whether compiler supports fixed type enumerations */
+#undef HAVE_CXX11_FIXED_TYPE_ENUM
+
+/* Flag indicating whether compiler supports fixed type enumerations */
+#undef HAVE_CXX11_FIXED_TYPE_ENUM_FWD
 
 /* Flag indicating whether compiler supports initializer lists */
 #undef HAVE_CXX11_INITIALIZER_LIST
@@ -271,23 +280,11 @@
    */
 #undef HAVE_CXX11_MAKE_UNIQUE_WORKAROUND
 
-/* Flag indicating whether compiler supports std::move */
-#undef HAVE_CXX11_MOVE
-
 /* Flag indicating whether compiler supports move construction */
 #undef HAVE_CXX11_MOVE_CONSTRUCTORS
 
-/* Flag indicating whether compiler supports noexcept */
-#undef HAVE_CXX11_NOEXCEPT
-
 /* Flag indicating whether compiler supports nullptr */
 #undef HAVE_CXX11_NULLPTR
-
-/* Compiler supports nullptr, but it is disabled in libmesh */
-#undef HAVE_CXX11_NULLPTR_BUT_DISABLED
-
-/* Flag indicating whether C++03 compatible nullptr workaround works */
-#undef HAVE_CXX11_NULLPTR_WORKAROUND
 
 /* Flag indicating whether compiler supports the override keyword */
 #undef HAVE_CXX11_OVERRIDE
@@ -304,14 +301,14 @@
 /* Flag indicating whether compiler supports std::shared_ptr */
 #undef HAVE_CXX11_SHARED_PTR
 
-/* Compiler supports std::shared_ptr, but it is disabled in libmesh */
-#undef HAVE_CXX11_SHARED_PTR_BUT_DISABLED
-
 /* Flag indicating whether compiler supports std::thread */
 #undef HAVE_CXX11_THREAD
 
 /* Flag indicating whether compiler supports std::to_string() */
 #undef HAVE_CXX11_TO_STRING
+
+/* Flag indicating whether compiler supports std::move */
+#undef HAVE_CXX11_TUPLE
 
 /* Flag indicating whether compiler supports <type_traits> */
 #undef HAVE_CXX11_TYPE_TRAITS
@@ -489,12 +486,6 @@
 /* Flag indicating whether the library will be compiled with Qhull support */
 #undef HAVE_QHULL_API
 
-/* Define to 1 if you have the <rpc/rpc.h> header file. */
-#undef HAVE_RPC_RPC_H
-
-/* Define to 1 if you have the <rpc/xdr.h> header file. */
-#undef HAVE_RPC_XDR_H
-
 /* define if the compiler supports Run-Time Type Identification */
 #undef HAVE_RTTI
 
@@ -649,8 +640,22 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* Flag indicating whether or not PETSc was configured with CHACO support */
+#undef PETSC_HAVE_CHACO
+
 /* Flag indicating whether or not PETSc was configured with MUMPS support */
 #undef PETSC_HAVE_MUMPS
+
+/* Flag indicating whether or not PETSc was configured with ParMETIS support
+   */
+#undef PETSC_HAVE_PARMETIS
+
+/* Flag indicating whether or not PETSc was configured with PARTY support */
+#undef PETSC_HAVE_PARTY
+
+/* Flag indicating whether or not PETSc was configured with PTSCOTCH support
+   */
+#undef PETSC_HAVE_PTSCOTCH
 
 /* Flag indicating whether or not PETSc was configured with SuperLU_dist
    support */

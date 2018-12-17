@@ -38,7 +38,16 @@ class ZeroFunction : public ConstFunction<Output>
 public:
   ZeroFunction () : ConstFunction<Output>(0) {}
 
-  virtual std::unique_ptr<FunctionBase<Output>> clone() const libmesh_override
+  /**
+   * The 5 special functions can be defaulted for this class.
+   */
+  ZeroFunction (ZeroFunction &&) = default;
+  ZeroFunction (const ZeroFunction &) = default;
+  ZeroFunction & operator= (const ZeroFunction &) = default;
+  ZeroFunction & operator= (ZeroFunction &&) = default;
+  virtual ~ZeroFunction () = default;
+
+  virtual std::unique_ptr<FunctionBase<Output>> clone() const override
   {
     return libmesh_make_unique<ZeroFunction<Output>>();
   }

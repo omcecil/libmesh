@@ -58,26 +58,32 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
                                        MeshBase::element_iterator end,
                                        unsigned int n_pieces)
 {
-  libmesh_assert_greater (n_pieces, 0);
+  // Check for easy returns
+  if (beg == end)
+    return;
 
-  // We don't yet support distributed meshes with this Partitioner
-  if (!mesh.is_serial())
-    libmesh_not_implemented();
-
-  // Check for an easy return
   if (n_pieces == 1)
     {
       this->single_partition_range (beg, end);
       return;
     }
 
+  libmesh_assert_greater (n_pieces, 0);
+
+  // We don't yet support distributed meshes with this Partitioner
+  if (!mesh.is_serial())
+    {
+      libMesh::out << "WARNING: Forced to gather a distributed mesh for METIS" << std::endl;
+      mesh.allgather();
+    }
+
   // What to do if the Metis library IS NOT present
 #ifndef LIBMESH_HAVE_METIS
 
-  libmesh_here();
-  libMesh::err << "ERROR: The library has been built without"    << std::endl
+  libmesh_do_once(
+  libMesh::out << "ERROR: The library has been built without"    << std::endl
                << "Metis support.  Using a space-filling curve"  << std::endl
-               << "partitioner instead!"                         << std::endl;
+               << "partitioner instead!"                         << std::endl;);
 
   SFCPartitioner sfcp;
   sfcp.partition_range (mesh, beg, end, n_pieces);
@@ -87,7 +93,7 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
 
   LOG_SCOPE("partition_range()", "MetisPartitioner");
 
-  const dof_id_type n_range_elem = std::distance(beg, end);
+  const dof_id_type n_range_elem = cast_int<dof_id_type>(std::distance(beg, end));
 
   // Metis will only consider the elements in the range.
   // We need to map the range element ids into a
@@ -214,11 +220,11 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
             // adjacency corresponds to a face neighbor
             for (auto neighbor : elem->neighbor_ptr_range())
               {
-                if (neighbor != libmesh_nullptr)
+                if (neighbor != nullptr)
                   {
                     // If the neighbor is active, but is not in the
                     // range of elements being partitioned, treat it
-                    // as a NULL neighbor.
+                    // as a nullptr neighbor.
                     if (neighbor->active() && !global_index_map.count(neighbor->id()))
                       continue;
 
@@ -287,14 +293,15 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
                 std::set<const Elem *> neighbor_set;
                 elem->find_interior_neighbors(neighbor_set);
 
-                num_neighbors += neighbor_set.size();
+                num_neighbors += cast_int<unsigned int>(neighbor_set.size());
               }
 
             // Check for any boundary neighbors
             typedef map_type::iterator map_it_type;
             std::pair<map_it_type, map_it_type>
               bounds = interior_to_boundary_map.equal_range(elem);
-            num_neighbors += std::distance(bounds.first, bounds.second);
+            num_neighbors += cast_int<unsigned int>
+              (std::distance(bounds.first, bounds.second));
 
             csr_graph.prep_n_nonzeros(elem_global_index, num_neighbors);
 #ifndef NDEBUG
@@ -316,11 +323,11 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
             // adjacency corresponds to a face neighbor
             for (auto neighbor : elem->neighbor_ptr_range())
               {
-                if (neighbor != libmesh_nullptr)
+                if (neighbor != nullptr)
                   {
                     // If the neighbor is active, but is not in the
                     // range of elements being partitioned, treat it
-                    // as a NULL neighbor.
+                    // as a nullptr neighbor.
                     if (neighbor->active() && !global_index_map.count(neighbor->id()))
                       continue;
 
@@ -436,33 +443,33 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
       if (n_pieces <= 8)
         Metis::METIS_PartGraphRecursive(&n,
                                         &ncon,
-                                        &csr_graph.offsets[0],
-                                        &csr_graph.vals[0],
-                                        &vwgt[0],
-                                        libmesh_nullptr,
-                                        libmesh_nullptr,
+                                        csr_graph.offsets.data(),
+                                        csr_graph.vals.data(),
+                                        vwgt.data(),
+                                        nullptr,
+                                        nullptr,
                                         &nparts,
-                                        libmesh_nullptr,
-                                        libmesh_nullptr,
-                                        libmesh_nullptr,
+                                        nullptr,
+                                        nullptr,
+                                        nullptr,
                                         &edgecut,
-                                        &part[0]);
+                                        part.data());
 
       // Otherwise  use kway
       else
         Metis::METIS_PartGraphKway(&n,
                                    &ncon,
-                                   &csr_graph.offsets[0],
-                                   &csr_graph.vals[0],
-                                   &vwgt[0],
-                                   libmesh_nullptr,
-                                   libmesh_nullptr,
+                                   csr_graph.offsets.data(),
+                                   csr_graph.vals.data(),
+                                   vwgt.data(),
+                                   nullptr,
+                                   nullptr,
                                    &nparts,
-                                   libmesh_nullptr,
-                                   libmesh_nullptr,
-                                   libmesh_nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
                                    &edgecut,
-                                   &part[0]);
+                                   part.data());
 
     } // end processor 0 part
 

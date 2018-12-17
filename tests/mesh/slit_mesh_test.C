@@ -36,17 +36,17 @@ public:
 
   ~SlitFunc () {}
 
-  virtual void init_context (const FEMContext &) libmesh_override {}
+  virtual void init_context (const FEMContext &) override {}
 
   virtual std::unique_ptr<FEMFunctionBase<Number>>
-  clone () const libmesh_override
+  clone () const override
   {
     return libmesh_make_unique<SlitFunc>();
   }
 
   virtual Number operator() (const FEMContext & c,
                              const Point & p,
-                             const Real /*time*/ = 0.) libmesh_override
+                             const Real /*time*/ = 0.) override
   {
     const Real & x = p(0);
     const Real & y = p(1);
@@ -59,7 +59,7 @@ public:
   virtual void operator() (const FEMContext & c,
                            const Point & p,
                            const Real time,
-                           DenseVector<Number> & output) libmesh_override
+                           DenseVector<Number> & output) override
   {
     for (unsigned int i=0; i != output.size(); ++i)
       output(i) = (*this)(c, p, time);
@@ -80,7 +80,9 @@ class SlitMeshTest : public CppUnit::TestCase {
 public:
   CPPUNIT_TEST_SUITE( SlitMeshTest );
 
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -165,7 +167,9 @@ protected:
 public:
   void setUp()
   {
+#if LIBMESH_DIM > 1
     this->build_mesh();
+#endif
   }
 
   void tearDown()
@@ -210,7 +214,9 @@ class SlitMeshRefinedMeshTest : public SlitMeshTest {
 public:
   CPPUNIT_TEST_SUITE( SlitMeshRefinedMeshTest );
 
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -219,10 +225,12 @@ public:
 
   void setUp()
   {
+#if LIBMESH_DIM > 1
     this->build_mesh();
 
 #ifdef LIBMESH_ENABLE_AMR
     MeshRefinement(*_mesh).uniformly_refine(1);
+#endif
 #endif
   }
 
@@ -248,12 +256,14 @@ class SlitMeshRefinedSystemTest : public SlitMeshTest {
 public:
   CPPUNIT_TEST_SUITE( SlitMeshRefinedSystemTest );
 
+#if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
 
   CPPUNIT_TEST( testSystem );
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   CPPUNIT_TEST( testRestart );
+#endif
 #endif
 
   CPPUNIT_TEST_SUITE_END();
@@ -267,6 +277,7 @@ public:
 
   void setUp()
   {
+#if LIBMESH_DIM > 1
     this->build_mesh();
 
     // libMesh *should* renumber now, or a DistributedMesh might not
@@ -286,6 +297,7 @@ public:
     _es->reinit();
     MeshRefinement(*_mesh).uniformly_refine(1);
     _es->reinit();
+#endif
 #endif
   }
 
@@ -322,14 +334,8 @@ public:
     const std::vector<Point> & xyz = fe->get_xyz();
     fe->get_phi();
 
-    MeshBase::const_element_iterator       el     =
-      _mesh->active_local_elements_begin();
-    const MeshBase::const_element_iterator end_el =
-      _mesh->active_local_elements_end();
-
-    for (; el != end_el; ++el)
+    for (const auto & elem : _mesh->active_local_element_ptr_range())
       {
-        const Elem * elem = *el;
         context.pre_fe_reinit(*_sys, elem);
         context.elem_fe_reinit();
 

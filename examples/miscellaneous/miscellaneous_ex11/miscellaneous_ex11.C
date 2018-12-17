@@ -57,6 +57,7 @@
 #include "libmesh/numeric_vector.h"
 #include "libmesh/vtk_io.h"
 #include "libmesh/exodusII_io.h"
+#include "libmesh/enum_solver_package.h"
 
 // These are the include files typically needed for subdivision elements.
 #include "libmesh/face_tri3_subdivision.h"
@@ -581,7 +582,7 @@ void assemble_shell (EquationSystems & es,
       for (auto s : elem->side_index_range())
         {
           const Tri3Subdivision * nb_elem = static_cast<const Tri3Subdivision *> (elem->neighbor_ptr(s));
-          if (nb_elem == libmesh_nullptr || nb_elem->is_ghost())
+          if (nb_elem == nullptr || nb_elem->is_ghost())
             continue;
 
           /*

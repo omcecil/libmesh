@@ -67,24 +67,19 @@
 // Libmesh includes
 #include "libmesh/equation_systems.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
-
 #include "libmesh/twostep_time_solver.h"
 #include "libmesh/euler_solver.h"
 #include "libmesh/euler2_solver.h"
 #include "libmesh/steady_solver.h"
-
 #include "libmesh/newton_solver.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/petsc_diff_solver.h"
-
 #include "libmesh/mesh.h"
 #include "libmesh/mesh_tools.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/mesh_refinement.h"
-
 #include "libmesh/system.h"
 #include "libmesh/system_norm.h"
-
 #include "libmesh/adjoint_residual_error_estimator.h"
 #include "libmesh/const_fem_function.h"
 #include "libmesh/error_vector.h"
@@ -101,6 +96,8 @@
 #include "libmesh/uniform_refinement_estimator.h"
 #include "libmesh/qoi_set.h"
 #include "libmesh/weighted_patch_recovery_error_estimator.h"
+#include "libmesh/enum_solver_package.h"
+#include "libmesh/enum_xdr_mode.h"
 
 // Local includes
 #include "coupled_system.h"
@@ -279,8 +276,10 @@ void write_output_solvedata(EquationSystems & es,
                             unsigned int tv_usec)
 {
   MeshBase & mesh = es.get_mesh();
-  unsigned int n_active_elem = mesh.n_active_elem();
-  unsigned int n_active_dofs = es.n_active_dofs();
+
+  // Query parallel_object_only() methods *outside* if(pid==0)
+  const std::size_t n_active_elem = mesh.n_active_elem();
+  const std::size_t n_active_dofs = es.n_active_dofs();
 
   if (mesh.processor_id() == 0)
     {
@@ -641,7 +640,7 @@ build_error_estimator_component_wise (FEMParameters & param,
   std::size_t size = primal_error_norm_type.size();
 
   libmesh_assert_equal_to (size, dual_error_norm_type.size());
-  for (std::size_t i = 0; i != size; ++i)
+  for (unsigned int i = 0; i != size; ++i)
     {
       adjoint_residual_estimator->primal_error_estimator()->error_norm.set_type(i, primal_error_norm_type[i]);
       adjoint_residual_estimator->dual_error_estimator()->error_norm.set_type(i, dual_error_norm_type[i]);
@@ -650,11 +649,11 @@ build_error_estimator_component_wise (FEMParameters & param,
   // Now we set the right weights for each term in the error estimate, using the user provided
   // term_weights matrix
   libmesh_assert_equal_to (size, term_weights.size());
-  for (std::size_t i = 0; i != term_weights.size(); ++i)
+  for (unsigned int i = 0; i != size; ++i)
     {
       libmesh_assert_equal_to (size, term_weights[i].size());
       adjoint_residual_estimator->error_norm.set_weight(i, term_weights[i][i]);
-      for (std::size_t j = 0; j != size; ++j)
+      for (unsigned int j = 0; j != size; ++j)
         if (i != j)
           adjoint_residual_estimator->error_norm.set_off_diagonal_weight(i, j, term_weights[i][j]);
     }
@@ -706,11 +705,11 @@ build_weighted_error_estimator_component_wise (FEMParameters & param,
   // Now we set the right weights for each term in the error estimate, using the user provided
   // term_weights matrix
   libmesh_assert_equal_to (size, term_weights.size());
-  for (std::size_t i = 0; i != term_weights.size(); ++i)
+  for (unsigned int i = 0; i != size; ++i)
     {
       libmesh_assert_equal_to (size, term_weights[i].size());
       adjoint_residual_estimator->error_norm.set_weight(i, term_weights[i][i]);
-      for (std::size_t j = 0; j != size; ++j)
+      for (unsigned int j = 0; j != size; ++j)
         if (i != j)
           adjoint_residual_estimator->error_norm.set_off_diagonal_weight(i, j, term_weights[i][j]);
     }
@@ -752,7 +751,7 @@ int main (int argc, char ** argv)
 
   // Create a mesh with the given dimension, distributed
   // across the default MPI communicator.
-  Mesh mesh(init.comm(), param.dimension);
+  Mesh mesh(init.comm(), cast_int<unsigned char>(param.dimension));
 
   // And an object to refine it
   std::unique_ptr<MeshRefinement> mesh_refinement =

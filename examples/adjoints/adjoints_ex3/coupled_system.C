@@ -182,18 +182,18 @@ void CoupledSystem::init_context(DiffContext & context)
   // we will need to build the linear system.
   // Note that the concentration and velocity components
   // use the same basis.
-  FEBase * u_elem_fe = libmesh_nullptr;
+  FEBase * u_elem_fe = nullptr;
   c.get_element_fe(u_var, u_elem_fe);
   u_elem_fe->get_JxW();
   u_elem_fe->get_phi();
   u_elem_fe->get_dphi();
   u_elem_fe->get_xyz();
 
-  FEBase * p_elem_fe = libmesh_nullptr;
+  FEBase * p_elem_fe = nullptr;
   c.get_element_fe(p_var, p_elem_fe);
   p_elem_fe->get_phi();
 
-  FEBase * side_fe = libmesh_nullptr;
+  FEBase * side_fe = nullptr;
   c.get_side_fe(u_var, side_fe);
 
   side_fe->get_JxW();
@@ -209,7 +209,7 @@ bool CoupledSystem::element_time_derivative (bool request_jacobian,
 
   // First we get some references to cell-specific data that
   // will be used to assemble the linear system.
-  FEBase * u_elem_fe = libmesh_nullptr;
+  FEBase * u_elem_fe = nullptr;
   c.get_element_fe(u_var, u_elem_fe);
 
   // Element Jacobian * quadrature weights for interior integration
@@ -224,15 +224,15 @@ bool CoupledSystem::element_time_derivative (bool request_jacobian,
 
   // The pressure shape functions at interior
   // quadrature points.
-  FEBase * p_elem_fe = libmesh_nullptr;
+  FEBase * p_elem_fe = nullptr;
   c.get_element_fe(p_var, p_elem_fe);
 
   const std::vector<std::vector<Real>> & psi = p_elem_fe->get_phi();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_p_dofs = c.get_dof_indices(p_var).size();
-  const unsigned int n_u_dofs = c.get_dof_indices(u_var).size();
-  libmesh_assert_equal_to (n_u_dofs, c.get_dof_indices(v_var).size());
+  const unsigned int n_p_dofs = c.n_dof_indices(p_var);
+  const unsigned int n_u_dofs = c.n_dof_indices(u_var);
+  libmesh_assert_equal_to (n_u_dofs, c.n_dof_indices(v_var));
 
   // The subvectors and submatrices we need to fill:
   DenseSubMatrix<Number> & Kuu = c.get_elem_jacobian(u_var, u_var);
@@ -335,10 +335,10 @@ bool CoupledSystem::element_constraint (bool request_jacobian,
 
   // Here we define some references to cell-specific data that
   // will be used to assemble the linear system.
-  FEBase * u_elem_fe = libmesh_nullptr;
+  FEBase * u_elem_fe = nullptr;
   c.get_element_fe(u_var, u_elem_fe);
 
-  FEBase * p_elem_fe = libmesh_nullptr;
+  FEBase * p_elem_fe = nullptr;
   c.get_element_fe(p_var, p_elem_fe);
 
   // Element Jacobian * quadrature weight for interior integration
@@ -353,8 +353,8 @@ bool CoupledSystem::element_constraint (bool request_jacobian,
   const std::vector<std::vector<Real>> & psi = p_elem_fe->get_phi();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_u_dofs = c.get_dof_indices(u_var).size();
-  const unsigned int n_p_dofs = c.get_dof_indices(p_var).size();
+  const unsigned int n_u_dofs = c.n_dof_indices(u_var);
+  const unsigned int n_p_dofs = c.n_dof_indices(p_var);
 
   // The subvectors and submatrices we need to fill:
   DenseSubMatrix<Number> & Kpu = c.get_elem_jacobian(p_var, u_var);

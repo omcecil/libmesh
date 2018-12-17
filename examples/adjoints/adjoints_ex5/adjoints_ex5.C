@@ -83,6 +83,7 @@
 #include "libmesh/system_norm.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/enum_solver_package.h"
 
 #include "libmesh/mesh.h"
 #include "libmesh/mesh_generation.h"
@@ -320,7 +321,7 @@ int main (int argc, char ** argv)
 
   // Create a mesh with the given dimension, distributed
   // across the default MPI communicator.
-  Mesh mesh(init.comm(), param.dimension);
+  Mesh mesh(init.comm(), cast_int<unsigned char>(param.dimension));
 
   // And an object to refine it
   auto mesh_refinement = libmesh_make_unique<MeshRefinement>(mesh);

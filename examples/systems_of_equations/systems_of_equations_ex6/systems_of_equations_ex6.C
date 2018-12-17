@@ -66,6 +66,7 @@
 #include "libmesh/solver_configuration.h"
 #include "libmesh/petsc_linear_solver.h"
 #include "libmesh/petsc_macro.h"
+#include "libmesh/enum_solver_package.h"
 
 #define x_scaling 1.3
 
@@ -98,10 +99,10 @@ public:
   {
     PetscErrorCode ierr = 0;
     ierr = KSPSetType (_petsc_linear_solver.ksp(), const_cast<KSPType>(KSPCG));
-    libmesh_assert(ierr == 0);
+    LIBMESH_CHKERR(ierr);
 
     ierr = PCSetType (_petsc_linear_solver.pc(), const_cast<PCType>(PCBJACOBI));
-    libmesh_assert(ierr == 0);
+    LIBMESH_CHKERR(ierr);
   }
 
   // The linear solver object that we are configuring
@@ -244,7 +245,7 @@ public:
         g_vec(2) = -1.;
         {
           for (auto side : elem->side_index_range())
-            if (elem->neighbor_ptr(side) == libmesh_nullptr)
+            if (elem->neighbor_ptr(side) == nullptr)
               {
                 const std::vector<std::vector<Real>> & phi_face = fe_face->get_phi();
                 const std::vector<Real> & JxW_face = fe_face->get_JxW();

@@ -20,13 +20,12 @@
 #include "libmesh/libmesh_config.h"
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 
-// C++ includes
-
 // Local includes cont'd
 #include "libmesh/face_inf_quad.h"
 #include "libmesh/edge_edge2.h"
 #include "libmesh/edge_inf_edge2.h"
 #include "libmesh/face_inf_quad4.h"
+#include "libmesh/enum_elem_quality.h"
 
 namespace libMesh
 {
@@ -106,6 +105,48 @@ std::unique_ptr<Elem> InfQuad::side_ptr (const unsigned int i)
   return edge;
 }
 
+
+
+void InfQuad::side_ptr (std::unique_ptr<Elem> & side,
+                        const unsigned int i)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  switch (i)
+    {
+      // the base face
+    case 0:
+      {
+        if (!side.get() || side->type() != EDGE2)
+          {
+            side = this->side_ptr(i);
+            return;
+          }
+        break;
+      }
+
+      // connecting to another infinite element
+    case 1:
+    case 2:
+      {
+        if (!side.get() || side->type() != INFEDGE2)
+          {
+            side = this->side_ptr(i);
+            return;
+          }
+        break;
+      }
+
+    default:
+      libmesh_error_msg("Invalid side i = " << i);
+    }
+
+  side->subdomain_id() = this->subdomain_id();
+
+  // Set the nodes
+  for (auto n : side->node_index_range())
+    side->set_node(n) = this->node_ptr(InfQuad4::side_nodes_map[i][n]);
+}
 
 
 bool InfQuad::is_child_on_side(const unsigned int c,

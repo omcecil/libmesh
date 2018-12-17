@@ -20,6 +20,7 @@
 // Local includes
 #include "libmesh/fe.h"
 #include "libmesh/libmesh_logging.h"
+#include "libmesh/enum_elem_type.h"
 
 // For projection code:
 #include "libmesh/boundary_info.h"
@@ -37,9 +38,35 @@
 #include "libmesh/remote_elem.h"
 #include "libmesh/tensor_value.h"
 #include "libmesh/threads.h"
+#include "libmesh/enum_elem_type.h"
 
 namespace libMesh
 {
+
+FEAbstract::FEAbstract(const unsigned int d,
+                       const FEType & fet) :
+  _fe_map( FEMap::build(fet) ),
+  dim(d),
+  calculations_started(false),
+  calculate_phi(false),
+  calculate_dphi(false),
+  calculate_d2phi(false),
+  calculate_curl_phi(false),
+  calculate_div_phi(false),
+  calculate_dphiref(false),
+  fe_type(fet),
+  elem_type(INVALID_ELEM),
+  _p_level(0),
+  qrule(nullptr),
+  shapes_on_quadrature(false)
+{
+}
+
+
+FEAbstract::~FEAbstract()
+{
+}
+
 
 std::unique_ptr<FEAbstract> FEAbstract::build(const unsigned int dim,
                                               const FEType & fet)
@@ -808,12 +835,14 @@ void FEAbstract::compute_node_constraints (NodeConstraints & constraints,
   // We currently always use LAGRANGE mappings for geometry
   const FEType fe_type(elem->default_order(), LAGRANGE);
 
+  // Pull objects out of the loop to reduce heap operations
   std::vector<const Node *> my_nodes, parent_nodes;
+  std::unique_ptr<const Elem> my_side, parent_side;
 
   // Look at the element faces.  Check to see if we need to
   // build constraints.
   for (auto s : elem->side_index_range())
-    if (elem->neighbor_ptr(s) != libmesh_nullptr &&
+    if (elem->neighbor_ptr(s) != nullptr &&
         elem->neighbor_ptr(s) != remote_elem)
       if (elem->neighbor_ptr(s)->level() < elem->level()) // constrain dofs shared between
         {                                                 // this element and ones coarser
@@ -821,13 +850,13 @@ void FEAbstract::compute_node_constraints (NodeConstraints & constraints,
           // Get pointers to the elements of interest and its parent.
           const Elem * parent = elem->parent();
 
-          // This can't happen...  Only level-0 elements have NULL
+          // This can't happen...  Only level-0 elements have nullptr
           // parents, and no level-0 elements can be at a higher
           // level than their neighbors!
           libmesh_assert(parent);
 
-          const std::unique_ptr<const Elem> my_side     (elem->build_side_ptr(s));
-          const std::unique_ptr<const Elem> parent_side (parent->build_side_ptr(s));
+          elem->build_side_ptr(my_side, s);
+          parent->build_side_ptr(parent_side, s);
 
           const unsigned int n_side_nodes = my_side->n_nodes();
 
@@ -954,7 +983,9 @@ void FEAbstract::compute_periodic_node_constraints (NodeConstraints & constraint
   // We currently always use LAGRANGE mappings for geometry
   const FEType fe_type(elem->default_order(), LAGRANGE);
 
+  // Pull objects out of the loop to reduce heap operations
   std::vector<const Node *> my_nodes, neigh_nodes;
+  std::unique_ptr<const Elem> my_side, neigh_side;
 
   // Look at the element faces.  Check to see if we need to
   // build constraints.
@@ -989,8 +1020,8 @@ void FEAbstract::compute_periodic_node_constraints (NodeConstraints & constraint
                   libmesh_assert(neigh->active());
 #endif // #ifdef LIBMESH_ENABLE_AMR
 
-                  const std::unique_ptr<const Elem> my_side    (elem->build_side_ptr(s));
-                  const std::unique_ptr<const Elem> neigh_side (neigh->build_side_ptr(s_neigh));
+                  elem->build_side_ptr(my_side, s);
+                  neigh->build_side_ptr(neigh_side, s_neigh);
 
                   const unsigned int n_side_nodes = my_side->n_nodes();
 

@@ -128,12 +128,12 @@ EpetraVector<T>::operator -= (const NumericVector<T> & v)
 
 template <typename T>
 NumericVector<T> &
-EpetraVector<T>::operator /= (NumericVector<T> & v)
+EpetraVector<T>::operator /= (const NumericVector<T> & v)
 {
   libmesh_assert(this->closed());
   libmesh_assert_equal_to(size(), v.size());
 
-  EpetraVector<T> & v_vec = cast_ref<EpetraVector<T> &>(v);
+  const EpetraVector<T> & v_vec = cast_ref<const EpetraVector<T> &>(v);
 
   _vec->ReciprocalMultiply(1.0, *v_vec._vec, *_vec, 0.0);
 
@@ -215,8 +215,8 @@ void EpetraVector<T>::add_vector (const T * v,
 {
   libmesh_assert_equal_to (sizeof(numeric_index_type), sizeof(int));
 
-  SumIntoGlobalValues (dof_indices.size(),
-                       (int *) &dof_indices[0],
+  SumIntoGlobalValues (cast_int<numeric_index_type>(dof_indices.size()),
+                       numeric_trilinos_cast(dof_indices.data()),
                        const_cast<T *>(v));
 }
 
@@ -288,8 +288,8 @@ void EpetraVector<T>::insert (const T * v,
 {
   libmesh_assert_equal_to (sizeof(numeric_index_type), sizeof(int));
 
-  ReplaceGlobalValues (dof_indices.size(),
-                       (int *) &dof_indices[0],
+  ReplaceGlobalValues (cast_int<numeric_index_type>(dof_indices.size()),
+                       numeric_trilinos_cast(dof_indices.data()),
                        const_cast<T *>(v));
 }
 
@@ -345,25 +345,14 @@ EpetraVector<T>::operator = (const T s_in)
 
 template <typename T>
 NumericVector<T> &
-EpetraVector<T>::operator = (const NumericVector<T> & v_in)
+EpetraVector<T>::operator = (const NumericVector<T> & /*v_in*/)
 {
-  const EpetraVector<T> * v = cast_ptr<const EpetraVector<T> *>(&v_in);
-
-  *this = *v;
-
-  return *this;
-}
-
-
-
-template <typename T>
-EpetraVector<T> &
-EpetraVector<T>::operator = (const EpetraVector<T> & v)
-{
-  (*_vec) = *v._vec;
-
-  // FIXME - what about our communications data?
-
+  // This function could be implemented in terms of the copy
+  // assignment operator (see other NumericVector subclasses) but that
+  // function is currently deleted so calling this function is an error.
+  // const EpetraVector<T> * v = cast_ptr<const EpetraVector<T> *>(&v_in);
+  // *this = *v;
+  libmesh_not_implemented();
   return *this;
 }
 
@@ -906,13 +895,13 @@ void EpetraVector<T>::destroyNonlocalData()
   if (allocatedNonlocalLength_ > 0) {
     delete [] nonlocalIDs_;
     delete [] nonlocalElementSize_;
-    nonlocalIDs_ = libmesh_nullptr;
-    nonlocalElementSize_ = libmesh_nullptr;
+    nonlocalIDs_ = nullptr;
+    nonlocalElementSize_ = nullptr;
     for (int i=0; i<numNonlocalIDs_; ++i) {
       delete [] nonlocalCoefs_[i];
     }
     delete [] nonlocalCoefs_;
-    nonlocalCoefs_ = libmesh_nullptr;
+    nonlocalCoefs_ = nullptr;
     numNonlocalIDs_ = 0;
     allocatedNonlocalLength_ = 0;
   }

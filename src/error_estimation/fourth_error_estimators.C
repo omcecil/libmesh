@@ -34,13 +34,29 @@
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/elem.h"
 #include "libmesh/system.h"
-
 #include "libmesh/dense_vector.h"
 #include "libmesh/tensor_tools.h"
-
+#include "libmesh/enum_error_estimator_type.h"
+#include "libmesh/enum_norm_type.h"
 
 namespace libMesh
 {
+
+
+LaplacianErrorEstimator::LaplacianErrorEstimator() :
+  JumpErrorEstimator()
+{
+  error_norm = H2_SEMINORM;
+}
+
+
+
+ErrorEstimatorType
+LaplacianErrorEstimator::type() const
+{
+  return LAPLACIAN;
+}
+
 
 
 void
@@ -53,7 +69,7 @@ LaplacianErrorEstimator::init_context(FEMContext & c)
       if (error_norm.weight(v) == 0.0) continue;
 
       // FIXME: Need to generalize this to vector-valued elements. [PB]
-      FEBase * side_fe = libmesh_nullptr;
+      FEBase * side_fe = nullptr;
 
       const std::set<unsigned char> & elem_dims =
         c.elem_dimensions();
@@ -79,12 +95,12 @@ LaplacianErrorEstimator::internal_side_integration ()
   const DenseVector<Number> & Ucoarse = coarse_context->get_elem_solution();
   const DenseVector<Number> & Ufine   = fine_context->get_elem_solution();
 
-  unsigned int dim = fine_elem.dim();
+  unsigned short dim = fine_elem.dim();
 
-  FEBase * fe_fine = libmesh_nullptr;
+  FEBase * fe_fine = nullptr;
   fine_context->get_side_fe( var, fe_fine, dim );
 
-  FEBase * fe_coarse = libmesh_nullptr;
+  FEBase * fe_coarse = nullptr;
   coarse_context->get_side_fe( var, fe_coarse, dim );
 
   Real error = 1.e-30;

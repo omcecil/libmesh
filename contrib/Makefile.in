@@ -219,7 +219,7 @@ target_triplet = @target@
 @LIBMESH_ENABLE_FPARSER_TRUE@am__append_121 = fparser/libprof.la
 @LIBMESH_ENABLE_FPARSER_TRUE@am__append_122 = fparser/liboprof.la
 @LIBMESH_ENABLE_NANOFLANN_TRUE@am__append_123 = nanoflann
-@LIBMESH_ENABLE_METAPHYSICL_TRUE@am__append_124 = metaphysicl/0.2.0
+@LIBMESH_ENABLE_METAPHYSICL_TRUE@am__append_124 = metaphysicl
 @LIBMESH_OPT_MODE_TRUE@am__append_125 = libcontrib_opt.la
 @LIBMESH_DBG_MODE_TRUE@am__append_126 = libcontrib_dbg.la
 @LIBMESH_DEVEL_MODE_TRUE@am__append_127 = libcontrib_devel.la
@@ -230,7 +230,11 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
 	$(top_srcdir)/m4/all_static.m4 \
 	$(top_srcdir)/m4/ax_boost_base.m4 \
+	$(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_compiler_vendor.m4 \
 	$(top_srcdir)/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/m4/ax_gcc_archflag.m4 \
+	$(top_srcdir)/m4/ax_gcc_x86_cpuid.m4 \
 	$(top_srcdir)/m4/ax_openmp.m4 $(top_srcdir)/m4/ax_pthread.m4 \
 	$(top_srcdir)/m4/ax_split_version.m4 \
 	$(top_srcdir)/m4/ax_tls.m4 $(top_srcdir)/m4/backtrace.m4 \
@@ -268,7 +272,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
 	$(top_srcdir)/m4/tetgen.m4 $(top_srcdir)/m4/threads.m4 \
 	$(top_srcdir)/m4/triangle.m4 $(top_srcdir)/m4/trilinos.m4 \
 	$(top_srcdir)/m4/unordered.m4 $(top_srcdir)/m4/vtk.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/xdr.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -420,7 +424,7 @@ DIST_SUBDIRS = capnproto boost/include eigen/eigen gmv gzstream \
 	netcdf/v3 netcdf/v4 exodusii/v5.09 exodusii/v5.22/exodus \
 	nemesis/v3.09 nemesis/v5.22/nemesis tecplot/tecio \
 	tecplot/binary triangle tetgen qhull/qhull libHilbert laspack \
-	metis parmetis sfcurves fparser nanoflann metaphysicl/0.2.0
+	metis parmetis sfcurves fparser nanoflann metaphysicl
 am__DIST_COMMON = $(srcdir)/Makefile.in \
 	$(top_srcdir)/build-aux/depcomp README
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -452,6 +456,8 @@ am__relativize = \
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANY_PARANOID_FLAGS = @ANY_PARANOID_FLAGS@
+ANY_WERROR_FLAG = @ANY_WERROR_FLAG@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -628,6 +634,7 @@ PETSC_DIR = @PETSC_DIR@
 PETSC_FC_INCLUDES = @PETSC_FC_INCLUDES@
 PKG_CONFIG = @PKG_CONFIG@
 PROFILING_FLAGS = @PROFILING_FLAGS@
+PRTDIAG = @PRTDIAG@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -694,6 +701,7 @@ datarootdir = @datarootdir@
 docdir = @docdir@
 dvidir = @dvidir@
 enabledeprecated = @enabledeprecated@
+enablefwdenums = @enablefwdenums@
 enablelegacyincludepaths = @enablelegacyincludepaths@
 enablepetsc = @enablepetsc@
 enableuniqueptr = @enableuniqueptr@

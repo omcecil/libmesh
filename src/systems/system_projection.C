@@ -19,15 +19,22 @@
 
 // C++ includes
 #include <vector>
+#include <numeric> // std::iota
 
 // Local includes
 #include "libmesh/libmesh_config.h"
 
 #ifdef LIBMESH_HAVE_METAPHYSICL
+
+// FIXME - having to do this with MetaPhysicL brings me shame - RHS
+#include "libmesh/ignore_warnings.h"
 // Template specialization declarations in here need to *precede* code
 // using them.
 #include "metaphysicl/dynamicsparsenumberarray_decl.h"
+#include "libmesh/restore_warnings.h"
+
 #include "libmesh/compare_types.h"
+#include "libmesh/int_range.h"
 
 using MetaPhysicL::DynamicSparseNumberArray;
 
@@ -76,8 +83,11 @@ struct CompareTypes<MetaPhysicL::DynamicSparseNumberArray<T,I>, T2>
 
 
 #ifdef LIBMESH_HAVE_METAPHYSICL
+// FIXME - wrapping MetaPhysicL is shameful - RHS
+#include "libmesh/ignore_warnings.h"
 // Include MetaPhysicL definitions finally
 #include "metaphysicl/dynamicsparsenumberarray.h"
+#include "libmesh/restore_warnings.h"
 
 // And make sure we instantiate the methods we'll need to use on them.
 #include "libmesh/dense_matrix_impl.h"
@@ -238,11 +248,11 @@ void System::project_vector (const NumericVector<Number> & old_v,
 #ifdef LIBMESH_ENABLE_AMR
 
   // Resize the new vector and get a serial version.
-  NumericVector<Number> * new_vector_ptr = libmesh_nullptr;
+  NumericVector<Number> * new_vector_ptr = nullptr;
   std::unique_ptr<NumericVector<Number>> new_vector_built;
   NumericVector<Number> * local_old_vector;
   std::unique_ptr<NumericVector<Number>> local_old_vector_built;
-  const NumericVector<Number> * old_vector_ptr = libmesh_nullptr;
+  const NumericVector<Number> * old_vector_ptr = nullptr;
 
   ConstElemRange active_local_elem_range
     (this->get_mesh().active_local_elements_begin(),
@@ -319,8 +329,7 @@ void System::project_vector (const NumericVector<Number> & old_v,
   if (n_variables)
     {
       std::vector<unsigned int> vars(n_variables);
-      for (unsigned int i=0; i != n_variables; ++i)
-        vars[i] = i;
+      std::iota(vars.begin(), vars.end(), 0);
 
       // Use a typedef to make the calling sequence for parallel_for() a bit more readable
       typedef
@@ -348,13 +357,8 @@ void System::project_vector (const NumericVector<Number> & old_v,
                 std::vector<dof_id_type> new_SCALAR_indices, old_SCALAR_indices;
                 dof_map.SCALAR_dof_indices (new_SCALAR_indices, var, false);
                 dof_map.SCALAR_dof_indices (old_SCALAR_indices, var, true);
-                const unsigned int new_n_dofs =
-                  cast_int<unsigned int>(new_SCALAR_indices.size());
-
-                for (unsigned int i=0; i<new_n_dofs; i++)
-                  {
-                    new_vector.set( new_SCALAR_indices[i], old_vector(old_SCALAR_indices[i]) );
-                  }
+                for (auto i : index_range(new_SCALAR_indices))
+                  new_vector.set(new_SCALAR_indices[i], old_vector(old_SCALAR_indices[i]));
               }
         }
     }
@@ -479,10 +483,9 @@ public:
     const std::vector<dof_id_type> & old_dof_indices =
       this->old_context.get_dof_indices(var);
 
-    std::size_t size = values.size();
-    libmesh_assert_equal_to (old_dof_indices.size(), size);
+    libmesh_assert_equal_to (old_dof_indices.size(), values.size());
 
-    for (unsigned int i=0; i != size; ++i)
+    for (auto i : index_range(values))
       {
         values[i].resize(1);
         values[i].raw_at(0) = 1;
@@ -508,7 +511,7 @@ eval_at_point(const FEMContext & c,
     return 0;
 
   // Get finite element object
-  FEGenericBase<Real> * fe = libmesh_nullptr;
+  FEGenericBase<Real> * fe = nullptr;
   this->old_context.get_element_fe<Real>
     (i, fe, this->old_context.get_elem_dim());
 
@@ -527,10 +530,10 @@ eval_at_point(const FEMContext & c,
   DynamicSparseNumberArray<Real, dof_id_type> returnval;
   returnval.resize(n_dofs);
 
-  for (std::size_t i = 0; i != n_dofs; ++i)
+  for (auto j : index_range(phi))
     {
-      returnval.raw_at(i) = phi[i][0];
-      returnval.raw_index(i) = dof_indices[i];
+      returnval.raw_at(j) = phi[j][0];
+      returnval.raw_index(j) = dof_indices[j];
     }
 
   return returnval;
@@ -553,7 +556,7 @@ eval_at_point(const FEMContext & c,
     return 0;
 
   // Get finite element object
-  FEGenericBase<Real> * fe = libmesh_nullptr;
+  FEGenericBase<Real> * fe = nullptr;
   this->old_context.get_element_fe<Real>
     (i, fe, this->old_context.get_elem_dim());
 
@@ -574,14 +577,12 @@ eval_at_point(const FEMContext & c,
   for (unsigned int d = 0; d != LIBMESH_DIM; ++d)
     returnval(d).resize(n_dofs);
 
-  for (std::size_t i = 0; i != n_dofs; ++i)
-    {
-      for (unsigned int d = 0; d != LIBMESH_DIM; ++d)
-        {
-          returnval(d).raw_at(i) = dphi[i][0](d);
-          returnval(d).raw_index(i) = dof_indices[i];
-        }
-    }
+  for (auto j : index_range(dphi))
+    for (int d = 0; d != LIBMESH_DIM; ++d)
+      {
+        returnval(d).raw_at(j) = dphi[j][0](d);
+        returnval(d).raw_index(j) = dof_indices[j];
+      }
 
   return returnval;
 }
@@ -707,8 +708,8 @@ public:
           if ((dof_i >= begin_dof) && (dof_i < end_dof))
             {
               const DynamicSparseNumberArray<ValIn,dof_id_type> & dnsa = Ue(i);
-              const std::size_t size = dnsa.size();
-              for (unsigned int j = 0; j != size; ++j)
+              const std::size_t dnsa_size = dnsa.size();
+              for (unsigned int j = 0; j != dnsa_size; ++j)
                 {
                   const dof_id_type dof_j = dnsa.raw_index(j);
                   const ValIn dof_val = dnsa.raw_at(j);
@@ -739,8 +740,7 @@ void System::projection_matrix (SparseMatrix<Number> & proj_mat) const
          this->get_mesh().active_local_elements_end());
 
       std::vector<unsigned int> vars(n_variables);
-      for (unsigned int i=0; i != n_variables; ++i)
-        vars[i] = i;
+      std::iota(vars.begin(), vars.end(), 0);
 
       // Use a typedef to make the calling sequence for parallel_for() a bit more readable
       typedef OldSolutionCoefs<Real, &FEMContext::point_value> OldSolutionValueCoefs;
@@ -866,7 +866,7 @@ void System::project_vector (NumericVector<Number> & new_vector,
       this->project_vector(new_vector, &f_fem, &g_fem, is_adjoint);
     }
   else
-    this->project_vector(new_vector, &f_fem, libmesh_nullptr, is_adjoint);
+    this->project_vector(new_vector, &f_fem, nullptr, is_adjoint);
 }
 
 
@@ -892,8 +892,7 @@ void System::project_vector (NumericVector<Number> & new_vector,
   const unsigned int n_variables = this->n_vars();
 
   std::vector<unsigned int> vars(n_variables);
-  for (unsigned int i=0; i != n_variables; ++i)
-    vars[i] = i;
+  std::iota(vars.begin(), vars.end(), 0);
 
   // Use a typedef to make the calling sequence for parallel_for() a bit more readable
   typedef
@@ -913,7 +912,7 @@ void System::project_vector (NumericVector<Number> & new_vector,
   else
     Threads::parallel_for
       (active_local_range,
-       FEMProjector(*this, fw, libmesh_nullptr, setter, vars));
+       FEMProjector(*this, fw, nullptr, setter, vars));
 
   // Also, load values into the SCALAR dofs
   // Note: We assume that all SCALAR dofs are on the
@@ -1125,14 +1124,20 @@ void BuildProjectionList::operator()(const ConstElemRange & range)
               if (old_dofs)
                 {
                   const unsigned int sysnum = system.number();
-                  const unsigned int nv = old_dofs->n_vars(sysnum);
-                  for (unsigned int v=0; v != nv; ++v)
+                  const unsigned int nvg = old_dofs->n_var_groups(sysnum);
+
+                  for (unsigned int vg=0; vg != nvg; ++vg)
                     {
-                      const unsigned int nc =
-                        old_dofs->n_comp(sysnum, v);
-                      for (unsigned int c=0; c != nc; ++c)
-                        di.push_back
-                          (old_dofs->dof_number(sysnum, v, c));
+                      const unsigned int nvig =
+                        old_dofs->n_vars(sysnum, vg);
+                      for (unsigned int vig=0; vig != nvig; ++vig)
+                        {
+                          const unsigned int n_comp =
+                            old_dofs->n_comp_group(sysnum, vg);
+                          for (unsigned int c=0; c != n_comp; ++c)
+                            di.push_back
+                              (old_dofs->dof_number(sysnum, vg, vig, c, n_comp));
+                        }
                     }
                 }
             }
@@ -1234,7 +1239,7 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
 
       // The gradients of the shape functions at the quadrature
       // points on the child element.
-      const std::vector<std::vector<RealGradient>> * dphi = libmesh_nullptr;
+      const std::vector<std::vector<RealGradient>> * dphi = nullptr;
 
       const FEContinuity cont = fe->get_continuity();
 
@@ -1281,6 +1286,10 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
           std::vector<bool> is_boundary_node(n_nodes, false),
             is_boundary_edge(n_edges, false),
             is_boundary_side(n_sides, false);
+
+          // We also maintain a separate list of nodeset-based boundary nodes
+          std::vector<bool> is_boundary_nodeset(n_nodes, false);
+
           for (unsigned char s=0; s != n_sides; ++s)
             {
               // First see if this side has been requested
@@ -1305,6 +1314,31 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
                 if (elem->is_edge_on_side(e,s))
                   is_boundary_edge[e] = true;
             }
+
+            // We can also project on nodes, so we should also independently
+            // check whether the nodes have been requested
+            for (unsigned int n=0; n != n_nodes; ++n)
+              {
+                boundary_info.boundary_ids (elem->node_ptr(n), bc_ids);
+
+                for (const auto & bc_id : bc_ids)
+                  if (b.count(bc_id))
+                    {
+                      is_boundary_node[n] = true;
+                      is_boundary_nodeset[n] = true;
+                    }
+              }
+
+            // We can also project on edges, so we should also independently
+            // check whether the edges have been requested
+            for (unsigned short e=0; e != n_edges; ++e)
+              {
+                boundary_info.edge_boundary_ids (elem, e, bc_ids);
+
+                for (const auto & bc_id : bc_ids)
+                  if (b.count(bc_id))
+                    is_boundary_edge[e] = true;
+              }
 
           // Update the DOF indices for this element based on
           // the current mesh
@@ -1339,7 +1373,8 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
               const unsigned int nc =
                 FEInterface::n_dofs_at_node (dim, fe_type, elem_type,
                                              n);
-              if (!elem->is_vertex(n) || !is_boundary_node[n])
+              if ((!elem->is_vertex(n) || !is_boundary_node[n]) &&
+                  !is_boundary_nodeset[n])
                 {
                   current_dof += nc;
                   continue;
@@ -1496,10 +1531,13 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
                 FEInterface::dofs_on_edge(elem, dim, fe_type, e,
                                           side_dofs);
 
+                const unsigned int n_side_dofs =
+                  cast_int<unsigned int>(side_dofs.size());
+
                 // Some edge dofs are on nodes and already
                 // fixed, others are free to calculate
                 unsigned int free_dofs = 0;
-                for (std::size_t i=0; i != side_dofs.size(); ++i)
+                for (auto i : IntRange<unsigned int>(0, n_side_dofs))
                   if (!dof_is_fixed[side_dofs[i]])
                     free_dof[free_dofs++] = i;
 
@@ -1532,15 +1570,15 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
                                               system.time);
 
                     // Form edge projection matrix
-                    for (std::size_t sidei=0, freei=0;
-                         sidei != side_dofs.size(); ++sidei)
+                    for (unsigned int sidei=0, freei=0;
+                         sidei != n_side_dofs; ++sidei)
                       {
                         unsigned int i = side_dofs[sidei];
                         // fixed DoFs aren't test functions
                         if (dof_is_fixed[i])
                           continue;
-                        for (std::size_t sidej=0, freej=0;
-                             sidej != side_dofs.size(); ++sidej)
+                        for (unsigned int sidej=0, freej=0;
+                             sidej != n_side_dofs; ++sidej)
                           {
                             unsigned int j = side_dofs[sidej];
                             if (dof_is_fixed[j])
@@ -1597,7 +1635,7 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
                 // Some side dofs are on nodes/edges and already
                 // fixed, others are free to calculate
                 unsigned int free_dofs = 0;
-                for (std::size_t i=0; i != side_dofs.size(); ++i)
+                for (auto i : index_range(side_dofs))
                   if (!dof_is_fixed[side_dofs[i]])
                     free_dof[free_dofs++] = i;
 
@@ -1615,6 +1653,9 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
                 fe->reinit (elem, s);
                 const unsigned int n_qp = qsiderule->n_points();
 
+                const unsigned int n_side_dofs =
+                  cast_int<unsigned int>(side_dofs.size());
+
                 // Loop over the quadrature points
                 for (unsigned int qp=0; qp<n_qp; qp++)
                   {
@@ -1630,15 +1671,15 @@ void BoundaryProjectSolution::operator()(const ConstElemRange & range) const
                                               system.time);
 
                     // Form side projection matrix
-                    for (std::size_t sidei=0, freei=0;
-                         sidei != side_dofs.size(); ++sidei)
+                    for (unsigned int sidei=0, freei=0;
+                         sidei != n_side_dofs; ++sidei)
                       {
                         unsigned int i = side_dofs[sidei];
                         // fixed DoFs aren't test functions
                         if (dof_is_fixed[i])
                           continue;
-                        for (std::size_t sidej=0, freej=0;
-                             sidej != side_dofs.size(); ++sidej)
+                        for (unsigned int sidej=0, freej=0;
+                             sidej != n_side_dofs; ++sidej)
                           {
                             unsigned int j = side_dofs[sidej];
                             if (dof_is_fixed[j])

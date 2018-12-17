@@ -46,11 +46,11 @@ public:
    * Constructor.
    */
   DefaultCoupling() :
-    _dof_coupling(libmesh_nullptr),
+    _dof_coupling(nullptr),
 #ifdef LIBMESH_ENABLE_PERIODIC
-    _periodic_bcs(libmesh_nullptr),
+    _periodic_bcs(nullptr),
 #endif
-    _mesh(libmesh_nullptr),
+    _mesh(nullptr),
     _n_levels(0)
   {}
 
@@ -79,12 +79,12 @@ public:
    * If we have periodic boundaries, then we'll need the mesh to have
    * an updated point locator whenever we're about to query them.
    */
-  virtual void mesh_reinit () libmesh_override;
+  virtual void mesh_reinit () override;
 
-  virtual void redistribute () libmesh_override
+  virtual void redistribute () override
   { this->mesh_reinit(); }
 
-  virtual void delete_remote_elements() libmesh_override
+  virtual void delete_remote_elements() override
   { this->mesh_reinit(); }
 
   /**
@@ -100,7 +100,7 @@ public:
   virtual void operator() (const MeshBase::const_element_iterator & range_begin,
                            const MeshBase::const_element_iterator & range_end,
                            processor_id_type p,
-                           map_type & coupled_elements) libmesh_override;
+                           map_type & coupled_elements) override;
 
 private:
 

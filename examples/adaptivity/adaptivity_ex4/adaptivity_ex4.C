@@ -57,6 +57,7 @@
 #include "libmesh/tensor_value.h"
 #include "libmesh/perf_log.h"
 #include "libmesh/string_to_enum.h"
+#include "libmesh/enum_solver_package.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -776,15 +777,18 @@ void assemble_biharmonic(EquationSystems & es,
       // (phi, dphi) for the current element.
       fe->reinit (elem);
 
+      const unsigned int n_dofs =
+        cast_int<unsigned int>(dof_indices.size());
+      libmesh_assert_equal_to (n_dofs, phi.size());
+
       // Zero the element matrix and right-hand side before
       // summing them.
-      Ke.resize (dof_indices.size(),
-                 dof_indices.size());
+      Ke.resize (n_dofs, n_dofs);
 
-      Fe.resize (dof_indices.size());
+      Fe.resize (n_dofs);
 
       // Make sure there is enough room in this cache
-      shape_laplacian.resize(dof_indices.size());
+      shape_laplacian.resize(n_dofs);
 
       // Stop logging the shape function initialization.
       // If you forget to stop logging an event the PerfLog
@@ -804,7 +808,7 @@ void assemble_biharmonic(EquationSystems & es,
 
       for (unsigned int qp=0; qp<qrule->n_points(); qp++)
         {
-          for (std::size_t i=0; i<phi.size(); i++)
+          for (unsigned int i=0; i != n_dofs; i++)
             {
               shape_laplacian[i] = d2phi[i][qp](0,0);
               if (dim > 1)
@@ -812,8 +816,8 @@ void assemble_biharmonic(EquationSystems & es,
               if (dim == 3)
                 shape_laplacian[i] += d2phi[i][qp](2,2);
             }
-          for (std::size_t i=0; i<phi.size(); i++)
-            for (std::size_t j=0; j<phi.size(); j++)
+          for (unsigned int i=0; i != n_dofs; i++)
+            for (unsigned int j=0; j != n_dofs; j++)
               Ke(i,j) += JxW[qp]*
                 shape_laplacian[i]*shape_laplacian[j];
         }
@@ -841,7 +845,7 @@ void assemble_biharmonic(EquationSystems & es,
         // If the element has no neighbor on a side then that
         // side MUST live on a boundary of the domain.
         for (auto s : elem->side_index_range())
-          if (elem->neighbor_ptr(s) == libmesh_nullptr)
+          if (elem->neighbor_ptr(s) == nullptr)
             {
               // The value of the shape functions at the quadrature
               // points.
@@ -867,6 +871,8 @@ void assemble_biharmonic(EquationSystems & es,
               // face.
               fe_face->reinit(elem, s);
 
+              libmesh_assert_equal_to (n_dofs, phi_face.size());
+
               // Loop over the face quadrature points for integration.
               for (unsigned int qp=0; qp<qface->n_points(); qp++)
                 {
@@ -883,8 +889,8 @@ void assemble_biharmonic(EquationSystems & es,
                   // integrated against test function values while
                   // basis fluxes are integrated against test function
                   // fluxes.
-                  for (std::size_t i=0; i<phi_face.size(); i++)
-                    for (std::size_t j=0; j<phi_face.size(); j++)
+                  for (unsigned int i=0; i != n_dofs; i++)
+                    for (unsigned int j=0; j != n_dofs; j++)
                       Ke(i,j) += JxW_face[qp] *
                         (penalty * phi_face[i][qp] *
                          phi_face[j][qp] + penalty2
@@ -895,7 +901,7 @@ void assemble_biharmonic(EquationSystems & es,
 
                   // Right-hand-side contribution of the L2
                   // projection.
-                  for (std::size_t i=0; i<phi_face.size(); i++)
+                  for (unsigned int i=0; i != n_dofs; i++)
                     Fe(i) += JxW_face[qp] *
                       (penalty * value * phi_face[i][qp]
                        + penalty2 *
@@ -911,7 +917,7 @@ void assemble_biharmonic(EquationSystems & es,
       }
 
       for (unsigned int qp=0; qp<qrule->n_points(); qp++)
-        for (std::size_t i=0; i<phi.size(); i++)
+        for (unsigned int i=0; i != n_dofs; i++)
           Fe(i) += JxW[qp]*phi[i][qp]*forcing_function(q_point[qp]);
 
       // The element matrix and right-hand-side are now built

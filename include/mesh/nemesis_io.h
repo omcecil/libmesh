@@ -71,12 +71,12 @@ public:
    * You provide the basename, then LibMesh appends the ".size.rank"
    * depending on this->n_processors() and this->processor_id().
    */
-  virtual void read (const std::string & base_filename) libmesh_override;
+  virtual void read (const std::string & base_filename) override;
 
   /**
    * This method implements writing a mesh to a specified file.
    */
-  virtual void write (const std::string & base_filename) libmesh_override;
+  virtual void write (const std::string & base_filename) override;
 
   /**
    * Write one timestep's worth of the solution.
@@ -87,18 +87,39 @@ public:
                        const Real time);
 
   /**
+   * Specify the list of variables which should be included in the
+   * output (whitelist) If empty, then all variables will be present
+   * in the output.
+   *
+   * This interface is copied from ExodusII_IO since it was found to
+   * be useful there, but perhaps eventually these implementations
+   * could somehow be combined.
+   */
+  void set_output_variables(const std::vector<std::string> & output_variables,
+                            bool allow_empty = true);
+
+  /**
    * Output a nodal solution.
    */
   virtual void write_nodal_data (const std::string & fname,
                                  const std::vector<Number> & soln,
-                                 const std::vector<std::string> & names) libmesh_override;
+                                 const std::vector<std::string> & names) override;
 
   /**
    * Output a nodal solution in parallel, without localizing the soln vector.
    */
   virtual void write_nodal_data (const std::string & fname,
                                  const NumericVector<Number> & parallel_soln,
-                                 const std::vector<std::string> & names) libmesh_override;
+                                 const std::vector<std::string> & names) override;
+
+  /**
+   * Write out element solution in parallel, without localizing the solution vector.
+   *
+   * \note Unlike write_nodal_data(), this function is not virtual and
+   * it does not override anything from the base class. This design is
+   * similar to the function by the same name in ExodusII_IO.
+   */
+  void write_element_data (const EquationSystems & es);
 
   /**
    * Set the flag indicating if we should be verbose.
@@ -152,6 +173,19 @@ private:
    */
   void prepare_to_write_nodal_data (const std::string & fname,
                                     const std::vector<std::string> & names);
+
+  /**
+   * The names of the variables to be output.
+   * If this is empty then all variables are output.
+   */
+  std::vector<std::string> _output_variables;
+
+  /**
+   * If true, _output_variables is allowed to remain empty.
+   * If false, if _output_variables is empty it will be populated with a complete list of all variables
+   * By default, calling set_output_variables() sets this flag to true, but it provides an override.
+   */
+  bool _allow_empty_variables;
 };
 
 

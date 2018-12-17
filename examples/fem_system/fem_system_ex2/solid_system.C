@@ -152,7 +152,7 @@ void SolidSystem::init_context(DiffContext & context)
   FEMContext & c = cast_ref<FEMContext &>(context);
 
   // Pre-request all the data needed
-  FEBase * elem_fe = libmesh_nullptr;
+  FEBase * elem_fe = nullptr;
   c.get_element_fe(0, elem_fe);
 
   elem_fe->get_JxW();
@@ -160,7 +160,7 @@ void SolidSystem::init_context(DiffContext & context)
   elem_fe->get_dphi();
   elem_fe->get_xyz();
 
-  FEBase * side_fe = libmesh_nullptr;
+  FEBase * side_fe = nullptr;
   c.get_side_fe(0, side_fe);
 
   side_fe->get_JxW();
@@ -179,7 +179,7 @@ bool SolidSystem::element_time_derivative(bool request_jacobian,
 
   // First we get some references to cell-specific data that
   // will be used to assemble the linear system.
-  FEBase * elem_fe = libmesh_nullptr;
+  FEBase * elem_fe = nullptr;
   c.get_element_fe(0, elem_fe);
 
   // Element Jacobian * quadrature weights for interior integration
@@ -192,10 +192,10 @@ bool SolidSystem::element_time_derivative(bool request_jacobian,
   const unsigned int dim = this->get_mesh().mesh_dimension();
 
   // The number of local degrees of freedom in each variable
-  const unsigned int n_u_dofs = c.get_dof_indices(var[0]).size();
-  libmesh_assert(n_u_dofs == c.get_dof_indices(var[1]).size());
+  const unsigned int n_u_dofs = c.n_dof_indices(var[0]);
+  libmesh_assert(n_u_dofs == c.n_dof_indices(var[1]));
   if (dim == 3)
-    libmesh_assert(n_u_dofs ==  c.get_dof_indices(var[2]).size());
+    libmesh_assert(n_u_dofs ==  c.n_dof_indices(var[2]));
 
   unsigned int n_qpoints = c.get_element_qrule().n_points();
 
@@ -291,16 +291,18 @@ bool SolidSystem::side_time_derivative(bool request_jacobian,
   // side 5 about 1.0 units down the z-axis while leaving all other directions unrestricted
 
   // Get number of BCs to enforce
-  unsigned int num_bc = args.vector_variable_size("bc/displacement");
+  boundary_id_type num_bc =
+    cast_int<boundary_id_type>(args.vector_variable_size("bc/displacement"));
   if (num_bc % 4 != 0)
     libmesh_error_msg("ERROR, Odd number of values in displacement boundary condition.");
   num_bc /= 4;
 
   // Loop over all BCs
-  for (unsigned int nbc = 0; nbc < num_bc; nbc++)
+  for (boundary_id_type nbc = 0; nbc < num_bc; nbc++)
     {
       // Get IDs of the side for this BC
-      short int positive_boundary_id = args("bc/displacement", 1, nbc * 4);
+      boundary_id_type positive_boundary_id =
+        cast_int<boundary_id_type>(args("bc/displacement", 1, nbc * 4));
 
       // The current side may not be on the boundary to be restricted
       if (!this->get_mesh().get_boundary_info().has_boundary_id
@@ -317,14 +319,14 @@ bool SolidSystem::side_time_derivative(bool request_jacobian,
 
       Real penalty_number = args("bc/displacement_penalty", 1e7);
 
-      FEBase * fe = libmesh_nullptr;
+      FEBase * fe = nullptr;
       c.get_side_fe(0, fe);
 
       const std::vector<std::vector<Real>> & phi = fe->get_phi();
       const std::vector<Real> & JxW = fe->get_JxW();
       const std::vector<Point> & coords = fe->get_xyz();
 
-      unsigned int n_x_dofs = c.get_dof_indices(this->var[0]).size();
+      const unsigned int n_x_dofs = c.n_dof_indices(this->var[0]);
 
       // get mappings for dofs for auxiliary system for original mesh positions
       const System & auxsys = this->get_equation_systems().get_system("auxiliary");
