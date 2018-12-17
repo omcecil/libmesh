@@ -69,12 +69,9 @@ enum EigenProblemType : int {
                        GNHEP,
                        GHEP,
                        GHIEP,
-<<<<<<< HEAD
                        PEPGEN,
 
-=======
                        // Invalid
->>>>>>> 9aa7bd0e926fa3b06b5d421022001acb8f4469de
                        INVALID_EIGENPROBLEMTYPE};
 
 
