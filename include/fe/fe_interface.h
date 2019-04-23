@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -45,6 +45,7 @@ enum FEFamily : int;
 enum Order : int;
 enum FEFieldType : int;
 enum ElemType : int;
+enum FEContinuity : int;
 
 #ifdef LIBMESH_ENABLE_PERIODIC
 class PeriodicBoundaries;
@@ -98,6 +99,17 @@ public:
   static unsigned int n_dofs(const unsigned int dim,
                              const FEType & fe_t,
                              const ElemType t);
+
+  /**
+   * Similar to the function above but takes an Elem * and accounts for
+   * p-refinement internally, if any. This function is designed to prevent
+   * users from needing to trick FEInterface::n_dofs() into giving them
+   * the right number of dofs when working with p-refined elements. See,
+   * e.g. FEInterface::compute_data().
+   */
+  static unsigned int n_dofs(const unsigned int dim,
+                             const FEType & fe_t,
+                             const Elem * elem);
 
   /**
    * \returns The number of dofs at node n for a finite element
@@ -297,6 +309,41 @@ public:
                     OutputType & phi);
 
   /**
+   * \returns The \f$ j^{th} \f$ coordinate of the gradient of
+   * the \f$ i^{th} \f$ shape function at point \p p.
+   * This method allows you to specify the dimension,
+   * element type, and order directly. Automatically passes the
+   * request to the appropriate *scalar* finite element class member.
+   *
+   * \note On a p-refined element, \p fe_t.order should be the total
+   * order of the element.
+   */
+  static Real shape_deriv(const unsigned int dim,
+                          const FEType & fe_t,
+                          const ElemType t,
+                          const unsigned int i,
+                          const unsigned int j,
+                          const Point & p);
+
+  /**
+   * \returns The \f$ j^{th} \f$ coordinate of the gradient of
+   * the \f$ i^{th} \f$ shape function at point \p p.
+   * This method allows you to specify the dimension,
+   * element type, and order directly. Automatically passes the
+   * request to the appropriate *scalar* finite element class member.
+   *
+   * \note On a p-refined element, \p fe_t.order should be the total
+   * order of the element.
+   */
+  static Real shape_deriv (const unsigned int dim,
+                           const FEType & fe_t,
+                           const Elem *elem,
+                           const unsigned int i,
+                           const unsigned int j,
+                           const Point & p);
+
+
+  /**
    * Lets the appropriate child of \p FEBase compute the requested
    * data for the input specified in \p data, and sets the values in
    * \p data.  See this as a generalization of \p shape().  With
@@ -369,6 +416,14 @@ public:
    */
   static unsigned int n_vec_dim (const MeshBase & mesh,
                                  const FEType & fe_type);
+  /**
+   * Returns the input FEType's FEContinuity based on the underlying
+   * FEFamily and potentially the Order, although we do not currently
+   * support FEs with order-dependent continuity. These should exactly
+   * match the FEBase::get_continuity() specializations/overrides for
+   * the different FE types.
+   */
+  static FEContinuity get_continuity(const FEType & fe_type);
 
 private:
 
@@ -447,6 +502,21 @@ private:
                          const Elem * elem,
                          const unsigned int i,
                          const Point & p);
+
+
+  static Real ifem_shape_deriv(const unsigned int dim,
+                               const FEType & fe_t,
+                               const ElemType t,
+                               const unsigned int i,
+                               const unsigned int j,
+                               const Point & p);
+
+  static Real ifem_shape_deriv(const unsigned int dim,
+                               const FEType & fe_t,
+                               const Elem * elem,
+                               const unsigned int i,
+                               const unsigned int j,
+                               const Point & p);
 
   static void ifem_compute_data(const unsigned int dim,
                                 const FEType & fe_t,

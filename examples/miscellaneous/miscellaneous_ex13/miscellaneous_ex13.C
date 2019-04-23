@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -331,7 +331,7 @@ void assemble_shell (EquationSystems & es,
 {
   // This example requires Eigen to actually work, but we should still
   // let it compile and throw a runtime error if you don't.
-#ifdef LIBMESH_HAVE_EIGEN
+#if defined(LIBMESH_HAVE_EIGEN) && defined(LIBMESH_ENABLE_SECOND_DERIVATIVES)
   // It is a good idea to make sure we are assembling
   // the proper system.
   libmesh_assert_equal_to (system_name, "Shell");
@@ -763,7 +763,6 @@ void assemble_shell (EquationSystems & es,
 
 #else
   // Avoid compiler warnings
-  libmesh_ignore(es);
-  libmesh_ignore(system_name);
-#endif // LIBMESH_HAVE_EIGEN
+  libmesh_ignore(es, system_name);
+#endif // defined(LIBMESH_HAVE_EIGEN) && defined(LIBMESH_ENABLE_SECOND_DERIVATIVES)
 }

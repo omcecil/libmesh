@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -31,6 +31,7 @@
 #include "libmesh/threads.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/enum_elem_type.h"
+#include "libmesh/int_range.h"
 
 #ifdef DEBUG
 #  include "libmesh/remote_elem.h"
@@ -2150,7 +2151,7 @@ struct SyncNodeSet
     // Find whether each requested node belongs in the set
     data.resize(ids.size());
 
-    for (std::size_t i=0; i != ids.size(); ++i)
+    for (auto i : index_range(ids))
       {
         const dof_id_type id = ids[i];
 
@@ -2169,7 +2170,7 @@ struct SyncNodeSet
     bool data_changed = false;
 
     // Add nodes we've been informed of to our own set
-    for (std::size_t i=0; i != ids.size(); ++i)
+    for (auto i : index_range(ids))
       {
         if (in_set[i])
           {
@@ -2222,7 +2223,7 @@ struct SyncProcIdsFromMap
     // Find the new processor id of each requested node
     data.resize(ids.size());
 
-    for (std::size_t i=0; i != ids.size(); ++i)
+    for (auto i : index_range(ids))
       {
         const dof_id_type id = ids[i];
         const proc_id_map_type::const_iterator it = new_proc_ids.find(id);
@@ -2245,7 +2246,7 @@ struct SyncProcIdsFromMap
                     const std::vector<datum> proc_ids)
   {
     // Set the node processor ids we've now been informed of
-    for (std::size_t i=0; i != ids.size(); ++i)
+    for (auto i : index_range(ids))
       {
         Node & node = mesh.node_ref(ids[i]);
         node.processor_id() = proc_ids[i];
@@ -2290,7 +2291,7 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
   // balancing.  But if the mesh is disallowing repartitioning, we
   // won't touch processor_id on any node where it's valid, regardless
   // of whether or not it's canonical.
-  bool repartition_all_nodes = !mesh.skip_partitioning();
+  bool repartition_all_nodes = !mesh.skip_noncritical_partitioning();
   std::unordered_set<const Node *> valid_nodes;
 
   // If we aren't allowed to repartition, then we're going to leave
@@ -2364,11 +2365,8 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
         }
     };
 
-  // Push using non-blocking I/O
-  std::vector<Parallel::Request> push_requests;
-
   Parallel::push_parallel_vector_data
-    (mesh.comm(), ids_to_push, push_requests, action_functor);
+    (mesh.comm(), ids_to_push, action_functor);
 
   // Now new_proc_ids is correct for every node we used to own.  Let's
   // ask every other processor about the nodes they used to own.  But
@@ -2381,9 +2379,6 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
       if (it != new_proc_ids.end() && it->second != mesh.processor_id())
         ex_local_nodes.insert(node);
     }
-
-  // Let's finish with previous I/O before we start more.
-  Parallel::wait(push_requests);
 
   SyncProcIdsFromMap sync(new_proc_ids, mesh);
   if (repartition_all_nodes)

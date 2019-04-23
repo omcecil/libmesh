@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -30,14 +30,45 @@
 #include <cmath>
 #include <complex>
 
+#ifdef LIBMESH_HAVE_METAPHYSICL
+namespace MetaPhysicL
+{
+template <typename, typename>
+class DualNumber;
+}
+namespace std
+{
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> norm(const MetaPhysicL::DualNumber<T, D> & in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> norm(MetaPhysicL::DualNumber<T, D> && in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> sqrt(const MetaPhysicL::DualNumber<T, D> & in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> sqrt(MetaPhysicL::DualNumber<T, D> && in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> abs(const MetaPhysicL::DualNumber<T, D> & in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> abs(MetaPhysicL::DualNumber<T, D> && in);
+}
+#endif
+
 namespace libMesh
 {
-
 // Forward declarations
 template <typename T> class TypeTensor;
 template <typename T> class VectorValue;
 template <typename T> class TensorValue;
+}
 
+namespace std
+{
+template <typename T>
+auto norm(const libMesh::TypeVector<T> & vector) -> decltype(std::norm(T()));
+}
+
+namespace libMesh
+{
 /**
  * This class defines a vector in \p LIBMESH_DIM dimensional space of
  * type T.  T may either be Real or Complex. Instead use one of the derived
@@ -66,9 +97,9 @@ protected:
    * Constructor-from-T.  By default sets higher dimensional
    * entries to 0.
    */
-  TypeVector (const T x,
-              const T y=0,
-              const T z=0);
+  TypeVector (const T & x,
+              const T & y=0,
+              const T & z=0);
 
   /**
    * Constructor-from-scalars.  By default sets higher dimensional
@@ -77,13 +108,13 @@ protected:
   template <typename Scalar1, typename Scalar2, typename Scalar3>
   TypeVector (typename
               boostcopy::enable_if_c<ScalarTraits<Scalar1>::value,
-              const Scalar1>::type x,
+              const Scalar1>::type & x,
               typename
               boostcopy::enable_if_c<ScalarTraits<Scalar2>::value,
-              const Scalar2>::type y=0,
+              const Scalar2>::type & y=0,
               typename
               boostcopy::enable_if_c<ScalarTraits<Scalar3>::value,
-              const Scalar3>::type z=0);
+              const Scalar3>::type & z=0);
 
   /**
    * Constructor-from-scalar.  Sets higher dimensional entries to 0.
@@ -92,7 +123,7 @@ protected:
    * TypeVector<Complex> v = 0;
    */
   template <typename Scalar>
-  TypeVector (const Scalar x,
+  TypeVector (const Scalar & x,
               typename
               boostcopy::enable_if_c<ScalarTraits<Scalar>::value,
               const Scalar>::type * sfinae = nullptr);
@@ -175,7 +206,7 @@ public:
    * Add a scaled value to this vector without creating a temporary.
    */
   template <typename T2>
-  void add_scaled (const TypeVector<T2> &, const T);
+  void add_scaled (const TypeVector<T2> &, const T &);
 
   /**
    * Subtract from this vector.
@@ -205,7 +236,7 @@ public:
    * temporary.
    */
   template <typename T2>
-  void subtract_scaled (const TypeVector<T2> &, const T);
+  void subtract_scaled (const TypeVector<T2> &, const T &);
 
   /**
    * \returns The negative of this vector in a separate copy.
@@ -221,14 +252,14 @@ public:
   typename boostcopy::enable_if_c<
     ScalarTraits<Scalar>::value,
     TypeVector<typename CompareTypes<T, Scalar>::supertype>>::type
-  operator * (const Scalar) const;
+  operator * (const Scalar &) const;
 
   /**
    * Multiply this vector by a scalar value.
    *
    * \returns A reference to *this.
    */
-  const TypeVector<T> & operator *= (const T);
+  const TypeVector<T> & operator *= (const T &);
 
   /**
    * Divide each entry of this vector by scalar value.
@@ -239,14 +270,14 @@ public:
   typename boostcopy::enable_if_c<
     ScalarTraits<Scalar>::value,
     TypeVector<typename CompareTypes<T, Scalar>::supertype>>::type
-  operator / (const Scalar) const;
+  operator / (const Scalar &) const;
 
   /**
    * Divide each entry of this vector by scalar value.
    *
    * \returns A reference to *this.
    */
-  const TypeVector<T> & operator /= (const T);
+  const TypeVector<T> & operator /= (const T &);
 
   /**
    * \returns The dot-product of this vector with another vector.
@@ -284,14 +315,14 @@ public:
    * \deprecated Use the norm() function instead.
    */
 #ifdef LIBMESH_ENABLE_DEPRECATED
-  Real size() const;
+  auto size() const -> decltype(std::norm(T()));
 #endif
 
   /**
    * \returns The magnitude of the vector, i.e. the square-root of the
    * sum of the elements squared.
    */
-  Real norm() const;
+  auto norm() const -> decltype(std::norm(T()));
 
   /**
    * \returns The magnitude of the vector squared, i.e. the sum of the
@@ -300,14 +331,19 @@ public:
    * \deprecated Use the norm_sq() function instead.
    */
 #ifdef LIBMESH_ENABLE_DEPRECATED
-  Real size_sq() const;
+  auto size_sq() const -> decltype(std::norm(T()));
 #endif
 
   /**
    * \returns The magnitude of the vector squared, i.e. the sum of the
    * element magnitudes squared.
    */
-  Real norm_sq() const;
+  auto norm_sq() const -> decltype(std::norm(T()));
+
+  /**
+   * \returns True if all values in the vector are zero
+   */
+  bool is_zero() const;
 
   /**
    * Set all entries of the vector to 0.
@@ -435,9 +471,9 @@ TypeVector<T>::TypeVector ()
 
 template <typename T>
 inline
-TypeVector<T>::TypeVector (const T x,
-                           const T y,
-                           const T z)
+TypeVector<T>::TypeVector (const T & x,
+                           const T & y,
+                           const T & z)
 {
   _coords[0] = x;
 
@@ -460,13 +496,13 @@ template <typename Scalar1, typename Scalar2, typename Scalar3>
 inline
 TypeVector<T>::TypeVector (typename
                            boostcopy::enable_if_c<ScalarTraits<Scalar1>::value,
-                           const Scalar1>::type x,
+                           const Scalar1>::type & x,
                            typename
                            boostcopy::enable_if_c<ScalarTraits<Scalar2>::value,
-                           const Scalar2>::type y,
+                           const Scalar2>::type & y,
                            typename
                            boostcopy::enable_if_c<ScalarTraits<Scalar3>::value,
-                           const Scalar3>::type z)
+                           const Scalar3>::type & z)
 {
   _coords[0] = x;
 
@@ -488,7 +524,7 @@ TypeVector<T>::TypeVector (typename
 template <typename T>
 template <typename Scalar>
 inline
-TypeVector<T>::TypeVector (const Scalar x,
+TypeVector<T>::TypeVector (const Scalar & x,
                            typename
                            boostcopy::enable_if_c<ScalarTraits<Scalar>::value,
                            const Scalar>::type * /*sfinae*/)
@@ -624,7 +660,7 @@ void TypeVector<T>::add (const TypeVector<T2> & p)
 template <typename T>
 template <typename T2>
 inline
-void TypeVector<T>::add_scaled (const TypeVector<T2> & p, const T factor)
+void TypeVector<T>::add_scaled (const TypeVector<T2> & p, const T & factor)
 {
 #if LIBMESH_DIM == 1
   _coords[0] += factor*p(0);
@@ -698,7 +734,7 @@ void TypeVector<T>::subtract (const TypeVector<T2> & p)
 template <typename T>
 template <typename T2>
 inline
-void TypeVector<T>::subtract_scaled (const TypeVector<T2> & p, const T factor)
+void TypeVector<T>::subtract_scaled (const TypeVector<T2> & p, const T & factor)
 {
   for (unsigned int i=0; i<LIBMESH_DIM; i++)
     _coords[i] -= factor*p(i);
@@ -736,7 +772,7 @@ inline
 typename boostcopy::enable_if_c<
   ScalarTraits<Scalar>::value,
   TypeVector<typename CompareTypes<T, Scalar>::supertype>>::type
-TypeVector<T>::operator * (const Scalar factor) const
+TypeVector<T>::operator * (const Scalar & factor) const
 {
   typedef typename CompareTypes<T, Scalar>::supertype SuperType;
 
@@ -763,7 +799,7 @@ inline
 typename boostcopy::enable_if_c<
   ScalarTraits<Scalar>::value,
   TypeVector<typename CompareTypes<T, Scalar>::supertype>>::type
-operator * (const Scalar factor,
+operator * (const Scalar & factor,
             const TypeVector<T> & v)
 {
   return v * factor;
@@ -773,7 +809,7 @@ operator * (const Scalar factor,
 
 template <typename T>
 inline
-const TypeVector<T> & TypeVector<T>::operator *= (const T factor)
+const TypeVector<T> & TypeVector<T>::operator *= (const T & factor)
 {
 #if LIBMESH_DIM == 1
   _coords[0] *= factor;
@@ -801,7 +837,7 @@ inline
 typename boostcopy::enable_if_c<
   ScalarTraits<Scalar>::value,
   TypeVector<typename CompareTypes<T, Scalar>::supertype>>::type
-TypeVector<T>::operator / (const Scalar factor) const
+TypeVector<T>::operator / (const Scalar & factor) const
 {
   libmesh_assert_not_equal_to (factor, static_cast<T>(0.));
 
@@ -830,7 +866,7 @@ TypeVector<T>::operator / (const Scalar factor) const
 template <typename T>
 inline
 const TypeVector<T> &
-TypeVector<T>::operator /= (const T factor)
+TypeVector<T>::operator /= (const T & factor)
 {
   libmesh_assert_not_equal_to (factor, static_cast<T>(0.));
 
@@ -898,7 +934,7 @@ TypeVector<T>::cross(const TypeVector<T2> & p) const
 #ifdef LIBMESH_ENABLE_DEPRECATED
 template <typename T>
 inline
-Real TypeVector<T>::size() const
+auto TypeVector<T>::size() const -> decltype(std::norm(T()))
 {
   libmesh_deprecated();
   return this->norm();
@@ -909,7 +945,7 @@ Real TypeVector<T>::size() const
 
 template <typename T>
 inline
-Real TypeVector<T>::norm() const
+auto TypeVector<T>::norm() const -> decltype(std::norm(T()))
 {
   return std::sqrt(this->norm_sq());
 }
@@ -929,7 +965,7 @@ void TypeVector<T>::zero()
 #ifdef LIBMESH_ENABLE_DEPRECATED
 template <typename T>
 inline
-Real TypeVector<T>::size_sq() const
+auto TypeVector<T>::size_sq() const -> decltype(std::norm(T()))
 {
   libmesh_deprecated();
   return this->norm_sq();
@@ -940,7 +976,7 @@ Real TypeVector<T>::size_sq() const
 
 template <typename T>
 inline
-Real TypeVector<T>::norm_sq() const
+auto TypeVector<T>::norm_sq() const -> decltype(std::norm(T()))
 {
 #if LIBMESH_DIM == 1
   return (TensorTools::norm_sq(_coords[0]));
@@ -959,6 +995,15 @@ Real TypeVector<T>::norm_sq() const
 }
 
 
+template <typename T>
+inline
+bool TypeVector<T>::is_zero() const
+{
+  for (const auto & val : _coords)
+    if (val != T(0))
+      return false;
+  return true;
+}
 
 template <typename T>
 inline
@@ -1126,5 +1171,14 @@ TypeVector<T> TypeVector<T>::unit() const
 
 }
 } // namespace libMesh
+
+namespace std
+{
+template <typename T>
+auto norm(const libMesh::TypeVector<T> & vector) -> decltype(std::norm(T()))
+{
+  return vector.norm();
+}
+} // namespace std
 
 #endif // LIBMESH_TYPE_VECTOR_H

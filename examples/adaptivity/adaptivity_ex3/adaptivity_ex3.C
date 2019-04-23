@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -624,8 +624,7 @@ void assemble_laplace(EquationSystems & es,
                       const std::string & system_name)
 {
   // Ignore unused parameter warnings when !LIBMESH_ENABLE_AMR.
-  libmesh_ignore(es);
-  libmesh_ignore(system_name);
+  libmesh_ignore(es, system_name);
 
 #ifdef LIBMESH_ENABLE_AMR
   // It is a good idea to make sure we are assembling

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
@@ -25,6 +25,8 @@ namespace libMesh
 void FEComputeData::clear ()
 {
   this->shape.clear();
+  this->dshape.clear();
+  this->local_transform.clear();
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   this->phase = 0.;
   this->speed = 1.;
@@ -67,6 +69,14 @@ void FEComputeData::init ()
 
 #endif //LIBMESH_ENABLE_INFINITE_ELEMENTS
 
+}
+
+
+void FEComputeData::enable_derivative ()
+{
+  _need_dshape=true;
+  if (!(this->dshape.empty()))
+    std::fill (this->dshape.begin(),   this->dshape.end(),  0);
 }
 
 

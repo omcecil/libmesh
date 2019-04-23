@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -30,6 +30,7 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/parallel.h"
 #include "libmesh/petsc_macro.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -745,7 +746,7 @@ void PetscVector<T>::localize (NumericVector<T> & v_local_in,
 
   for (numeric_index_type i=0; i<n_sl; i++)
     idx[i] = static_cast<PetscInt>(send_list[i]);
-  for (numeric_index_type i = 0; i != this->local_size(); ++i)
+  for (auto i : IntRange<numeric_index_type>(0, this->local_size()))
     idx[n_sl+i] = i + this->first_local_index();
 
   // Create the index set & scatter object

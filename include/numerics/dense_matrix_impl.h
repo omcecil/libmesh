@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -216,7 +216,7 @@ void DenseMatrix<T>::right_multiply (const DenseMatrixBase<T> & M3)
     this->_multiply_blas(M3, RIGHT_MULTIPLY);
   else
     {
-      // (*this) <- M3 * (*this)
+      // (*this) <- (*this) * M3
       // Where:
       // (*this) = (m x n),
       // M2      = (m x p),
@@ -735,10 +735,10 @@ void DenseMatrix<T>::_lu_decompose ()
       _pivots[i] = i;
 
       // std::abs(complex) must return a Real!
-      Real the_max = std::abs( A(i,i) );
+      auto the_max = std::abs( A(i,i) );
       for (unsigned int j=i+1; j<n_rows; ++j)
         {
-          Real candidate_max = std::abs( A(j,i) );
+          auto candidate_max = std::abs( A(j,i) );
           if (the_max < candidate_max)
             {
               the_max = candidate_max;

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -45,6 +45,7 @@
 #include "libmesh/raw_accessor.h"
 #include "libmesh/sparse_matrix.h" // needed to constrain adjoint rhs
 #include "libmesh/system.h" // needed by enforce_constraints_exactly()
+#include "libmesh/nonlinear_implicit_system.h"
 #include "libmesh/threads.h"
 #include "libmesh/tensor_tools.h"
 #include "libmesh/int_range.h"
@@ -1233,9 +1234,10 @@ void DofMap::create_dof_constraints(const MeshBase & mesh, Real time)
     {
       // Clear out any old constraints; maybe the user just deleted
       // their last remaining dirichlet/periodic/user constraint?
+      // Note: any _stashed_dof_constraints are not cleared as it
+      // may be the user's intention to restore them later.
 #ifdef LIBMESH_ENABLE_CONSTRAINTS
       _dof_constraints.clear();
-      _stashed_dof_constraints.clear();
       _primal_constraint_values.clear();
       _adjoint_constraint_values.clear();
 #endif
@@ -1287,8 +1289,9 @@ void DofMap::create_dof_constraints(const MeshBase & mesh, Real time)
 
 
   // recalculate dof constraints from scratch
+  // Note: any _stashed_dof_constraints are not cleared as it
+  // may be the user's intention to restore them later.
   _dof_constraints.clear();
-  _stashed_dof_constraints.clear();
   _primal_constraint_values.clear();
   _adjoint_constraint_values.clear();
 
@@ -1356,6 +1359,12 @@ void DofMap::add_constraint_row (const dof_id_type dof_number,
   if (forbid_constraint_overwrite)
     if (this->is_constrained_dof(dof_number))
       libmesh_error_msg("ERROR: DOF " << dof_number << " was already constrained!");
+
+  libmesh_assert_less(dof_number, this->n_dofs());
+#ifndef NDEBUG
+  for (const auto & pr : constraint_row)
+    libmesh_assert_less(pr.first, this->n_dofs());
+#endif
 
   // We don't get insert_or_assign until C++17 so we make do.
   std::pair<DofConstraints::iterator, bool> it =
@@ -2165,6 +2174,91 @@ void DofMap::enforce_constraints_exactly (const System & system,
   v->close();
 }
 
+void DofMap::enforce_constraints_on_residual (const NonlinearImplicitSystem & system,
+                                              NumericVector<Number> * rhs,
+                                              NumericVector<Number> const * solution,
+                                              bool homogeneous) const
+{
+  parallel_object_only();
+
+  if (!this->n_constrained_dofs())
+    return;
+
+  if (!rhs)
+    rhs = system.rhs;
+  if (!solution)
+    solution = system.solution.get();
+
+  NumericVector<Number> const * solution_local  = nullptr; // will be initialized below
+  std::unique_ptr<NumericVector<Number>> solution_built;
+  if (solution->type() == SERIAL || solution->type() == GHOSTED)
+      solution_local = solution;
+  else if (solution->type() == PARALLEL)
+    {
+      solution_built = NumericVector<Number>::build(this->comm());
+      solution_built->init (solution->size(), solution->size(), true, SERIAL);
+      solution->localize(*solution_built);
+      solution_built->close();
+      solution_local = solution_built.get();
+    }
+  else // unknown solution->type()
+    libmesh_error_msg("ERROR: Unknown solution->type() == " << solution->type());
+
+  // We should never hit these asserts because we should error-out in
+  // else clause above.  Just to be sure we don't try to use solution_local
+  libmesh_assert(solution_local);
+  libmesh_assert_equal_to (this, &(system.get_dof_map()));
+
+  for (const auto & pr : _dof_constraints)
+    {
+      dof_id_type constrained_dof = pr.first;
+      if (!this->local_index(constrained_dof))
+        continue;
+
+      const DofConstraintRow constraint_row = pr.second;
+
+      Number exact_value = 0;
+      for (const auto & j : constraint_row)
+        exact_value += j.second * (*solution_local)(j.first);
+      exact_value -= (*solution_local)(constrained_dof);
+      if (!homogeneous)
+        {
+          DofConstraintValueMap::const_iterator rhsit =
+            _primal_constraint_values.find(constrained_dof);
+          if (rhsit != _primal_constraint_values.end())
+            exact_value += rhsit->second;
+        }
+
+      rhs->set(constrained_dof, exact_value);
+    }
+}
+
+void DofMap::enforce_constraints_on_jacobian (const NonlinearImplicitSystem & system,
+                                              SparseMatrix<Number> * jac) const
+{
+  parallel_object_only();
+
+  if (!this->n_constrained_dofs())
+    return;
+
+  if (!jac)
+    jac = system.matrix;
+
+  libmesh_assert_equal_to (this, &(system.get_dof_map()));
+
+  for (const auto & pr : _dof_constraints)
+    {
+      dof_id_type constrained_dof = pr.first;
+      if (!this->local_index(constrained_dof))
+        continue;
+
+      const DofConstraintRow constraint_row = pr.second;
+
+      for (const auto & j : constraint_row)
+        jac->set(constrained_dof, j.first, j.second);
+      jac->set(constrained_dof, constrained_dof, -1);
+    }
+}
 
 
 void DofMap::enforce_adjoint_constraints_exactly (NumericVector<Number> & v,
@@ -2868,7 +2962,10 @@ void DofMap::allgather_recursive_constraints(MeshBase & mesh)
               {
                 DofConstraintRow & row = _dof_constraints[constrained];
                 for (auto & kv : pushed_keys_vals_to_me[i])
-                  row[kv.first] = kv.second;
+                  {
+                    libmesh_assert_less(kv.first, this->n_dofs());
+                    row[kv.first] = kv.second;
+                  }
 
                 const Number primal_rhs = pushed_rhss_to_me[i][max_qoi_num];
 
@@ -2974,7 +3071,7 @@ void DofMap::allgather_recursive_constraints(MeshBase & mesh)
 
   // We may be receiving packed_range sends out of order with
   // parallel_sync tags, so make sure they're received correctly.
-  Parallel::MessageTag range_tag = this->comm().get_unique_tag(14142);
+  Parallel::MessageTag range_tag = this->comm().get_unique_tag();
 
   while (unexpanded_set_nonempty)
     {
@@ -3230,12 +3327,12 @@ void DofMap::process_constraints (MeshBase & mesh)
   // non-local constraints that we'll need to take into account.
   this->allgather_recursive_constraints(mesh);
 
-  if(_error_on_cyclic_constraint)
+  if (_error_on_constraint_loop)
   {
-    // Optionally check for cyclic constraints and throw an error
+    // Optionally check for constraint loops and throw an error
     // if they're detected. We always do this check below in dbg/devel
     // mode but here we optionally do it in opt mode as well.
-    check_for_cyclic_constraints();
+    check_for_constraint_loops();
   }
 
   // Create a set containing the DOFs we already depend on
@@ -3284,7 +3381,7 @@ void DofMap::process_constraints (MeshBase & mesh)
 
             for (const auto & item : subconstraint_row)
               {
-                // Assert that the constraint is not cyclic.
+                // Assert that the constraint does not form a cycle.
                 libmesh_assert(item.first != expandable);
                 constraint_row[item.first] += item.second * this_coef;
               }
@@ -3332,6 +3429,12 @@ void DofMap::process_constraints (MeshBase & mesh)
 
 #ifdef LIBMESH_ENABLE_CONSTRAINTS
 void DofMap::check_for_cyclic_constraints()
+{
+  // Eventually make this officially libmesh_deprecated();
+  check_for_constraint_loops();
+}
+
+void DofMap::check_for_constraint_loops()
 {
   // Create a set containing the DOFs we already depend on
   typedef std::set<dof_id_type> RCSet;
@@ -3385,7 +3488,7 @@ void DofMap::check_for_cyclic_constraints()
             for (const auto & item : subconstraint_row)
               {
                 if (item.first == expandable)
-                  libmesh_error_msg("Cyclic constraint detected");
+                  libmesh_error_msg("Constraint loop detected");
 
                 constraint_row[item.first] += item.second * this_coef;
               }
@@ -3422,6 +3525,7 @@ void DofMap::check_for_cyclic_constraints()
       }
 }
 #else
+void DofMap::check_for_constraint_loops() {}
 void DofMap::check_for_cyclic_constraints()
 {
   // Do nothing
@@ -3455,7 +3559,7 @@ void DofMap::scatter_constraints(MeshBase & mesh)
 
   // We may be receiving packed_range sends out of order with
   // parallel_sync tags, so make sure they're received correctly.
-  Parallel::MessageTag range_tag = this->comm().get_unique_tag(1414);
+  Parallel::MessageTag range_tag = this->comm().get_unique_tag();
 
 #ifdef LIBMESH_ENABLE_NODE_CONSTRAINTS
   std::map<processor_id_type, std::set<dof_id_type>> pushed_node_ids;
@@ -3556,7 +3660,6 @@ void DofMap::scatter_constraints(MeshBase & mesh)
       pushed_keys_vals_to_me[pid] = data;
     };
 
-  // Trade pushed dof constraint rows
   Parallel::push_parallel_vector_data
     (this->comm(), pushed_ids_rhss, ids_rhss_action_functor);
   Parallel::push_parallel_vector_data
@@ -3590,6 +3693,7 @@ void DofMap::scatter_constraints(MeshBase & mesh)
                   DofConstraintRow & row = _dof_constraints[constrained];
                   for (auto & key_val : keys_vals[i])
                     {
+                      libmesh_assert_less(key_val.first, this->n_dofs());
                       row[key_val.first] = key_val.second;
                     }
                   if (ids_rhss[i].second != Number(0))
@@ -4086,7 +4190,10 @@ void DofMap::gather_constraints (MeshBase & /*mesh*/,
                   DofConstraintRow & row = _dof_constraints[constrained];
                   row.clear();
                   for (auto & pair : data[i])
-                    row[pair.first] = pair.second;
+                    {
+                      libmesh_assert_less(pair.first, this->n_dofs());
+                      row[pair.first] = pair.second;
+                    }
 
                   // And prepare to check for more recursive constraints
                   unexpanded_dofs.insert(constrained);

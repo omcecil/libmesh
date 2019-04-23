@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -18,6 +18,7 @@
 
 
 #include "libmesh/parallel_ghost_sync.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -34,7 +35,7 @@ void SyncNodalPositions::gather_data (const std::vector<dof_id_type> & ids,
   data.resize(ids.size());
 
   // Gather (x,y,z) data for all node IDs in the ids vector
-  for (std::size_t i=0; i<ids.size(); ++i)
+  for (auto i : index_range(ids))
     {
       // Look for this node in the mesh
       const Point & pt = mesh.point(ids[i]);
@@ -50,9 +51,8 @@ void SyncNodalPositions::gather_data (const std::vector<dof_id_type> & ids,
 void SyncNodalPositions::act_on_data (const std::vector<dof_id_type> & ids,
                                       const std::vector<datum> & data) const
 {
-  for (std::size_t i=0; i<ids.size(); ++i)
+  for (auto i : index_range(ids))
     {
-
       // Get a pointer to the node whose position is to be updated.
       Node & node = mesh.node_ref(ids[i]);
 

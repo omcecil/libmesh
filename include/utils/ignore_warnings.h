@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -82,6 +82,9 @@
 #if (__GNUC__ > 6)
 #pragma GCC diagnostic ignored "-Wint-in-bool-context"
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#if (__GNUC__ > 7)
+#pragma GCC diagnostic ignored "-Wparentheses"
+#endif // GCC > 7
 #endif // GCC > 6
 #endif // GCC > 5
 #endif // GCC > 4.5

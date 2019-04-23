@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -227,7 +227,11 @@ void PetscDiffSolver::clear()
   int ierr = LibMeshSNESDestroy(&_snes);
   LIBMESH_CHKERR(ierr);
 
+#if !PETSC_VERSION_LESS_THAN(3,7,3)
+#if defined(LIBMESH_ENABLE_AMR) && defined(LIBMESH_HAVE_METAPHYSICL) && !defined(LIBMESH_USE_COMPLEX_NUMBERS)
   _dm_wrapper.clear();
+#endif
+#endif
 }
 
 
@@ -331,6 +335,15 @@ unsigned int PetscDiffSolver::solve()
   SNESConvergedReason reason;
   SNESGetConvergedReason(_snes, &reason);
 
+  PetscInt l_its, nl_its;
+  ierr = SNESGetLinearSolveIterations(_snes,&l_its);
+  LIBMESH_CHKERR(ierr);
+  this->_inner_iterations = l_its;
+
+  ierr = SNESGetIterationNumber(_snes,&nl_its);
+  LIBMESH_CHKERR(ierr);
+  this->_outer_iterations = nl_its;
+
   return convert_solve_result(reason);
 }
 
@@ -354,8 +367,12 @@ void PetscDiffSolver::setup_petsc_data()
   bool use_petsc_dm = libMesh::on_command_line("--use_petsc_dm");
 
   // This needs to be called before SNESSetFromOptions
+#if !PETSC_VERSION_LESS_THAN(3,7,3)
+#if defined(LIBMESH_ENABLE_AMR) && defined(LIBMESH_HAVE_METAPHYSICL) && !defined(LIBMESH_USE_COMPLEX_NUMBERS)
   if (use_petsc_dm)
     this->_dm_wrapper.init_and_attach_petscdm(_system, _snes);
+#endif
+#endif
 
   // If we're not using PETSc DM, let's keep around
   // the old style for fieldsplit

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -60,11 +60,13 @@ MeshBase::MeshBase (const Parallel::Communicator & comm_in,
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   _next_unique_id(DofObject::invalid_unique_id),
 #endif
-  _skip_partitioning(libMesh::on_command_line("--skip-partitioning")),
+  _skip_noncritical_partitioning(false),
+  _skip_all_partitioning(libMesh::on_command_line("--skip-partitioning")),
   _skip_renumber_nodes_and_elements(false),
   _allow_remote_element_removal(true),
   _spatial_dimension(d),
-  _default_ghosting(new GhostPointNeighbors(*this))
+  _default_ghosting(new GhostPointNeighbors(*this)),
+  _point_locator_close_to_point_tol(0.)
 {
   _elem_dims.insert(d);
   _ghosting_functors.insert(_default_ghosting.get());
@@ -86,13 +88,15 @@ MeshBase::MeshBase (const MeshBase & other_mesh) :
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   _next_unique_id(other_mesh._next_unique_id),
 #endif
-  _skip_partitioning(libMesh::on_command_line("--skip-partitioning")),
+  _skip_noncritical_partitioning(false),
+  _skip_all_partitioning(libMesh::on_command_line("--skip-partitioning")),
   _skip_renumber_nodes_and_elements(false),
   _allow_remote_element_removal(true),
   _elem_dims(other_mesh._elem_dims),
   _spatial_dimension(other_mesh._spatial_dimension),
   _default_ghosting(new GhostPointNeighbors(*this)),
-  _ghosting_functors(other_mesh._ghosting_functors)
+  _ghosting_functors(other_mesh._ghosting_functors),
+  _point_locator_close_to_point_tol(other_mesh._point_locator_close_to_point_tol)
 {
   // Make sure we don't accidentally delete the other mesh's default
   // ghosting functor; we'll use our own if that's needed.
@@ -145,6 +149,54 @@ void MeshBase::set_spatial_dimension(unsigned char d)
   // libMesh will only *increase* the spatial dimension, however,
   // never decrease it.
   _spatial_dimension = d;
+}
+
+
+
+unsigned int MeshBase::add_elem_integer(const std::string & name)
+{
+  for (auto i : index_range(_elem_integer_names))
+    if (_elem_integer_names[i] == name)
+      return i;
+
+  _elem_integer_names.push_back(name);
+  return _elem_integer_names.size()-1;
+}
+
+
+
+unsigned int MeshBase::get_elem_integer_index(const std::string & name) const
+{
+  for (auto i : index_range(_elem_integer_names))
+    if (_elem_integer_names[i] == name)
+      return i;
+
+  libmesh_error_msg("Unknown elem integer " << name);
+  return libMesh::invalid_uint;
+}
+
+
+
+unsigned int MeshBase::add_node_integer(const std::string & name)
+{
+  for (auto i : index_range(_node_integer_names))
+    if (_node_integer_names[i] == name)
+      return i;
+
+  _node_integer_names.push_back(name);
+  return _node_integer_names.size()-1;
+}
+
+
+
+unsigned int MeshBase::get_node_integer_index(const std::string & name) const
+{
+  for (auto i : index_range(_node_integer_names))
+    if (_node_integer_names[i] == name)
+      return i;
+
+  libmesh_error_msg("Unknown node integer " << name);
+  return libMesh::invalid_uint;
 }
 
 
@@ -235,8 +287,11 @@ void MeshBase::prepare_for_use (const bool skip_renumber_nodes_and_elements, con
       gf->mesh_reinit();
     }
 
-  // Partition the mesh.
-  this->partition();
+  // Partition the mesh unless *all* partitioning is to be skipped.
+  // If only noncritical partitioning is to be skipped, the
+  // partition() call will still check for orphaned nodes.
+  if (!skip_partitioning())
+    this->partition();
 
   // If we're using DistributedMesh, we'll probably want it
   // parallelized.
@@ -433,10 +488,10 @@ void MeshBase::partition (const unsigned int n_parts)
       libmesh_assert (this->is_serial());
       partitioner()->partition (*this, n_parts);
     }
-  // A nullptr partitioner means don't repartition; skip_partitioning()
-  // checks on this.
-  // Non-serial meshes may not be ready for repartitioning here.
-  else if (!skip_partitioning())
+  // A nullptr partitioner or a skip_partitioning(true) call or a
+  // skip_noncritical_partitioning(true) call means don't repartition;
+  // skip_noncritical_partitioning() checks all these.
+  else if (!skip_noncritical_partitioning())
     {
       partitioner()->partition (*this, n_parts);
     }
@@ -486,6 +541,9 @@ const PointLocatorBase & MeshBase::point_locator () const
       libmesh_assert(!Threads::in_threads);
 
       _point_locator = PointLocatorBase::build(TREE_ELEMENTS, *this);
+
+      if (_point_locator_close_to_point_tol > 0.)
+        _point_locator->set_close_to_point_tol(_point_locator_close_to_point_tol);
     }
 
   return *_point_locator;
@@ -505,6 +563,9 @@ std::unique_ptr<PointLocatorBase> MeshBase::sub_point_locator () const
       parallel_object_only();
 
       _point_locator = PointLocatorBase::build(TREE_ELEMENTS, *this);
+
+      if (_point_locator_close_to_point_tol > 0.)
+        _point_locator->set_close_to_point_tol(_point_locator_close_to_point_tol);
     }
 
   // Otherwise there was a master point locator, and we can grab a
@@ -720,5 +781,27 @@ void MeshBase::detect_interior_parents()
         }
     }
 }
+
+
+
+void MeshBase::set_point_locator_close_to_point_tol(Real val)
+{
+  _point_locator_close_to_point_tol = val;
+  if (_point_locator)
+    {
+      if (val > 0.)
+        _point_locator->set_close_to_point_tol(val);
+      else
+        _point_locator->unset_close_to_point_tol();
+    }
+}
+
+
+
+Real MeshBase::get_point_locator_close_to_point_tol() const
+{
+  return _point_locator_close_to_point_tol;
+}
+
 
 } // namespace libMesh

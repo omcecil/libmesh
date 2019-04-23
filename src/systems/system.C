@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -1990,7 +1990,10 @@ void System::user_QOI_derivative(const QoISet & qoi_indices,
 
 
 
-Number System::point_value(unsigned int var, const Point & p, const bool insist_on_success) const
+Number System::point_value(unsigned int var,
+                           const Point & p,
+                           const bool insist_on_success,
+                           const NumericVector<Number> *sol) const
 {
   // This function must be called on every processor; there's no
   // telling where in the partition p falls.
@@ -2018,13 +2021,18 @@ Number System::point_value(unsigned int var, const Point & p, const bool insist_
   if (!insist_on_success || !mesh.is_serial())
     locator.enable_out_of_mesh_mode();
 
-  // Get a pointer to the element that contains P
-  const Elem * e = locator(p);
+  // Get a pointer to an element that contains p and allows us to
+  // evaluate var
+  const std::set<subdomain_id_type> & raw_subdomains =
+    this->variable(var).active_subdomains();
+  const std::set<subdomain_id_type> * implicit_subdomains =
+    raw_subdomains.empty() ? nullptr : &raw_subdomains;
+  const Elem * e = locator(p, implicit_subdomains);
 
   Number u = 0;
 
   if (e && this->get_dof_map().is_evaluable(*e, var))
-    u = point_value(var, p, *e);
+    u = point_value(var, p, *e, sol);
 
   // If I have an element containing p, then let's let everyone know
   processor_id_type lowest_owner =
@@ -2043,12 +2051,18 @@ Number System::point_value(unsigned int var, const Point & p, const bool insist_
   return u;
 }
 
-Number System::point_value(unsigned int var, const Point & p, const Elem & e) const
+Number System::point_value(unsigned int var,
+                           const Point & p,
+                           const Elem & e,
+                           const NumericVector<Number> *sol) const
 {
   // Ensuring that the given point is really in the element is an
   // expensive assert, but as long as debugging is turned on we might
   // as well try to catch a particularly nasty potential error
   libmesh_assert (e.contains_point(p));
+
+  if (!sol)
+    sol = this->current_local_solution.get();
 
   // Get the dof map to get the proper indices for our computation
   const DofMap & dof_map = this->get_dof_map();
@@ -2081,7 +2095,7 @@ Number System::point_value(unsigned int var, const Point & p, const Elem & e) co
 
   for (unsigned int l=0; l<num_dofs; l++)
     {
-      u += fe_data.shape[l]*this->current_solution (dof_indices[l]);
+      u += fe_data.shape[l] * (*sol)(dof_indices[l]);
     }
 
   return u;
@@ -2097,7 +2111,18 @@ Number System::point_value(unsigned int var, const Point & p, const Elem * e) co
 
 
 
-Gradient System::point_gradient(unsigned int var, const Point & p, const bool insist_on_success) const
+Number System::point_value(unsigned int var, const Point & p, const NumericVector<Number> * sol) const
+{
+  return this->point_value(var, p, true, sol);
+}
+
+
+
+
+Gradient System::point_gradient(unsigned int var,
+                                const Point & p,
+                                const bool insist_on_success,
+                                const NumericVector<Number> *sol) const
 {
   // This function must be called on every processor; there's no
   // telling where in the partition p falls.
@@ -2125,13 +2150,18 @@ Gradient System::point_gradient(unsigned int var, const Point & p, const bool in
   if (!insist_on_success || !mesh.is_serial())
     locator.enable_out_of_mesh_mode();
 
-  // Get a pointer to the element that contains P
-  const Elem * e = locator(p);
+  // Get a pointer to an element that contains p and allows us to
+  // evaluate var
+  const std::set<subdomain_id_type> & raw_subdomains =
+    this->variable(var).active_subdomains();
+  const std::set<subdomain_id_type> * implicit_subdomains =
+    raw_subdomains.empty() ? nullptr : &raw_subdomains;
+  const Elem * e = locator(p, implicit_subdomains);
 
   Gradient grad_u;
 
   if (e && this->get_dof_map().is_evaluable(*e, var))
-    grad_u = point_gradient(var, p, *e);
+    grad_u = point_gradient(var, p, *e, sol);
 
   // If I have an element containing p, then let's let everyone know
   processor_id_type lowest_owner =
@@ -2151,20 +2181,24 @@ Gradient System::point_gradient(unsigned int var, const Point & p, const bool in
 }
 
 
-Gradient System::point_gradient(unsigned int var, const Point & p, const Elem & e) const
+Gradient System::point_gradient(unsigned int var,
+                                const Point & p,
+                                const Elem & e,
+                                const NumericVector<Number> *sol) const
 {
   // Ensuring that the given point is really in the element is an
   // expensive assert, but as long as debugging is turned on we might
   // as well try to catch a particularly nasty potential error
   libmesh_assert (e.contains_point(p));
 
-#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
-  if (e.infinite())
-    libmesh_not_implemented();
-#endif
+  if (!sol)
+    sol = this->current_local_solution.get();
 
   // Get the dof map to get the proper indices for our computation
   const DofMap & dof_map = this->get_dof_map();
+
+  // write the element dimension into a separate variable.
+  const unsigned int dim = e.dim();
 
   // Make sure we can evaluate on this element.
   libmesh_assert (dof_map.is_evaluable(e, var));
@@ -2181,25 +2215,30 @@ Gradient System::point_gradient(unsigned int var, const Point & p, const Elem & 
 
   FEType fe_type = dof_map.variable_type(var);
 
-  // Build a FE again so we can calculate u(p)
-  std::unique_ptr<FEBase> fe (FEBase::build(e.dim(), fe_type));
+  // Map the physical co-ordinates to the master co-ordinates using the inverse_map from fe_interface.h.
+  Point coor = FEInterface::inverse_map(dim, fe_type, &e, p);
 
-  // Map the physical co-ordinates to the master co-ordinates using the inverse_map from fe_interface.h
-  // Build a vector of point co-ordinates to send to reinit
-  std::vector<Point> coor(1, FEInterface::inverse_map(e.dim(), fe_type, &e, p));
-
-  // Get the values of the shape function derivatives
-  const std::vector<std::vector<RealGradient>> &  dphi = fe->get_dphi();
-
-  // Reinitialize the element and compute the shape function values at coor
-  fe->reinit (&e, &coor);
+  // get the shape function value via the FEInterface to also handle the case
+  // of infinite elements correcly, the shape function is not fe->phi().
+  FEComputeData fe_data(this->get_equation_systems(), coor);
+  fe_data.enable_derivative();
+  FEInterface::compute_data(dim, fe_type, &e, fe_data);
 
   // Get ready to accumulate a gradient
   Gradient grad_u;
 
   for (unsigned int l=0; l<num_dofs; l++)
     {
-      grad_u.add_scaled (dphi[l][0], this->current_solution (dof_indices[l]));
+      // Chartesian coordinates have allways LIBMESH_DIM entries,
+      // local coordinates have as many coordinates as the element has.
+      for (std::size_t v=0; v<dim; v++)
+        for (std::size_t xyz=0; xyz<LIBMESH_DIM; xyz++)
+          {
+            // FIXME: this needs better syntax: It is matrix-vector multiplication.
+            grad_u(xyz) += fe_data.local_transform[v][xyz]
+              * fe_data.dshape[l](v)
+              * (*sol)(dof_indices[l]);
+          }
     }
 
   return grad_u;
@@ -2215,9 +2254,19 @@ Gradient System::point_gradient(unsigned int var, const Point & p, const Elem * 
 
 
 
+Gradient System::point_gradient(unsigned int var, const Point & p, const NumericVector<Number> * sol) const
+{
+  return this->point_gradient(var, p, true, sol);
+}
+
+
+
 // We can only accumulate a hessian with --enable-second
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
-Tensor System::point_hessian(unsigned int var, const Point & p, const bool insist_on_success) const
+Tensor System::point_hessian(unsigned int var,
+                             const Point & p,
+                             const bool insist_on_success,
+                             const NumericVector<Number> *sol) const
 {
   // This function must be called on every processor; there's no
   // telling where in the partition p falls.
@@ -2245,13 +2294,18 @@ Tensor System::point_hessian(unsigned int var, const Point & p, const bool insis
   if (!insist_on_success || !mesh.is_serial())
     locator.enable_out_of_mesh_mode();
 
-  // Get a pointer to the element that contains P
-  const Elem * e = locator(p);
+  // Get a pointer to an element that contains p and allows us to
+  // evaluate var
+  const std::set<subdomain_id_type> & raw_subdomains =
+    this->variable(var).active_subdomains();
+  const std::set<subdomain_id_type> * implicit_subdomains =
+    raw_subdomains.empty() ? nullptr : &raw_subdomains;
+  const Elem * e = locator(p, implicit_subdomains);
 
   Tensor hess_u;
 
   if (e && this->get_dof_map().is_evaluable(*e, var))
-    hess_u = point_hessian(var, p, *e);
+    hess_u = point_hessian(var, p, *e, sol);
 
   // If I have an element containing p, then let's let everyone know
   processor_id_type lowest_owner =
@@ -2270,12 +2324,18 @@ Tensor System::point_hessian(unsigned int var, const Point & p, const bool insis
   return hess_u;
 }
 
-Tensor System::point_hessian(unsigned int var, const Point & p, const Elem & e) const
+Tensor System::point_hessian(unsigned int var,
+                             const Point & p,
+                             const Elem & e,
+                             const NumericVector<Number> *sol) const
 {
   // Ensuring that the given point is really in the element is an
   // expensive assert, but as long as debugging is turned on we might
   // as well try to catch a particularly nasty potential error
   libmesh_assert (e.contains_point(p));
+
+  if (!sol)
+    sol = this->current_local_solution.get();
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   if (e.infinite())
@@ -2318,7 +2378,7 @@ Tensor System::point_hessian(unsigned int var, const Point & p, const Elem & e) 
 
   for (unsigned int l=0; l<num_dofs; l++)
     {
-      hess_u.add_scaled (d2phi[l][0], this->current_solution (dof_indices[l]));
+      hess_u.add_scaled (d2phi[l][0], (*sol)(dof_indices[l]));
     }
 
   return hess_u;
@@ -2334,8 +2394,15 @@ Tensor System::point_hessian(unsigned int var, const Point & p, const Elem * e) 
 
 
 
+Tensor System::point_hessian(unsigned int var, const Point & p, const NumericVector<Number> * sol) const
+{
+  return this->point_hessian(var, p, true, sol);
+}
+
 #else
-Tensor System::point_hessian(unsigned int, const Point &, const bool) const
+
+Tensor System::point_hessian(unsigned int, const Point &, const bool,
+                             const NumericVector<Number> *) const
 {
   libmesh_error_msg("We can only accumulate a hessian with --enable-second");
 
@@ -2343,7 +2410,8 @@ Tensor System::point_hessian(unsigned int, const Point &, const bool) const
   return Tensor();
 }
 
-Tensor System::point_hessian(unsigned int, const Point &, const Elem &) const
+Tensor System::point_hessian(unsigned int, const Point &, const Elem &,
+                             const NumericVector<Number> *) const
 {
   libmesh_error_msg("We can only accumulate a hessian with --enable-second");
 
@@ -2352,6 +2420,14 @@ Tensor System::point_hessian(unsigned int, const Point &, const Elem &) const
 }
 
 Tensor System::point_hessian(unsigned int, const Point &, const Elem *) const
+{
+  libmesh_error_msg("We can only accumulate a hessian with --enable-second");
+
+  // Avoid compiler warnings
+  return Tensor();
+}
+
+Tensor System::point_hessian(unsigned int, const Point &, const NumericVector<Number> *) const
 {
   libmesh_error_msg("We can only accumulate a hessian with --enable-second");
 

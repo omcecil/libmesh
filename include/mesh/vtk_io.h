@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -125,7 +125,8 @@ public:
 
 private:
   /**
-   * write the nodes from the mesh into a vtkUnstructuredGrid
+   * write the nodes from the mesh into a vtkUnstructuredGrid and update the
+   * local_node_map.
    */
   void nodes_to_vtk();
 
@@ -133,6 +134,22 @@ private:
    * write the cells from the mesh into a vtkUnstructuredGrid
    */
   void cells_to_vtk();
+
+  /**
+   * write the nodal values of soln to a vtkUnstructuredGrid
+   */
+  void node_values_to_vtk(const std::string & name,
+                          const std::vector<Real> & local_values);
+
+  /**
+   * Extract the values of soln that correspond to the nodes
+   *
+   * This method overwrites all values in local_values
+   */
+  void get_local_node_values(std::vector<Number> & local_values,
+                             std::size_t variable,
+                             const std::vector<Number> & soln,
+                             const std::vector<std::string> & names);
 
   /**
    * Write the system vectors to vtk

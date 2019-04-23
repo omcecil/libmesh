@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,6 +17,7 @@
 
 
 #include "libmesh/diff_qoi.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -32,7 +33,7 @@ void DifferentiableQoI::thread_join( std::vector<Number> & qoi,
                                      const std::vector<Number> & other_qoi,
                                      const QoISet &)
 {
-  for (std::size_t i=0; i != qoi.size(); ++i)
+  for (auto i : index_range(qoi))
     qoi[i] += other_qoi[i];
 }
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,6 +20,8 @@
 #ifndef LIBMESH_LIBMESH_C_ISNAN_H
 #define LIBMESH_LIBMESH_C_ISNAN_H
 
+// These functions should never have been called directly, and are
+// also deprecated for internal library use now.
 int libmesh_C_isnan_float(float a);
 int libmesh_C_isnan_double(double a);
 int libmesh_C_isnan_longdouble(long double a);

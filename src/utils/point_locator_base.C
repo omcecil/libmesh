@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -40,9 +40,13 @@ PointLocatorBase::PointLocatorBase (const MeshBase & mesh,
   _use_close_to_point_tol  (false),
   _close_to_point_tol      (TOLERANCE)
 {
+  // If we have a non-nullptr master, inherit its close-to-point tolerances.
+  if (_master)
+    {
+      _use_close_to_point_tol = _master->_use_close_to_point_tol;
+      _close_to_point_tol = _master->_close_to_point_tol;
+    }
 }
-
-
 
 
 

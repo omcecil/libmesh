@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,7 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/eigen_sparse_vector.h"
 #include "libmesh/eigen_sparse_matrix.h"
-
+#include "libmesh/int_range.h"
 
 #ifdef LIBMESH_HAVE_EIGEN
 
@@ -311,7 +311,7 @@ EigenSparseVector<T>::operator = (const std::vector<T> & v)
    * The global vector.  Only add the local components.
    */
   if (this->size() == v.size())
-    for (numeric_index_type i=0; i<v.size(); i++)
+    for (auto i : index_range(v))
       this->set (i, v[i]);
 
   else
@@ -358,7 +358,7 @@ void EigenSparseVector<T>::localize (std::vector<T> & v_local,
   // EigenSparseVectors are serial, so we can just copy values
   v_local.resize(indices.size());
 
-  for (numeric_index_type i=0; i<v_local.size(); i++)
+  for (auto i : index_range(v_local))
     v_local[i] = (*this)(indices[i]);
 }
 
@@ -387,7 +387,7 @@ void EigenSparseVector<T>::localize (std::vector<T> & v_local) const
 {
   v_local.resize(this->size());
 
-  for (numeric_index_type i=0; i<v_local.size(); i++)
+  for (auto i : index_range(v_local))
     v_local[i] = (*this)(i);
 }
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,6 +19,7 @@
 #include "libmesh/quadrature_gm.h"
 #include "libmesh/quadrature_gauss.h"
 #include "libmesh/enum_quadrature_type.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -85,7 +86,7 @@ void QGrundmann_Moller::gm_rule(unsigned int s, unsigned int dim)
       compose_all(s-i, dim+1, permutations);
       //libMesh::out << "n. permutations=" << permutations.size() << std::endl;
 
-      for (std::size_t p=0; p<permutations.size(); ++p)
+      for (auto p : index_range(permutations))
         {
           // We use the first dim entries of each permutation to
           // construct an integration point.
@@ -121,7 +122,7 @@ void QGrundmann_Moller::gm_rule(unsigned int s, unsigned int dim)
         }
 
       // This is the weight for each of the points computed previously
-      for (std::size_t j=0; j<permutations.size(); ++j)
+      for (auto j : index_range(permutations))
         _weights[offset+j] = weight;
 
       // Change sign for next iteration

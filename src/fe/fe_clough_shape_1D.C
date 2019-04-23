@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -40,9 +40,14 @@ static const Elem * old_elem_ptr = nullptr;
 // local shape function corresponding to normal derivative 2
 static Real d1xd1x, d2xd2x;
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+
 Real clough_raw_shape_second_deriv(const unsigned int basis_num,
                                    const unsigned int deriv_type,
                                    const Point & p);
+
+#endif
+
 Real clough_raw_shape_deriv(const unsigned int basis_num,
                             const unsigned int deriv_type,
                             const Point & p);
@@ -110,6 +115,8 @@ void clough_compute_coefs(const Elem * elem)
 }
 
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+
 // Return shape function second derivatives on the unit interval
 Real clough_raw_shape_second_deriv(const unsigned int basis_num,
                                    const unsigned int deriv_type,
@@ -144,6 +151,7 @@ Real clough_raw_shape_second_deriv(const unsigned int basis_num,
     }
 }
 
+#endif
 
 
 Real clough_raw_shape_deriv(const unsigned int basis_num,
@@ -336,6 +344,7 @@ Real FE<1,CLOUGH>::shape_deriv(const Elem * elem,
 }
 
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 template <>
 Real FE<1,CLOUGH>::shape_second_deriv(const Elem * elem,
@@ -386,5 +395,7 @@ Real FE<1,CLOUGH>::shape_second_deriv(const Elem * elem,
       libmesh_error_msg("ERROR: Unsupported polynomial order = " << totalorder);
     }
 }
+
+#endif
 
 } // namespace libMesh

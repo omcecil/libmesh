@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -131,7 +131,7 @@ DofMap::DofMap(const unsigned int number,
                MeshBase & mesh) :
   ParallelObject (mesh.comm()),
   _dof_coupling(nullptr),
-  _error_on_cyclic_constraint(false),
+  _error_on_constraint_loop(false),
   _variables(),
   _variable_groups(),
   _variable_group_numbers(),
@@ -237,7 +237,14 @@ bool DofMap::is_periodic_boundary (const boundary_id_type boundaryid) const
 
 void DofMap::set_error_on_cyclic_constraint(bool error_on_cyclic_constraint)
 {
-  _error_on_cyclic_constraint = error_on_cyclic_constraint;
+  // This function will eventually be officially libmesh_deprecated();
+  // Call DofMap::set_error_on_constraint_loop() instead.
+  set_error_on_constraint_loop(error_on_cyclic_constraint);
+}
+
+void DofMap::set_error_on_constraint_loop(bool error_on_constraint_loop)
+{
+  _error_on_constraint_loop = error_on_constraint_loop;
 }
 
 
@@ -875,7 +882,7 @@ void DofMap::clear()
   _first_df.clear();
   _end_df.clear();
   _first_scalar_df.clear();
-  _send_list.clear();
+  this->clear_send_list();
   this->clear_sparsity();
   need_full_sparsity_pattern = false;
 
@@ -928,7 +935,7 @@ void DofMap::distribute_dofs (MeshBase & mesh)
   dof_id_type next_free_dof = 0;
 
   // Clear the send list before we rebuild it
-  _send_list.clear();
+  this->clear_send_list();
 
   // Set temporary DOF indices on this processor
   if (node_major_dofs)
@@ -1671,6 +1678,17 @@ void DofMap::prepare_send_list ()
   std::vector<dof_id_type> (_send_list.begin(), new_end).swap (_send_list);
 }
 
+void DofMap::reinit_send_list (MeshBase & mesh)
+{
+  this->clear_send_list();
+  this->add_neighbors_to_send_list(mesh);
+
+  // This is assuming that we only need to recommunicate
+  // the constraints and no new ones have been added since
+  // a previous call to reinit_constraints.
+  this->process_constraints(mesh);
+  this->prepare_send_list();
+}
 
 void DofMap::set_implicit_neighbor_dofs(bool implicit_neighbor_dofs)
 {
@@ -2206,6 +2224,105 @@ void DofMap::dof_indices (const Node * const node,
 }
 
 
+void DofMap::dof_indices (const Elem & elem,
+                          unsigned int n,
+                          std::vector<dof_id_type> & di,
+                          const unsigned int vn) const
+{
+  this->_node_dof_indices(elem, n, elem.node_ref(n), di, vn);
+}
+
+
+
+void DofMap::old_dof_indices (const Elem & elem,
+                              unsigned int n,
+                              std::vector<dof_id_type> & di,
+                              const unsigned int vn) const
+{
+  const DofObject * old_obj = elem.node_ref(n).old_dof_object;
+  libmesh_assert(old_obj);
+  this->_node_dof_indices(elem, n, *old_obj, di, vn);
+}
+
+
+
+void DofMap::_node_dof_indices (const Elem & elem,
+                                unsigned int n,
+                                const DofObject & obj,
+                                std::vector<dof_id_type> & di,
+                                const unsigned int vn) const
+{
+  // Half of this is a cut and paste of _dof_indices code below, but
+  // duplication actually seems cleaner than creating a helper
+  // function with a million arguments and hoping the compiler inlines
+  // it properly into one of our most highly trafficked functions.
+
+  LOG_SCOPE("_node_dof_indices()", "DofMap");
+
+  const ElemType type = elem.type();
+  const unsigned int dim = elem.dim();
+
+  const unsigned int sys_num = this->sys_number();
+  const std::pair<unsigned int, unsigned int>
+    vg_and_offset = obj.var_to_vg_and_offset(sys_num,vn);
+  const unsigned int vg = vg_and_offset.first;
+  const unsigned int vig = vg_and_offset.second;
+  const unsigned int n_comp = obj.n_comp_group(sys_num,vg);
+
+  const VariableGroup & var = this->variable_group(vg);
+  FEType fe_type = var.type();
+  fe_type.order = static_cast<Order>(fe_type.order +
+                                     elem.p_level());
+  const bool extra_hanging_dofs =
+    FEInterface::extra_hanging_dofs(fe_type);
+
+  // There is a potential problem with h refinement.  Imagine a
+  // quad9 that has a linear FE on it.  Then, on the hanging side,
+  // it can falsely identify a DOF at the mid-edge node. This is why
+  // we go through FEInterface instead of obj->n_comp() directly.
+  const unsigned int nc =
+    FEInterface::n_dofs_at_node(dim, fe_type, type, n);
+
+  // If this is a non-vertex on a hanging node with extra
+  // degrees of freedom, we use the non-vertex dofs (which
+  // come in reverse order starting from the end, to
+  // simplify p refinement)
+  if (extra_hanging_dofs && nc && !elem.is_vertex(n))
+    {
+      const int dof_offset = n_comp - nc;
+
+      // We should never have fewer dofs than necessary on a
+      // node unless we're getting indices on a parent element,
+      // and we should never need the indices on such a node
+      if (dof_offset < 0)
+        {
+          libmesh_assert(!elem.active());
+          di.resize(di.size() + nc, DofObject::invalid_id);
+        }
+      else
+        for (unsigned int i = dof_offset; i != n_comp; ++i)
+          {
+            const dof_id_type d =
+              obj.dof_number(sys_num, vg, vig, i, n_comp);
+            libmesh_assert_not_equal_to (d, DofObject::invalid_id);
+            di.push_back(d);
+          }
+    }
+  // If this is a vertex or an element without extra hanging
+  // dofs, our dofs come in forward order coming from the
+  // beginning
+  else
+    for (unsigned int i=0; i<nc; i++)
+      {
+        const dof_id_type d =
+          obj.dof_number(sys_num, vg, vig, i, n_comp);
+        libmesh_assert_not_equal_to (d, DofObject::invalid_id);
+        di.push_back(d);
+      }
+}
+
+
+
 void DofMap::_dof_indices (const Elem & elem,
                            int p_level,
                            std::vector<dof_id_type> & di,
@@ -2252,22 +2369,22 @@ void DofMap::_dof_indices (const Elem & elem,
       // Get the node-based DOF numbers
       for (unsigned int n=0; n != n_nodes; n++)
         {
-          const Node * node      = nodes[n];
+          const Node & node = *nodes[n];
 
           // Cache the intermediate lookups that are common to every
           // component
 #ifdef DEBUG
           const std::pair<unsigned int, unsigned int>
-            vg_and_offset = node->var_to_vg_and_offset(sys_num,v);
+            vg_and_offset = node.var_to_vg_and_offset(sys_num,v);
           libmesh_assert_equal_to (vg, vg_and_offset.first);
           libmesh_assert_equal_to (vig, vg_and_offset.second);
 #endif
-          const unsigned int n_comp = node->n_comp_group(sys_num,vg);
+          const unsigned int n_comp = node.n_comp_group(sys_num,vg);
 
           // There is a potential problem with h refinement.  Imagine a
           // quad9 that has a linear FE on it.  Then, on the hanging side,
           // it can falsely identify a DOF at the mid-edge node. This is why
-          // we go through FEInterface instead of node->n_comp() directly.
+          // we go through FEInterface instead of node.n_comp() directly.
           const unsigned int nc =
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
             is_inf ?
@@ -2295,7 +2412,7 @@ void DofMap::_dof_indices (const Elem & elem,
                 for (int i=n_comp-1; i>=dof_offset; i--)
                   {
                     const dof_id_type d =
-                      node->dof_number(sys_num, vg, vig, i, n_comp);
+                      node.dof_number(sys_num, vg, vig, i, n_comp);
                     libmesh_assert_not_equal_to (d, DofObject::invalid_id);
                     di.push_back(d);
                   }
@@ -2307,7 +2424,7 @@ void DofMap::_dof_indices (const Elem & elem,
             for (unsigned int i=0; i<nc; i++)
               {
                 const dof_id_type d =
-                  node->dof_number(sys_num, vg, vig, i, n_comp);
+                  node.dof_number(sys_num, vg, vig, i, n_comp);
                 libmesh_assert_not_equal_to (d, DofObject::invalid_id);
                 di.push_back(d);
               }

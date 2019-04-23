@@ -24,6 +24,7 @@ unit_tests_sources = \
   base/default_coupling_test.C \
   base/getpot_test.C \
   base/point_neighbor_coupling_test.C \
+  base/overlapping_coupling_test.C \
   fe/fe_bernstein_test.C \
   fe/fe_clough_test.C \
   fe/fe_hermite_test.C \
@@ -47,7 +48,9 @@ unit_tests_sources = \
   mesh/boundary_info.C \
   mesh/checkpoint.C \
   mesh/contains_point.C \
+  mesh/extra_integers.C \
   mesh/mesh_input.C \
+  mesh/mesh_function.C \
   mesh/mixed_dim_mesh_test.C \
   mesh/nodal_neighbors.C \
   mesh/mesh_extruder.C \
@@ -70,8 +73,10 @@ unit_tests_sources = \
   numerics/vector_value_test.C \
   numerics/type_tensor_test.C \
   numerics/dense_matrix_test.C \
+  parallel/message_tag.C \
   parallel/packed_range_test.C \
   parallel/parallel_sort_test.C \
+  parallel/parallel_sync_test.C \
   parallel/parallel_test.C \
   parallel/parallel_point_test.C \
   partitioning/partitioner_test.h \
@@ -206,7 +211,8 @@ endif
 CLEANFILES = cube_mesh.xda \
              slit_mesh.xda slit_solution.xda \
 	     out.e \
-	     mesh_with_soln.e
+	     mesh_with_soln.e \
+	     elemental_from_nodal.e
 
 # CLEANFILES only applies to files, handle directories separately
 clean-local:

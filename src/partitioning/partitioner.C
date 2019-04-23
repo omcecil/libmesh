@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,6 +27,7 @@
 #include "libmesh/mesh_communication.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/parallel_ghost_sync.h"
+#include "libmesh/int_range.h"
 
 #ifdef LIBMESH_HAVE_PETSC
 #include "libmesh/ignore_warnings.h"
@@ -287,10 +288,10 @@ void Partitioner::set_parent_processor_ids(MeshBase & mesh)
       for (auto & elem : mesh.active_element_ptr_range())
         {
           // First set descendents
-          std::vector<const Elem *> subactive_family;
+          std::vector<Elem *> subactive_family;
           elem->total_family_tree(subactive_family);
-          for (std::size_t i = 0; i != subactive_family.size(); ++i)
-            const_cast<Elem *>(subactive_family[i])->processor_id() = elem->processor_id();
+          for (const auto & f : subactive_family)
+            f->processor_id() = elem->processor_id();
 
           // Then set ancestors
           Elem * parent = elem->parent();
@@ -324,10 +325,10 @@ void Partitioner::set_parent_processor_ids(MeshBase & mesh)
       // Loop over all the active elements in the mesh
       for (auto & child : mesh.active_element_ptr_range())
         {
-          std::vector<const Elem *> subactive_family;
+          std::vector<Elem *> subactive_family;
           child->total_family_tree(subactive_family);
-          for (std::size_t i = 0; i != subactive_family.size(); ++i)
-            const_cast<Elem *>(subactive_family[i])->processor_id() = child->processor_id();
+          for (const auto & f : subactive_family)
+            f->processor_id() = child->processor_id();
         }
 
       // When the mesh is parallel we cannot guarantee that parents have access to
@@ -377,8 +378,8 @@ void Partitioner::set_parent_processor_ids(MeshBase & mesh)
 
                   std::vector<const Elem *> active_family;
                   parent->active_family_tree(active_family);
-                  for (std::size_t i = 0; i != active_family.size(); ++i)
-                    parent_pid = std::min (parent_pid, active_family[i]->processor_id());
+                  for (const auto & f : active_family)
+                    parent_pid = std::min (parent_pid, f->processor_id());
 
                   const dof_id_type packed_idx = parent_idx - first_elem_id;
                   libmesh_assert_less (packed_idx, parent_processor_ids.size());
@@ -892,14 +893,14 @@ struct SyncLocalIDs
   {
     local_ids.resize(ids.size());
 
-    for (std::size_t i=0, imax = ids.size(); i != imax; ++i)
+    for (auto i : index_range(ids))
       local_ids[i] = id_map[ids[i]];
   }
 
   void act_on_data (const std::vector<dof_id_type> & ids,
                     const std::vector<datum> & local_ids)
   {
-    for (std::size_t i=0, imax = local_ids.size(); i != imax; ++i)
+    for (auto i : index_range(local_ids))
       id_map[ids[i]] = local_ids[i];
   }
 };
@@ -1054,11 +1055,8 @@ void Partitioner::build_graph (const MeshBase & mesh)
                   // Get all the neighbor's children that
                   // live on that side and are thus connected
                   // to us
-                  for (std::size_t nc=0; nc<neighbors_offspring.size(); nc++)
+                  for (const auto & child : neighbors_offspring)
                     {
-                      const Elem * child =
-                        neighbors_offspring[nc];
-
                       // This does not assume a level-1 mesh.
                       // Note that since children have sides numbered
                       // coincident with the parent then this is a sufficient test.

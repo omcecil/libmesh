@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,95 +24,60 @@
 #include "libmesh/metis_partitioner.h"
 #include "libmesh/replicated_mesh.h"
 #include "libmesh/utility.h"
+#include "libmesh/point.h"
+#ifdef LIBMESH_HAVE_NANOFLANN
+#include "libmesh/nanoflann.hpp"
+#endif
 
 // C++ includes
 #include <unordered_map>
 #include <unordered_set>
 
-namespace
-{
-using namespace libMesh;
-
-// A custom comparison function, based on Point::operator<,
-// that tries to ignore floating point differences in components
-// of the point
-class FuzzyPointCompare
-{
-private:
-  Real _tol;
-
-public:
-  // Constructor takes the tolerance to be used in fuzzy comparisons
-  FuzzyPointCompare(Real tol) : _tol(tol) {}
-
-  // This is inspired directly by Point::operator<
-  bool operator()(const Point & lhs, const Point & rhs)
-  {
-    for (unsigned i=0; i<LIBMESH_DIM; ++i)
-      {
-        // If the current components are within some tolerance
-        // of one another, then don't attempt the less-than comparison.
-        // Note that this may cause something strange to happen, as Roy
-        // believes he can prove it is not a total ordering...
-        Real rel_size = std::max(std::abs(lhs(i)), std::abs(rhs(i)));
-
-        // Don't use relative tolerance if both numbers are already small.
-        // How small?  Some possible options are:
-        // * std::numeric_limits<Real>::epsilon()
-        // * TOLERANCE
-        // * 1.0
-        // If we use std::numeric_limits<Real>::epsilon(), we'll
-        // do more relative comparisons for small numbers, but
-        // increase the chance for false positives?  If we pick 1.0,
-        // we'll never "increase" the difference between small numbers
-        // in the test below.
-        if (rel_size < 1.)
-          rel_size = 1.;
-
-        // Don't attempt the comparison if lhs(i) and rhs(i) are too close
-        // together.
-        if ( std::abs(lhs(i) - rhs(i)) / rel_size < _tol)
-          continue;
-
-        if (lhs(i) < rhs(i))
-          return true;
-        if (lhs(i) > rhs(i))
-          return false;
-      }
-
-    // We compared all the components without returning yet, so
-    // each component was neither greater than nor less than they other.
-    // They might be equal, so return false.
-    return false;
-  }
-
-  // Needed by std::sort on vector<pair<Point,id>>
-  bool operator()(const std::pair<Point, dof_id_type> & lhs,
-                  const std::pair<Point, dof_id_type> & rhs)
-  {
-    return (*this)(lhs.first, rhs.first);
-  }
-
-  // comparison function where lhs is a Point and rhs is a pair<Point,dof_id_type>.
-  // This is used in routines like lower_bound, where a specific value is being
-  // searched for.
-  bool operator()(const Point & lhs, std::pair<Point, dof_id_type> & rhs)
-  {
-    return (*this)(lhs, rhs.first);
-  }
-
-  // And the other way around...
-  bool operator()(std::pair<Point, dof_id_type> & lhs, const Point & rhs)
-  {
-    return (*this)(lhs.first, rhs);
-  }
-};
-}
-
-
-
 namespace libMesh
 {
+
+// This class adapts a vector of Nodes (represented by a pair of a Point and a dof_id_type)
+// for use in a nanoflann KD-Tree
+
+class VectorOfNodesAdaptor
+{
+private:
+  const std::vector<std::pair<Point, dof_id_type>> _nodes;
+
+public:
+  VectorOfNodesAdaptor(const std::vector<std::pair<Point, dof_id_type>> & nodes) :
+    _nodes(nodes)
+  {}
+
+  /**
+   * Must return the number of data points
+   */
+  inline size_t kdtree_get_point_count() const { return _nodes.size(); }
+
+  /**
+   * \returns The dim'th component of the idx'th point in the class:
+   * Since this is inlined and the "dim" argument is typically an immediate value, the
+   *  "if's" are actually solved at compile time.
+   */
+  inline Real kdtree_get_pt(const size_t idx, int dim) const
+    {
+      libmesh_assert_less (idx, _nodes.size());
+      libmesh_assert_less (dim, 3);
+
+      const Point & p(_nodes[idx].first);
+
+      if (dim==0) return p(0);
+      if (dim==1) return p(1);
+      return p(2);
+    }
+
+  /*
+   * Optional bounding-box computation
+   */
+  template <class BBOX>
+  bool kdtree_get_bbox(BBOX & /* bb */) const { return false; }
+};
+
 
 // ------------------------------------------------------------
 // ReplicatedMesh class member functions
@@ -142,8 +107,32 @@ ReplicatedMesh::~ReplicatedMesh ()
 ReplicatedMesh::ReplicatedMesh (const ReplicatedMesh & other_mesh) :
   UnstructuredMesh (other_mesh)
 {
-  this->copy_nodes_and_elements(other_mesh);
-  this->get_boundary_info() = other_mesh.get_boundary_info();
+  this->copy_nodes_and_elements(other_mesh, true);
+
+  auto & this_boundary_info = this->get_boundary_info();
+  const auto & other_boundary_info = other_mesh.get_boundary_info();
+
+  this_boundary_info = other_boundary_info;
+
+  this->set_subdomain_name_map() = other_mesh.get_subdomain_name_map();
+
+  // Use the first BoundaryInfo object to build the list of side boundary ids
+  std::vector<boundary_id_type> side_boundaries;
+  other_boundary_info.build_side_boundary_ids(side_boundaries);
+
+  // Assign those boundary ids in our BoundaryInfo object
+  for (const auto & side_bnd_id : side_boundaries)
+    this_boundary_info.sideset_name(side_bnd_id) =
+      other_boundary_info.get_sideset_name(side_bnd_id);
+
+  // Do the same thing for node boundary ids
+  std::vector<boundary_id_type> node_boundaries;
+  other_boundary_info.build_node_boundary_ids(node_boundaries);
+
+  for (const auto & node_bnd_id : node_boundaries)
+    this_boundary_info.nodeset_name(node_bnd_id) =
+      other_boundary_info.get_nodeset_name(node_bnd_id);
+
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   this->_next_unique_id = other_mesh._next_unique_id;
 #endif
@@ -153,8 +142,31 @@ ReplicatedMesh::ReplicatedMesh (const ReplicatedMesh & other_mesh) :
 ReplicatedMesh::ReplicatedMesh (const UnstructuredMesh & other_mesh) :
   UnstructuredMesh (other_mesh)
 {
-  this->copy_nodes_and_elements(other_mesh);
-  this->get_boundary_info() = other_mesh.get_boundary_info();
+  this->copy_nodes_and_elements(other_mesh, true);
+
+  auto & this_boundary_info = this->get_boundary_info();
+  const auto & other_boundary_info = other_mesh.get_boundary_info();
+
+  this_boundary_info = other_boundary_info;
+
+  this->set_subdomain_name_map() = other_mesh.get_subdomain_name_map();
+
+  // Use the first BoundaryInfo object to build the list of side boundary ids
+  std::vector<boundary_id_type> side_boundaries;
+  other_boundary_info.build_side_boundary_ids(side_boundaries);
+
+  // Assign those boundary ids in our BoundaryInfo object
+  for (const auto & side_bnd_id : side_boundaries)
+    this_boundary_info.sideset_name(side_bnd_id) =
+      other_boundary_info.get_sideset_name(side_bnd_id);
+
+  // Do the same thing for node boundary ids
+  std::vector<boundary_id_type> node_boundaries;
+  other_boundary_info.build_node_boundary_ids(node_boundaries);
+
+  for (const auto & node_bnd_id : node_boundaries)
+    this_boundary_info.nodeset_name(node_bnd_id) =
+      other_boundary_info.get_nodeset_name(node_bnd_id);
 }
 
 
@@ -281,6 +293,8 @@ Elem * ReplicatedMesh::add_elem (Elem * e)
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   if (!e->valid_unique_id())
     e->set_unique_id() = _next_unique_id++;
+  else
+   _next_unique_id = std::max(_next_unique_id, e->unique_id()+1);
 #endif
 
   const dof_id_type id = e->id();
@@ -296,6 +310,10 @@ Elem * ReplicatedMesh::add_elem (Elem * e)
     }
 
   _elements[id] = e;
+
+  // Make sure any new element is given space for any extra integers
+  // we've requested
+  e->add_extra_integers(_elem_integer_names.size());
 
   return e;
 }
@@ -320,6 +338,10 @@ Elem * ReplicatedMesh::insert_elem (Elem * e)
     }
 
   _elements[e->id()] = e;
+
+  // Make sure any new element is given space for any extra integers
+  // we've requested
+  e->add_extra_integers(_elem_integer_names.size());
 
   return e;
 }
@@ -417,6 +439,8 @@ Node * ReplicatedMesh::add_point (const Point & p,
                       cast_int<dof_id_type>(_nodes.size()-1) : id).release();
       n->processor_id() = proc_id;
 
+      n->add_extra_integers(_node_integer_names.size());
+
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
       if (!n->valid_unique_id())
         n->set_unique_id() = _next_unique_id++;
@@ -448,6 +472,8 @@ Node * ReplicatedMesh::add_node (Node * n)
   if (!n->valid_unique_id())
     n->set_unique_id() = _next_unique_id++;
 #endif
+
+  n->add_extra_integers(_node_integer_names.size());
 
   _nodes.push_back(n);
 
@@ -487,6 +513,8 @@ Node * ReplicatedMesh::insert_node(Node * n)
   if (!n->valid_unique_id())
     n->set_unique_id() = _next_unique_id++;
 #endif
+
+  n->add_extra_integers(_node_integer_names.size());
 
   // We have enough space and this spot isn't already occupied by
   // another node, so go ahead and add it.
@@ -761,12 +789,12 @@ void ReplicatedMesh::renumber_nodes_and_elements ()
 void ReplicatedMesh::fix_broken_node_and_element_numbering ()
 {
   // Nodes first
-  for (std::size_t n=0; n<this->_nodes.size(); n++)
+  for (auto n : index_range(_nodes))
     if (this->_nodes[n] != nullptr)
       this->_nodes[n]->set_id() = cast_int<dof_id_type>(n);
 
   // Elements next
-  for (std::size_t e=0; e<this->_elements.size(); e++)
+  for (auto e : index_range(_elements))
     if (this->_elements[e] != nullptr)
       this->_elements[e]->set_id() = cast_int<dof_id_type>(e);
 }
@@ -880,10 +908,30 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
                         // We need to set h_min to some value. It's too expensive to
                         // search for the element that actually contains this node,
                         // since that would require a PointLocator. As a result, we
-                        // just use the first element in the mesh to give us hmin.
-                        const Elem * first_active_elem = *mesh_array[i]->active_elements_begin();
-                        h_min = first_active_elem->hmin();
-                        h_min_updated = true;
+                        // just use the first (non-NodeElem!) element in the mesh to
+                        // give us hmin if it's never been set before.
+                        if (!h_min_updated)
+                          {
+                            for (const auto & elem : mesh_array[i]->active_element_ptr_range())
+                              {
+                                Real current_h_min = elem->hmin();
+                                if (current_h_min > 0.)
+                                  {
+                                    h_min = current_h_min;
+                                    h_min_updated = true;
+                                    break;
+                                  }
+                              }
+
+                            // If, after searching all the active elements, we did not update
+                            // h_min, give up and set h_min to 1 so that we don't repeat this
+                            // fruitless search
+                            if (!h_min_updated)
+                              {
+                                h_min_updated = true;
+                                h_min = 1.0;
+                              }
+                          }
                       }
                   }
               }
@@ -968,113 +1016,108 @@ void ReplicatedMesh::stitching_helper (const ReplicatedMesh * other_mesh,
             }
         }
 
-
+      // We require nanoflann for the "binary search" (really kd-tree)
+      // option to work. If it's not available, turn that option off,
+      // warn the user, and fall back on the N^2 search algorithm.
       if (use_binary_search)
         {
-          // Store points from both stitched faces in sorted vectors for faster
-          // searching later.
-          typedef std::vector<std::pair<Point, dof_id_type>> PointVector;
-          PointVector
-            this_sorted_bndry_nodes(this_boundary_node_ids.size()),
-            other_sorted_bndry_nodes(other_boundary_node_ids.size());
+#ifndef LIBMESH_HAVE_NANOFLANN
+          use_binary_search = false;
+          libmesh_warning("The use_binary_search option in the "
+                          "ReplicatedMesh stitching algorithms requires nanoflann "
+                          "support. Falling back on N^2 search algorithm.");
+#endif
+        }
 
-          // Comparison object that will be used later. So far, I've had reasonable success
-          // with TOLERANCE...
-          FuzzyPointCompare mein_comp(TOLERANCE);
+      if (this_boundary_node_ids.size())
+      {
+        if (use_binary_search)
+        {
+#ifdef LIBMESH_HAVE_NANOFLANN
+          typedef nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<Real, VectorOfNodesAdaptor>, VectorOfNodesAdaptor, 3> kd_tree_t;
 
-          // Create and sort the vectors we will use to do the geometric searching
+          // Create the dataset needed to build the kd tree with nanoflann
+          std::vector<std::pair<Point, dof_id_type>> this_mesh_nodes(this_boundary_node_ids.size());
+          std::set<dof_id_type>::iterator current_node = this_boundary_node_ids.begin();
+          for (unsigned int ctr = 0; current_node != this_boundary_node_ids.end(); ++current_node, ++ctr)
           {
-            std::set<dof_id_type> * set_array[2] = {&this_boundary_node_ids, &other_boundary_node_ids};
-            const ReplicatedMesh * mesh_array[2] = {this, other_mesh};
-            PointVector * vec_array[2]           = {&this_sorted_bndry_nodes, &other_sorted_bndry_nodes};
-
-            for (unsigned i=0; i<2; ++i)
-              {
-                std::set<dof_id_type>::iterator
-                  set_it     = set_array[i]->begin(),
-                  set_it_end = set_array[i]->end();
-
-                // Fill up the vector with the contents of the set...
-                for (unsigned ctr=0; set_it != set_it_end; ++set_it, ++ctr)
-                  {
-                    (*vec_array[i])[ctr] = std::make_pair(mesh_array[i]->point(*set_it), // The geometric point
-                                                          *set_it);                      // Its ID
-                  }
-
-                // Sort the vectors based on the FuzzyPointCompare struct op()
-                std::sort(vec_array[i]->begin(), vec_array[i]->end(), mein_comp);
-              }
+            this_mesh_nodes[ctr].first = this->point(*current_node);
+            this_mesh_nodes[ctr].second = *current_node;
           }
 
-          // Build up the node_to_node_map and node_to_elems_map using the sorted vectors of Points.
-          for (std::size_t i=0; i<this_sorted_bndry_nodes.size(); ++i)
+          VectorOfNodesAdaptor vec_nodes_adaptor(this_mesh_nodes);
+
+          kd_tree_t this_kd_tree(3, vec_nodes_adaptor, 10);
+          this_kd_tree.buildIndex();
+
+          // Storage for nearest neighbor in the loop below
+          std::vector<size_t> ret_index(1);
+          std::vector<Real> ret_dist_sqr(1);
+
+          // Loop over other mesh. For each node, find its nearest neighbor in this mesh, and fill in the maps.
+          for (auto node : other_boundary_node_ids)
+          {
+            const Real query_pt[] = {other_mesh->point(node)(0), other_mesh->point(node)(1), other_mesh->point(node)(2)};
+            this_kd_tree.knnSearch(&query_pt[0], 1, &ret_index[0], &ret_dist_sqr[0]);
+            if (ret_dist_sqr[0] < TOLERANCE*TOLERANCE)
             {
-              // Current point we're working on
-              Point this_point = this_sorted_bndry_nodes[i].first;
-
-              // FuzzyPointCompare does a fuzzy equality comparison internally to handle
-              // slight differences between the list of nodes on each mesh.
-              PointVector::iterator other_iter = Utility::binary_find(other_sorted_bndry_nodes.begin(),
-                                                                      other_sorted_bndry_nodes.end(),
-                                                                      this_point,
-                                                                      mein_comp);
-
-              // Not every node on this_sorted_bndry_nodes will necessarily be stitched, so
-              // if its pair is not found on other_mesh, just continue.
-              if (other_iter != other_sorted_bndry_nodes.end())
-                {
-                  // Check that the points do indeed match - should not be necessary unless something
-                  // is wrong with binary_find.  To be on the safe side, we'll check.
-                  {
-                    // Grab the other point from the iterator
-                    Point other_point = other_iter->first;
-
-                    if (!this_point.absolute_fuzzy_equals(other_point, tol*h_min))
-                      libmesh_error_msg("Error: mismatched points: " << this_point << " and " << other_point);
-                  }
-
-
-                  // Associate these two nodes in both the node_to_node_map and the other_to_this_node_map
-                  dof_id_type
-                    this_node_id = this_sorted_bndry_nodes[i].second,
-                    other_node_id = other_iter->second;
-                  node_to_node_map[this_node_id] = other_node_id;
-                  other_to_this_node_map[other_node_id] = this_node_id;
-                }
-
+              node_to_node_map[this_mesh_nodes[ret_index[0]].second] = node;
+              other_to_this_node_map[node] = this_mesh_nodes[ret_index[0]].second;
             }
+          }
+
+          // If the 2 maps don't have the same size, it means we have overwritten a value in node_to_node_map
+          // It means one node in this mesh is the nearest neighbor of several nodes in other mesh.
+          // Not possible !
+          if (node_to_node_map.size() != other_to_this_node_map.size())
+            libmesh_error_msg("Error: Found multiple matching nodes in stitch_meshes");
+#endif
         }
-      else
+        else
         {
+          // In the unlikely event that two meshes composed entirely of
+          // NodeElems are being stitched together, we will not have
+          // selected a valid h_min value yet, and the distance
+          // comparison below will be true for essentially any two
+          // nodes. In this case we simply fall back on an absolute
+          // distance check.
+          if (!h_min_updated)
+            {
+              libmesh_warning("No valid h_min value was found, falling back on "
+                              "absolute distance check in the N^2 search algorithm.");
+              h_min = 1.;
+            }
+
           // Otherwise, use a simple N^2 search to find the closest matching points. This can be helpful
           // in the case that we have tolerance issues which cause mismatch between the two surfaces
           // that are being stitched.
           for (const auto & this_node_id : this_boundary_node_ids)
+          {
+            Node & this_node = this->node_ref(this_node_id);
+
+            bool found_matching_nodes = false;
+
+            for (const auto & other_node_id : other_boundary_node_ids)
             {
-              Node & this_node = this->node_ref(this_node_id);
+              const Node & other_node = other_mesh->node_ref(other_node_id);
 
-              bool found_matching_nodes = false;
+              Real node_distance = (this_node - other_node).norm();
 
-              for (const auto & other_node_id : other_boundary_node_ids)
-                {
-                  const Node & other_node = other_mesh->node_ref(other_node_id);
+              if (node_distance < tol*h_min)
+              {
+                // Make sure we didn't already find a matching node!
+                if (found_matching_nodes)
+                  libmesh_error_msg("Error: Found multiple matching nodes in stitch_meshes");
 
-                  Real node_distance = (this_node - other_node).norm();
+                node_to_node_map[this_node_id] = other_node_id;
+                other_to_this_node_map[other_node_id] = this_node_id;
 
-                  if (node_distance < tol*h_min)
-                    {
-                      // Make sure we didn't already find a matching node!
-                      if (found_matching_nodes)
-                        libmesh_error_msg("Error: Found multiple matching nodes in stitch_meshes");
-
-                      node_to_node_map[this_node_id] = other_node_id;
-                      other_to_this_node_map[other_node_id] = this_node_id;
-
-                      found_matching_nodes = true;
-                    }
-                }
+                found_matching_nodes = true;
+              }
             }
+          }
         }
+      }
 
       // Build up the node_to_elems_map, using only one loop over other_mesh
       for (auto & el : other_mesh->element_ptr_range())

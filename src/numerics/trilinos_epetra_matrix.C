@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,6 +28,7 @@
 #include "libmesh/dense_matrix.h"
 #include "libmesh/parallel.h"
 #include "libmesh/sparsity_pattern.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -91,7 +92,7 @@ void EpetraMatrix<T>::update_sparsity_pattern (const SparsityPattern::Graph & sp
   // Epetra wants the total number of nonzeros, both local and remote.
   std::vector<int> n_nz_tot; /**/ n_nz_tot.reserve(n_nz.size());
 
-  for (numeric_index_type i=0; i<n_nz.size(); i++)
+  for (auto i : index_range(n_nz))
     n_nz_tot.push_back(std::min(n_nz[i] + n_oz[i], n));
 
   if (m==0)

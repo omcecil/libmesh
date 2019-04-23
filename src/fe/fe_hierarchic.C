@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -159,6 +159,7 @@ unsigned int hierarchic_n_dofs_at_node(const ElemType t,
           return 1;
           // Internal DoFs are associated with the elem, not its nodes
         case 2:
+          libmesh_assert_equal_to(t, EDGE3);
           return 0;
         default:
           libmesh_error_msg("ERROR: Invalid node ID " << n << " selected for EDGE2/3!");

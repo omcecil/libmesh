@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,21 @@
 // Local includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/compare_types.h"
+
+#ifdef LIBMESH_HAVE_METAPHYSICL
+namespace MetaPhysicL
+{
+template <typename, typename>
+class DualNumber;
+}
+namespace std
+{
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> norm(const MetaPhysicL::DualNumber<T, D> & in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> norm(MetaPhysicL::DualNumber<T, D> && in);
+}
+#endif
 
 namespace libMesh
 {
@@ -67,21 +82,26 @@ inner_product(const TypeNTensor<N,T> & a, const TypeNTensor<N,T2> & b)
 
 template<typename T>
 inline
-T norm_sq(T a) { return a*a; }
+T norm_sq(std::complex<T> a) { return std::norm(a); }
 
 template<typename T>
 inline
-T norm_sq(std::complex<T> a) { return std::norm(a); }
+auto norm_sq(const T & a) -> decltype(std::norm(a))
+{ return std::norm(a); }
 
 template <typename T>
 inline
-Real norm_sq(const TypeVector<T> & a)
+auto norm_sq(const TypeVector<T> & a) -> decltype(std::norm(T()))
 {return a.norm_sq();}
 
 template <typename T>
 inline
-Real norm_sq(const VectorValue<T> & a)
+auto norm_sq(const VectorValue<T> & a) -> decltype(std::norm(T()))
 {return a.norm_sq();}
+
+template<typename T>
+inline
+bool is_zero(const T & a){ return a.is_zero();}
 
 // Any tensor-rank-independent code will need to include
 // tensor_tools.h, so we define rank-increasing and real-to-number type

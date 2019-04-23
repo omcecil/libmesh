@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -725,7 +725,37 @@ public:
 #endif
 
   /**
-   * Prepare a newly created (or read) mesh for use.
+   * Register an integer datum (of type dof_id_type) to be added to
+   * each element in the mesh.
+   *
+   * \returns The index number for the new datum, or for the existing
+   * datum if one by the same name has already been added.
+   */
+  unsigned int add_elem_integer(const std::string & name);
+
+  /*
+   * \returns The index number for the named extra element integer
+   * datum, which must have already been added.
+   */
+  unsigned int get_elem_integer_index(const std::string & name) const;
+
+  /**
+   * Register an integer datum (of type dof_id_type) to be added to
+   * each node in the mesh.
+   *
+   * \returns The index number for the new datum, or for the existing
+   * datum if one by the same name has already been added.
+   */
+  unsigned int add_node_integer(const std::string & name);
+
+  /*
+   * \returns The index number for the named extra node integer
+   * datum, which must have already been added.
+   */
+  unsigned int get_node_integer_index(const std::string & name) const;
+
+  /**
+   * Prepare a newly ecreated (or read) mesh for use.
    * This involves 4 steps:
    *  1.) call \p find_neighbors()
    *  2.) call \p partition()
@@ -792,24 +822,47 @@ public:
   bool allow_remote_element_removal() const { return _allow_remote_element_removal; }
 
   /**
-   * If true is passed in then this mesh will no longer be
-   * (re)partitioned.  It would probably be a bad idea to call this on
-   * a DistributedMesh _before_ the first partitioning has
-   * happened... because no elements would get assigned to your
-   * processor pool.
+   * If true is passed in then the elements on this mesh will no
+   * longer be (re)partitioned, and the nodes on this mesh will only
+   * be repartitioned if they are found "orphaned" via coarsening or
+   * other removal of the last element responsible for their
+   * node/element processor id consistency.
    *
-   * \note Turning on skip_partitioning() can have adverse effects on
-   * your performance when using AMR... i.e. you could get large load
+   * \note It would probably be a bad idea to call this on a
+   * DistributedMesh _before_ the first partitioning has happened...
+   * because no elements would get assigned to your processor pool.
+   *
+   * \note Skipping partitioning can have adverse effects on your
+   * performance when using AMR... i.e. you could get large load
    * imbalances.  However you might still want to use this if the
    * communication and computation of the rebalance and repartition is
    * too high for your application.
    *
    * It is also possible, for backwards-compatibility purposes, to
-   * skip partitioning by resetting the partitioner() pointer for this
-   * mesh.
+   * skip noncritical partitioning by resetting the partitioner()
+   * pointer for this mesh.
    */
-  void skip_partitioning(bool skip) { _skip_partitioning = skip; }
-  bool skip_partitioning() const { return _skip_partitioning || !_partitioner.get(); }
+  void skip_noncritical_partitioning(bool skip)
+  { _skip_noncritical_partitioning = skip; }
+
+  bool skip_noncritical_partitioning() const
+  { return _skip_noncritical_partitioning || _skip_all_partitioning || !_partitioner.get(); }
+
+
+  /**
+   * If true is passed in then nothing on this mesh will be
+   * (re)partitioned.
+   *
+   * \note The caveats for skip_noncritical_partitioning() still
+   * apply, and removing elements from a mesh with this setting
+   * enabled can leave node processor ids in an inconsistent state
+   * (not matching any attached element), causing failures in other
+   * library code.  Do not use this setting along with element
+   * deletion or coarsening.
+   */
+  void skip_partitioning(bool skip) { _skip_all_partitioning = skip; }
+
+  bool skip_partitioning() const { return _skip_all_partitioning; }
 
   /**
    * Adds a functor which can specify ghosting requirements for use on
@@ -979,6 +1032,18 @@ public:
    * constructed.
    */
   std::unique_ptr<PointLocatorBase> sub_point_locator () const;
+
+  /**
+   * Set value used by PointLocatorBase::close_to_point_tol().
+   *
+   * Defaults to 0.0. If nonzero, calls close_to_point_tol() whenever
+   * a new PointLocator is built for use by this Mesh.  Since the Mesh
+   * controls the creation and destruction of the PointLocator, if
+   * there are any parameters we need to customize on it, the Mesh
+   * will need to know about them.
+   */
+  void set_point_locator_close_to_point_tol(Real val);
+  Real get_point_locator_close_to_point_tol() const;
 
   /**
    * Releases the current \p PointLocator object.
@@ -1194,16 +1259,22 @@ public:
   virtual element_iterator active_subdomain_elements_end (subdomain_id_type subdomain_id) = 0;
   virtual const_element_iterator active_subdomain_elements_begin (subdomain_id_type subdomain_id) const = 0;
   virtual const_element_iterator active_subdomain_elements_end (subdomain_id_type subdomain_id) const = 0;
+  virtual SimpleRange<element_iterator> active_subdomain_elements_ptr_range(subdomain_id_type subdomain_id) = 0;
+  virtual SimpleRange<const_element_iterator> active_subdomain_elements_ptr_range(subdomain_id_type subdomain_id) const = 0;
 
   virtual element_iterator active_subdomain_set_elements_begin (std::set<subdomain_id_type> ss) = 0;
   virtual element_iterator active_subdomain_set_elements_end (std::set<subdomain_id_type> ss) = 0;
   virtual const_element_iterator active_subdomain_set_elements_begin (std::set<subdomain_id_type> ss) const = 0;
   virtual const_element_iterator active_subdomain_set_elements_end (std::set<subdomain_id_type> ss) const = 0;
+  virtual SimpleRange<element_iterator> active_subdomain_set_elements_ptr_range(std::set<subdomain_id_type> ss) = 0;
+  virtual SimpleRange<const_element_iterator> active_subdomain_set_elements_ptr_range(std::set<subdomain_id_type> ss) const = 0;
 
   virtual element_iterator active_local_subdomain_elements_begin (subdomain_id_type subdomain_id) = 0;
   virtual element_iterator active_local_subdomain_elements_end (subdomain_id_type subdomain_id) = 0;
   virtual const_element_iterator active_local_subdomain_elements_begin (subdomain_id_type subdomain_id) const = 0;
   virtual const_element_iterator active_local_subdomain_elements_end (subdomain_id_type subdomain_id) const = 0;
+  virtual SimpleRange<element_iterator> active_local_subdomain_elements_ptr_range(subdomain_id_type subdomain_id) = 0;
+  virtual SimpleRange<const_element_iterator> active_local_subdomain_elements_ptr_range(subdomain_id_type subdomain_id) const = 0;
 
   virtual element_iterator local_level_elements_begin (unsigned int level) = 0;
   virtual element_iterator local_level_elements_end (unsigned int level) = 0;
@@ -1419,9 +1490,15 @@ protected:
 #endif
 
   /**
+   * If this is true then no partitioning should be done with the
+   * possible exception of orphaned nodes.
+   */
+  bool _skip_noncritical_partitioning;
+
+  /**
    * If this is true then no partitioning should be done.
    */
-  bool _skip_partitioning;
+  bool _skip_all_partitioning;
 
   /**
    * If this is true then renumbering will be kept to a minimum.
@@ -1459,6 +1536,18 @@ protected:
   unsigned char _spatial_dimension;
 
   /**
+   * The array of names for integer data associated with each element
+   * in the mesh
+   */
+  std::vector<std::string> _elem_integer_names;
+
+  /**
+   * The array of names for integer data associated with each node
+   * in the mesh
+   */
+  std::vector<std::string> _node_integer_names;
+
+  /**
    * The default geometric GhostingFunctor, used to implement standard
    * libMesh element ghosting behavior.  We use a base class pointer
    * here to avoid dragging in more header dependencies.
@@ -1473,6 +1562,12 @@ protected:
    * MeshBase because the cost is trivial.
    */
   std::set<GhostingFunctor *> _ghosting_functors;
+
+  /**
+   * If nonzero, we will call PointLocatorBase::set_close_to_point_tol()
+   * on any PointLocators that we create.
+   */
+  Real _point_locator_close_to_point_tol;
 
   /**
    * The partitioner class is a friend so that it can set

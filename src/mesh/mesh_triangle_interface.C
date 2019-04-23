@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -108,10 +108,8 @@ void TriangleInterface::triangulate()
   unsigned int n_hole_points = 0;
 
   if (have_holes)
-    {
-      for (std::size_t i=0; i<_holes->size(); ++i)
-        n_hole_points += (*_holes)[i]->n_points();
-    }
+    for (const auto & hole : *_holes)
+      n_hole_points += hole->n_points();
 
   // Triangle data structure for the mesh
   TriangleWrapper::triangulateio initial;
@@ -155,11 +153,11 @@ void TriangleInterface::triangulate()
   unsigned int hole_offset=0;
 
   if (have_holes)
-    for (std::size_t i=0; i<_holes->size(); ++i)
+    for (const auto & hole : *_holes)
       {
-        for (unsigned int ctr=0, h=0; h<(*_holes)[i]->n_points(); ctr+=2, ++h)
+        for (unsigned int ctr=0, h=0; h<hole->n_points(); ctr+=2, ++h)
           {
-            Point p = (*_holes)[i]->point(h);
+            Point p = hole->point(h);
 
             const unsigned int index0 = 2*hole_offset+ctr;
             const unsigned int index1 = 2*hole_offset+ctr+1;
@@ -170,11 +168,11 @@ void TriangleInterface::triangulate()
 
             // Set the points which define the segments
             initial.segmentlist[index0] = hole_offset+h;
-            initial.segmentlist[index1] = (h==(*_holes)[i]->n_points()-1) ? hole_offset : hole_offset+h+1; // wrap around
+            initial.segmentlist[index1] = (h == hole->n_points() - 1) ? hole_offset : hole_offset + h + 1; // wrap around
           }
 
         // Update the hole_offset for the next hole
-        hole_offset += (*_holes)[i]->n_points();
+        hole_offset += hole->n_points();
       }
 
 

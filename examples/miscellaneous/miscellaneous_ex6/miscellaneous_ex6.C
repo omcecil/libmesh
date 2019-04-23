@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -331,8 +331,6 @@ void add_cube_convex_hull_to_mesh(MeshBase & mesh,
       }
 #else
   // Avoid compiler warnings
-  libmesh_ignore(mesh);
-  libmesh_ignore(lower_limit);
-  libmesh_ignore(upper_limit);
+  libmesh_ignore(mesh, lower_limit, upper_limit);
 #endif // LIBMESH_HAVE_TETGEN
 }

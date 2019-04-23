@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -68,6 +68,7 @@ class MeshBase;
 class PeriodicBoundaryBase;
 class PeriodicBoundaries;
 class System;
+class NonlinearImplicitSystem;
 template <typename T> class DenseVectorBase;
 template <typename T> class DenseVector;
 template <typename T> class DenseMatrix;
@@ -439,6 +440,28 @@ public:
   void prepare_send_list ();
 
   /**
+   * Clears the \p _send_list vector. This should be done in order to completely
+   * rebuild the send_list from scratch rather than merely adding to the existing
+   * send_list.
+   */
+  void clear_send_list ()
+  {
+    _send_list.clear();
+  }
+
+  /**
+   * Clears the \p _send_list vector and then rebuilds it. This may be needed
+   * in special situations, for example when an algebraic coupling functor cannot
+   * be added to the \p DofMap until after it is completely setup. Then this method
+   * can be used to rebuild the send_list once the algebraic coupling functor is
+   * added. Note that while this will recommunicate constraints with the updated
+   * send_list, this does assume no new constraints have been added since the previous
+   * reinit_constraints call.
+   */
+  void reinit_send_list (MeshBase & mesh);
+
+
+  /**
    * \returns A constant reference to the \p _send_list for this processor.
    *
    * The \p _send_list contains the global indices of all the
@@ -489,11 +512,16 @@ public:
 
   /**
    * Specify whether or not we perform an extra (opt-mode enabled) check
-   * for cyclic constraints. If a cyclic constraint is present then
-   * the system constraints are not valid, so if \p error_on_cyclic_constraint
+   * for constraint loops. If a constraint loop is present then
+   * the system constraints are not valid, so if \p error_on_constraint_loop
    * is true we will throw an error in this case.
+   *
+   * \note We previously referred to these types of constraints as
+   * "cyclic" but that has now been deprecated, and these will now
+   * instead be referred to as "constraint loops" in libMesh.
    */
   void set_error_on_cyclic_constraint(bool error_on_cyclic_constraint);
+  void set_error_on_constraint_loop(bool error_on_constraint_loop);
 
   /**
    * \returns The \p VariableGroup description object for group \p g.
@@ -688,18 +716,40 @@ public:
 
   /**
    * Fills the vector \p di with the global degree of freedom indices
-   * for the node.
+   * for the \p node.
    */
   void dof_indices (const Node * const node,
                     std::vector<dof_id_type> & di) const;
 
   /**
    * Fills the vector \p di with the global degree of freedom indices
-   * for the node.   For one variable \p vn.
+   * for the \p node, for one variable \p vn.
    */
   void dof_indices (const Node * const node,
                     std::vector<dof_id_type> & di,
                     const unsigned int vn) const;
+
+  /**
+   * Appends to the vector \p di the global degree of freedom indices
+   * for \p elem.node_ref(n), for one variable \p vn.  On hanging
+   * nodes with both vertex and non-vertex DoFs, only those indices
+   * which are directly supported on \p elem are included.
+   */
+  void dof_indices (const Elem & elem,
+                    unsigned int n,
+                    std::vector<dof_id_type> & di,
+                    const unsigned int vn) const;
+
+  /**
+   * Appends to the vector \p di the old global degree of freedom
+   * indices for \p elem.node_ref(n), for one variable \p vn.  On
+   * hanging nodes with both vertex and non-vertex DoFs, only those
+   * indices which are directly supported on \p elem are included.
+   */
+  void old_dof_indices (const Elem & elem,
+                        unsigned int n,
+                        std::vector<dof_id_type> & di,
+                        const unsigned int vn) const;
 
   /**
    * Fills the vector \p di with the global degree of freedom indices
@@ -855,11 +905,21 @@ public:
   void process_constraints (MeshBase &);
 
   /**
-   * Throw an error if we detect and cyclic constraints, since these
-   * are not supported by libMesh and give erroneous results if they
-   * are present.
+   * Throw an error if we detect any constraint loops, i.e.
+   * A -> B -> C -> A
+   * that is, "dof A is constrained in terms of dof B which is
+   * constrained in terms of dof C which is constrained in terms of
+   * dof A", since these are not supported by libMesh and give
+   * erroneous results if they are present.
+   *
+   * \note The original "cyclic constraint" terminology was
+   * unfortunate since the word cyclic is used by some software to
+   * indicate an actual type of rotational/angular contraint and not
+   * (as here) a cyclic graph. The former nomenclature will eventually
+   * be deprecated in favor of "constraint loop".
    */
   void check_for_cyclic_constraints();
+  void check_for_constraint_loops();
 
   /**
    * Adds a copy of the user-defined row to the constraint matrix, using
@@ -917,6 +977,23 @@ public:
   void unstash_dof_constraints()
   {
     libmesh_assert(_dof_constraints.empty());
+    _dof_constraints.swap(_stashed_dof_constraints);
+  }
+
+  /**
+   * Similar to the stash/unstash_dof_constraints() API, but swaps
+   * _dof_constraints and _stashed_dof_constraints without asserting
+   * that the source or destination is empty first.
+   *
+   * \note There is an implicit assumption that swapping between sets
+   * of Constraints does not change the sparsity pattern or expand the
+   * send_list, since the only thing changed is the DofConstraints
+   * themselves.  This is intended to work for swapping between
+   * DofConstraints A and B, where A is used to define the send_list,
+   * and B is a subset of A.
+   */
+  void swap_dof_constraints()
+  {
     _dof_constraints.swap(_stashed_dof_constraints);
   }
 
@@ -1156,6 +1233,13 @@ public:
   void enforce_adjoint_constraints_exactly (NumericVector<Number> & v,
                                             unsigned int q) const;
 
+  void enforce_constraints_on_residual (const NonlinearImplicitSystem & system,
+                                        NumericVector<Number> * rhs,
+                                        NumericVector<Number> const * solution,
+                                        bool homogeneous = true) const;
+  void enforce_constraints_on_jacobian (const NonlinearImplicitSystem & system,
+                                        SparseMatrix<Number> * jac) const;
+
 
 
 #ifdef LIBMESH_ENABLE_PERIODIC
@@ -1350,6 +1434,16 @@ private:
                      ) const;
 
   /**
+   * Helper function that implements the element-nodal versions of
+   * dof_indices and old_dof_indices
+   */
+  void _node_dof_indices (const Elem & elem,
+                          unsigned int n,
+                          const DofObject & obj,
+                          std::vector<dof_id_type> & di,
+                          const unsigned int vn) const;
+
+  /**
    * Builds a sparsity pattern
    */
   std::unique_ptr<SparsityPattern::Build> build_sparsity(const MeshBase & mesh) const;
@@ -1488,9 +1582,10 @@ private:
 
   /**
    * This flag indicates whether or not we do an opt-mode check for
-   * the presence of cyclic constraints.
+   * the presence of constraint loops, i.e. cases where the constraint
+   * graph is cyclic.
    */
-  bool _error_on_cyclic_constraint;
+  bool _error_on_constraint_loop;
 
   /**
    * The finite element type for each variable.

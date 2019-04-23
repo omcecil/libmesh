@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -449,8 +449,8 @@ void Build::parallel_sync ()
   auto pid = comm.rank();
   auto num_procs = comm.size();
 
-  auto dof_tag = comm.get_unique_tag(998);
-  auto row_tag = comm.get_unique_tag(9998);
+  auto dof_tag = comm.get_unique_tag();
+  auto row_tag = comm.get_unique_tag();
 
   const auto n_global_dofs   = dof_map.n_dofs();
   const auto n_dofs_on_proc  = dof_map.n_dofs_on_processor(pid);

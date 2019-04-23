@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -1133,7 +1133,7 @@ unsigned int System::read_SCALAR_dofs (const unsigned int var,
 #ifdef LIBMESH_HAVE_MPI
   if (this->n_processors() > 1)
     {
-      const Parallel::MessageTag val_tag = this->comm().get_unique_tag(321);
+      const Parallel::MessageTag val_tag = this->comm().get_unique_tag();
 
       // Post the receive on the last processor
       if (this->processor_id() == (this->n_processors()-1))

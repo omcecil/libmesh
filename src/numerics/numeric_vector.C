@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -33,6 +33,7 @@
 #include "libmesh/tensor_tools.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
 #include "libmesh/enum_solver_package.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -82,7 +83,7 @@ template <typename T>
 void NumericVector<T>::insert (const T * v,
                                const std::vector<numeric_index_type> & dof_indices)
 {
-  for (numeric_index_type i=0; i<dof_indices.size(); i++)
+  for (auto i : index_range(dof_indices))
     this->set (dof_indices[i], v[i]);
 }
 
@@ -94,7 +95,7 @@ void NumericVector<T>::insert (const NumericVector<T> & V,
 {
   libmesh_assert_equal_to (V.size(), dof_indices.size());
 
-  for (numeric_index_type i=0; i<dof_indices.size(); i++)
+  for (auto i : index_range(dof_indices))
     this->set (dof_indices[i], V(i));
 }
 
@@ -362,7 +363,7 @@ template <typename T>
 void NumericVector<T>::add_vector (const T * v,
                                    const std::vector<numeric_index_type> & dof_indices)
 {
-  for (std::size_t i=0, n = dof_indices.size(); i != n; i++)
+  for (auto i : index_range(dof_indices))
     this->add (dof_indices[i], v[i]);
 }
 

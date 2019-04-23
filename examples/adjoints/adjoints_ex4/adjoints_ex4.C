@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -97,10 +97,7 @@ void write_output(EquationSystems & es,
                   FEMParameters & param)
 {
   // Ignore parameters when there are no output formats available.
-  libmesh_ignore(es);
-  libmesh_ignore(a_step);
-  libmesh_ignore(solution_type);
-  libmesh_ignore(param);
+  libmesh_ignore(es, a_step, solution_type, param);
 
 #ifdef LIBMESH_HAVE_GMV
   if (param.output_gmv)

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -517,6 +517,18 @@ public:
   void interior_rate(unsigned int var,
                      unsigned int qp,
                      OutputType & u) const;
+
+
+  /**
+   * \returns The time derivative (rate) of the solution gradient
+   * of variable \p var at the quadrature point \p qp on the current
+   * element interior.
+   */
+  template<typename OutputType>
+  void interior_rate_gradient(unsigned int var,
+                              unsigned int qp,
+                              OutputType & u) const;
+
 
   /**
    * \returns The time derivative (rate) of the solution variable

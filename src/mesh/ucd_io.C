@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,7 +19,6 @@
 // C++ includes
 #include <fstream>
 
-
 // Local includes
 #include "libmesh/libmesh_config.h"
 #include "libmesh/ucd_io.h"
@@ -31,6 +30,7 @@
 #include "libmesh/cell_prism6.h"
 #include "libmesh/enum_io_package.h"
 #include "libmesh/enum_elem_type.h"
+#include "libmesh/int_range.h"
 
 #ifdef LIBMESH_HAVE_GZSTREAM
 # include "libmesh/ignore_warnings.h" // shadowing in gzstream.h

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -48,8 +48,11 @@ class Elem;
 class PointLocatorBase;
 
 /**
- * This is the \p MeshRefinement class.  This class implements
- * adaptive mesh refinement algorithms for a \p MeshBase.
+ * \brief Implements (adaptive) mesh refinement algorithms for a \p MeshBase.
+ *
+ * \note Before using any of the algorithms in this class on a distributed
+ * mesh, the user needs to make sure that the mesh is prepared
+ * (MeshBase::prepare_for_use).
  *
  * \author Benjamin S. Kirk
  * \date 2002-2007

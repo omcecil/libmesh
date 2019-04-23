@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,7 @@
 #include "libmesh/postscript_io.h"
 #include "libmesh/mesh_tools.h"
 #include "libmesh/elem.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -252,7 +253,7 @@ void PostscriptIO::plot_quadratic_elem(const Elem * elem)
       this->_compute_edge_bezier_coeffs(side.get());
 
       // Print curveto path to file
-      for (std::size_t i=0; i<_bezier_coeffs.size(); ++i)
+      for (auto i : index_range(_bezier_coeffs))
         _out << _bezier_coeffs[i](0) << " " << _bezier_coeffs[i](1) << " ";
       _out << " cs\n";
     }

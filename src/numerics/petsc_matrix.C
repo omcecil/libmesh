@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -1204,6 +1204,11 @@ bool PetscMatrix<T>::closed() const
   return (assembled == PETSC_TRUE);
 }
 
+template <typename T>
+void PetscMatrix<T>::set_destroy_mat_on_exit(bool destroy)
+{
+  this->_destroy_mat_on_exit = destroy;
+}
 
 
 template <typename T>

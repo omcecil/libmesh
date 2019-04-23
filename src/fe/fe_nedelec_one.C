@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -603,6 +603,8 @@ template <>
 RealGradient FE<0,NEDELEC_ONE>::shape_deriv(const Elem *,const Order,const unsigned int,
                                             const unsigned int,const Point &)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 template <>
 RealGradient FE<0,NEDELEC_ONE>::shape_second_deriv(const ElemType, const Order,const unsigned int,
                                                    const unsigned int,const Point &)
@@ -611,6 +613,8 @@ template <>
 RealGradient FE<0,NEDELEC_ONE>::shape_second_deriv(const Elem *,const Order,const unsigned int,
                                                    const unsigned int,const Point &)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
+
+#endif
 
 template <>
 RealGradient FE<1,NEDELEC_ONE>::shape(const ElemType, const Order,const unsigned int,const Point &)
@@ -626,6 +630,8 @@ template <>
 RealGradient FE<1,NEDELEC_ONE>::shape_deriv(const Elem *,const Order,const unsigned int,
                                             const unsigned int,const Point &)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 template <>
 RealGradient FE<1,NEDELEC_ONE>::shape_second_deriv(const ElemType, const Order,const unsigned int,
                                                    const unsigned int,const Point &)
@@ -634,5 +640,7 @@ template <>
 RealGradient FE<1,NEDELEC_ONE>::shape_second_deriv(const Elem *,const Order,const unsigned int,
                                                    const unsigned int,const Point &)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
+
+#endif
 
 } // namespace libMesh

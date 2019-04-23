@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -60,14 +60,21 @@ typedef int16_t boundary_id_type;
 
 // How many bytes do we need to specify DoFObjects?  By default we'll
 // allow for a few billion (each) nodes & elements.
+//
+// We'll need a sign bit in some internal buffers, so let's also
+// define a signed type that we can convert to without loss.
 #if LIBMESH_DOF_ID_BYTES == 1
 typedef uint8_t dof_id_type;
+typedef  int8_t dof_id_signed_type;
 #elif LIBMESH_DOF_ID_BYTES == 2
 typedef uint16_t dof_id_type;
+typedef  int16_t dof_id_signed_type;
 #elif LIBMESH_DOF_ID_BYTES == 8
 typedef uint64_t dof_id_type;
+typedef  int64_t dof_id_signed_type;
 #else // LIBMESH_DOF_ID_BYTES = 4 (default)
 typedef uint32_t dof_id_type;
+typedef  int32_t dof_id_signed_type;
 #endif
 
 
@@ -92,17 +99,19 @@ typedef uint64_t unique_id_type;
 typedef dof_id_type numeric_index_type;
 
 
-// Define processor id storage type.  We default to short to save
-// space, but expanding to support more than 2^16-2 procs should work
-// too.
+// Define processor id storage type.
 #if LIBMESH_PROCESSOR_ID_BYTES == 1
 typedef uint8_t processor_id_type;
+#elif LIBMESH_PROCESSOR_ID_BYTES == 2
+typedef uint16_t processor_id_type;
 #elif LIBMESH_PROCESSOR_ID_BYTES == 4
-typedef uint32_t processor_id_type;
+typedef uint32_t processor_id_type; // default
 #elif LIBMESH_PROCESSOR_ID_BYTES == 8
 typedef uint64_t processor_id_type;
-#else // LIBMESH_PROCESSOR_ID_BYTES = 2 (default)
-typedef uint16_t processor_id_type;
+#else
+// We should not get here: it's not currently possible to set any
+// other size.
+DIE A HORRIBLE DEATH HERE...
 #endif
 
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -70,17 +70,17 @@ void SparseMatrix<T>::add_block_matrix (const DenseMatrix<T> & dm,
   rows.reserve(blocksize*brows.size());
   cols.reserve(blocksize*bcols.size());
 
-  for (std::size_t ib=0; ib<brows.size(); ib++)
+  for (auto & row : brows)
     {
-      numeric_index_type i=brows[ib]*blocksize;
+      numeric_index_type i = row * blocksize;
 
       for (unsigned int v=0; v<blocksize; v++)
         rows.push_back(i++);
     }
 
-  for (std::size_t jb=0; jb<bcols.size(); jb++)
+  for (auto & col : bcols)
     {
-      numeric_index_type j=bcols[jb]*blocksize;
+      numeric_index_type j = col * blocksize;
 
       for (unsigned int v=0; v<blocksize; v++)
         cols.push_back(j++);

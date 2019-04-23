@@ -123,6 +123,7 @@ BUILT_SOURCES = \
         elem.h \
         elem_cutter.h \
         elem_hash.h \
+        elem_internal.h \
         elem_quality.h \
         elem_range.h \
         face.h \
@@ -212,6 +213,7 @@ BUILT_SOURCES = \
         coupling_matrix.h \
         dense_matrix.h \
         dense_matrix_base.h \
+        dense_matrix_base_impl.h \
         dense_matrix_impl.h \
         dense_submatrix.h \
         dense_subvector.h \
@@ -505,16 +507,6 @@ exodusII.h: $(top_srcdir)/contrib/exodusii/v5.22/exodus/cbind/include/exodusII.h
 
   BUILT_SOURCES  += exodusII.h
   DISTCLEANFILES += exodusII.h
-
-endif
-
-if LIBMESH_ENABLE_NETCDF_V3
-
-netcdf.h: $(top_srcdir)/contrib/netcdf/v3/netcdf.h
-	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
-
-  BUILT_SOURCES  += netcdf.h
-  DISTCLEANFILES += netcdf.h
 
 endif
 
@@ -900,6 +892,9 @@ elem_cutter.h: $(top_srcdir)/include/geom/elem_cutter.h
 elem_hash.h: $(top_srcdir)/include/geom/elem_hash.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
+elem_internal.h: $(top_srcdir)/include/geom/elem_internal.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
 elem_quality.h: $(top_srcdir)/include/geom/elem_quality.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
@@ -1165,6 +1160,9 @@ dense_matrix.h: $(top_srcdir)/include/numerics/dense_matrix.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 dense_matrix_base.h: $(top_srcdir)/include/numerics/dense_matrix_base.h
+	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
+
+dense_matrix_base_impl.h: $(top_srcdir)/include/numerics/dense_matrix_base_impl.h
 	$(AM_V_GEN)rm -f $@ && $(LN_S) -f $< $@
 
 dense_matrix_impl.h: $(top_srcdir)/include/numerics/dense_matrix_impl.h

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -37,6 +37,7 @@
 #include "libmesh/mesh_tools.h"
 #include "libmesh/partitioner.h"
 #include "libmesh/libmesh_logging.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -769,8 +770,8 @@ void XdrIO::write_serialized_nodes (Xdr & io, const dof_id_type max_node_id) con
         coord_request_handles(this->n_processors()-1);
 
       Parallel::MessageTag
-        id_tag    = mesh.comm().get_unique_tag(1234),
-        coord_tag = mesh.comm().get_unique_tag(1235);
+        id_tag    = mesh.comm().get_unique_tag(),
+        coord_tag = mesh.comm().get_unique_tag();
 
       // Post the receives -- do this on processor 0 only.
       if (this->processor_id() == 0)
@@ -827,7 +828,7 @@ void XdrIO::write_serialized_nodes (Xdr & io, const dof_id_type max_node_id) con
           coords.resize (3*tot_id_size, std::numeric_limits<Real>::quiet_NaN());
 
           for (unsigned int pid=0; pid<this->n_processors(); pid++)
-            for (std::size_t idx=0; idx<recv_ids[pid].size(); idx++)
+            for (auto idx : index_range(recv_ids[pid]))
               {
                 libmesh_assert_less_equal(first_node, recv_ids[pid][idx]);
                 const std::size_t local_idx = recv_ids[pid][idx] - first_node;
@@ -908,8 +909,8 @@ void XdrIO::write_serialized_nodes (Xdr & io, const dof_id_type max_node_id) con
         id_request_handles(this->n_processors()-1);
 
       Parallel::MessageTag
-        unique_id_tag = mesh.comm().get_unique_tag(1236),
-        id_tag    = mesh.comm().get_unique_tag(1237);
+        unique_id_tag = mesh.comm().get_unique_tag(),
+        id_tag    = mesh.comm().get_unique_tag();
 
       // Post the receives -- do this on processor 0 only.
       if (this->processor_id() == 0)
@@ -966,7 +967,7 @@ void XdrIO::write_serialized_nodes (Xdr & io, const dof_id_type max_node_id) con
           unique_ids.resize(tot_id_size, unique_id_type(-1));
 
           for (unsigned int pid=0; pid<this->n_processors(); pid++)
-            for (std::size_t idx=0; idx<recv_ids[pid].size(); idx++)
+            for (auto idx : index_range(recv_ids[pid]))
               {
                 libmesh_assert_less_equal(first_node, recv_ids[pid][idx]);
                 const std::size_t local_idx = recv_ids[pid][idx] - first_node;

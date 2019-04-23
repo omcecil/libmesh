@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/elem.h"
 #include "libmesh/metis_partitioner.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -56,14 +57,12 @@ void SubdomainPartitioner::_do_partition (MeshBase & mesh,
 
   // For each chunk, construct an iterator range for the set of
   // subdomains in question, and pass it to the internal Partitioner.
-  for (std::size_t c=0; c<chunks.size(); ++c)
-    {
-      MeshBase::element_iterator
-        it = mesh.active_subdomain_set_elements_begin(chunks[c]),
-        end = mesh.active_subdomain_set_elements_end(chunks[c]);
-
-      _internal_partitioner->partition_range(mesh, it, end, n);
-    }
+  for (const auto & id_set : chunks)
+    _internal_partitioner->
+      partition_range(mesh,
+                      mesh.active_subdomain_set_elements_begin(id_set),
+                      mesh.active_subdomain_set_elements_end(id_set),
+                      n);
 }
 
 } // namespace libMesh

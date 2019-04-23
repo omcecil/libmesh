@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -129,6 +129,23 @@ class Elem;
  * Any unsupported variable dofs associated with the element's nodes
  * (e.g. subdomain-restricted variables on a neighboring subdomain)
  * will be unaffected.
+ *
+ * Typical usage of the GhostingFunctor would be to add a geometric ghosting
+ * functor before the mesh preparation is completed; progmatically, this would
+ * be before MeshBase::prepare_for_use() is called, but many different libMesh
+ * idioms internally call this function. The algebraic and coupling ghosting
+ * functors normally are added before EquationSystems::init() is called.
+ * However, in some circumstances, solution evaluation may be needed within the
+ * GhostingFunctor in order to determine the ghosting, in which case the appropriate
+ * functor would need to be added after EquationSystems::init(). In this case,
+ * the user will need to reinitialize certain parts of the DofMap for
+ * algebraic and coupling functors. For algebraic ghosting functors, the
+ * user will need to call DofMap::reinit_send_list() and then reinitialize
+ * any NumericVectors that are GHOSTED, e.g. the System::current_local_solution.
+ * For coupling ghosting, the user will also need to recompute the sparsity
+ * pattern via DofMap::clear_sparsity() and then DofMap::compute_sparsity() and
+ * then reinitialize any SparseMatrix objects attached to the System, e.g.
+ * the system.get_matrix("System Matrix").
  *
  * \author Roy H. Stogner
  * \date 2016

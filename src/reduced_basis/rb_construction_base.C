@@ -31,9 +31,9 @@
 #include "libmesh/equation_systems.h"
 #include "libmesh/parallel.h"
 #include "libmesh/petsc_linear_solver.h"
-// Includes for template instantiation
 #include "libmesh/condensed_eigen_system.h"
 #include "libmesh/linear_implicit_system.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -147,6 +147,11 @@ RBParameters RBConstructionBase<Base>::get_params_from_training_set(unsigned int
       Real param_value = libmesh_real((*(pr.second))(index));
       params.set_value(param_name, param_value);
     }
+
+  // Add potential extra values
+  const auto & mine = get_parameters();
+  for (const auto & pr : as_range(mine.extra_begin(), mine.extra_end()))
+    params.set_extra_value(pr.first, pr.second);
 
   return params;
 }
@@ -380,7 +385,7 @@ void RBConstructionBase<Base>::generate_training_parameters_random(const Paralle
       NumericVector<Number> * training_vector = pr.second.get();
 
       numeric_index_type first_index = training_vector->first_local_index();
-      for (numeric_index_type i=0; i<training_vector->local_size(); i++)
+      for (auto i : IntRange<numeric_index_type>(0, training_vector->local_size()))
         {
           numeric_index_type index = first_index + i;
           Real random_number = static_cast<Real>(std::rand()) / RAND_MAX; // in range [0,1]
@@ -462,7 +467,7 @@ void RBConstructionBase<Base>::generate_training_parameters_deterministic(const 
       Real max_param = max_parameters.begin()->second;
 
       numeric_index_type first_index = training_vector->first_local_index();
-      for (numeric_index_type i=0; i<training_vector->local_size(); i++)
+      for (auto i : IntRange<numeric_index_type>(0, training_vector->local_size()))
         {
           numeric_index_type index = first_index+i;
           if (use_log_scaling)

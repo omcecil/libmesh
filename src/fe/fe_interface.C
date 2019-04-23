@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,6 +26,7 @@
 #include "libmesh/enum_fe_family.h"
 #include "libmesh/enum_order.h"
 #include "libmesh/enum_elem_type.h"
+#include "libmesh/string_to_enum.h"
 
 namespace libMesh
 {
@@ -470,6 +471,18 @@ unsigned int FEInterface::n_dofs(const unsigned int dim,
 
 
 
+unsigned int
+FEInterface::n_dofs (const unsigned int dim,
+                     const FEType & fe_t,
+                     const Elem * elem)
+{
+  FEType p_refined_fe_t = fe_t;
+  p_refined_fe_t.order = static_cast<Order>(p_refined_fe_t.order + elem->p_level());
+  return FEInterface::n_dofs(dim, p_refined_fe_t, elem->type());
+}
+
+
+
 unsigned int FEInterface::n_dofs_at_node(const unsigned int dim,
                                          const FEType & fe_t,
                                          const ElemType t,
@@ -803,6 +816,76 @@ void FEInterface::shape<RealGradient>(const unsigned int dim,
   return;
 }
 
+Real FEInterface::shape_deriv(const unsigned int dim,
+                              const FEType & fe_t,
+                              const ElemType t,
+                              const unsigned int i,
+                              const unsigned int j,
+                              const Point & p)
+{
+  libmesh_assert_greater (dim,j);
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+
+  if (is_InfFE_elem(t)){
+    return ifem_shape_deriv(dim, fe_t, t, i, j, p);
+  }
+
+#endif
+
+  const Order o = fe_t.order;
+
+  switch(dim)
+    {
+    case 0:
+      fe_family_switch (0, shape_deriv(t, o, i, j, p), return , ;);
+    case 1:
+      fe_family_switch (1, shape_deriv(t, o, i, j, p), return , ;);
+    case 2:
+      fe_family_switch (2, shape_deriv(t, o, i, j, p), return  , ;);
+    case 3:
+      fe_family_switch (3, shape_deriv(t, o, i, j, p), return , ;);
+    default:
+      libmesh_error_msg("Invalid dimension = " << dim);
+    }
+  return 0;
+}
+
+
+Real FEInterface::shape_deriv(const unsigned int dim,
+                              const FEType & fe_t,
+                              const Elem * elem,
+                              const unsigned int i,
+                              const unsigned int j,
+                              const Point & p)
+{
+  libmesh_assert_greater (dim,j);
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+
+  if (elem->infinite()){
+    return ifem_shape_deriv(dim, fe_t, elem, i, j, p);
+  }
+
+#endif
+
+  const Order o = fe_t.order;
+
+  switch(dim)
+    {
+    case 0:
+      fe_family_switch (0, shape_deriv(elem, o, i, j, p), return , ;);
+    case 1:
+      fe_family_switch (1, shape_deriv(elem, o, i, j, p), return , ;);
+    case 2:
+      fe_family_switch (2, shape_deriv(elem, o, i, j, p), return , ;);
+    case 3:
+      fe_family_switch (3, shape_deriv(elem, o, i, j, p), return , ;);
+    default:
+      libmesh_error_msg("Invalid dimension = " << dim);
+    }
+  return 0;
+}
+
+
 template<>
 void FEInterface::shape<RealGradient>(const unsigned int dim,
                                       const FEType & fe_t,
@@ -850,20 +933,59 @@ void FEInterface::compute_data(const unsigned int dim,
 
 #endif
 
-  FEType p_refined = fe_t;
-  p_refined.order = static_cast<Order>(p_refined.order + elem->p_level());
-
-  const unsigned int n_dof = n_dofs (dim, p_refined, elem->type());
-  const Point &       p     = data.p;
+  const unsigned int n_dof = n_dofs (dim, fe_t, elem);
+  const Point & p = data.p;
   data.shape.resize(n_dof);
+
+  if (data.need_derivative())
+    {
+      data.dshape.resize(n_dof);
+      data.local_transform.resize(dim);
+
+      for (unsigned int d=0; d<dim; d++)
+        data.local_transform[d].resize(dim);
+
+      UniquePtr<FEBase> fe (FEBase::build(dim, fe_t));
+      std::vector<Point> pt(1);
+      pt[0]=p;
+      fe->get_dphideta(); // to compute the map
+      fe->reinit(elem, &pt);
+
+      // compute the reference->physical map.
+      data.local_transform[0][0] = fe->get_dxidx()[0];
+      if (dim > 1)
+        {
+          data.local_transform[1][0] = fe->get_detadx()[0];
+          data.local_transform[1][1] = fe->get_detady()[0];
+          data.local_transform[0][1] = fe->get_dxidy()[0];
+          if (dim > 2)
+            {
+              data.local_transform[2][0] = fe->get_dzetadx()[0];
+              data.local_transform[2][1] = fe->get_dzetady()[0];
+              data.local_transform[2][2] = fe->get_dzetadz()[0];
+              data.local_transform[1][2] = fe->get_detadz()[0];
+              data.local_transform[0][2] = fe->get_dxidz()[0];
+            }
+        }
+    }
 
   // set default values for all the output fields
   data.init();
 
   for (unsigned int n=0; n<n_dof; n++)
-    data.shape[n] = shape(dim, p_refined, elem, n, p);
-
-  return;
+    {
+      // Here we pass the original fe_t object. Additional p-levels
+      // (if any) are handled internally by the shape() and
+      // shape_deriv() functions since they have access to the elem
+      // pointer. Note that we are already using the n_dof value
+      // appropriate to the elevated p-level.
+      data.shape[n] = shape(dim, fe_t, elem, n, p);
+      if (data.need_derivative())
+        {
+          for (unsigned int j=0; j<dim; j++)
+            data.dshape[n](j) = shape_deriv(dim, fe_t, elem, n, j, p);
+        }
+    }
 }
 
 
@@ -1465,5 +1587,46 @@ unsigned int FEInterface::n_vec_dim (const MeshBase & mesh,
       return 1;
     }
 }
+
+
+
+FEContinuity FEInterface::get_continuity(const FEType & fe_type)
+{
+  switch (fe_type.family)
+    {
+      // Discontinuous elements
+    case MONOMIAL:
+    case L2_HIERARCHIC:
+    case L2_LAGRANGE:
+    case XYZ:
+    case SCALAR:
+      return DISCONTINUOUS;
+
+      // C0 elements
+    case LAGRANGE:
+    case HIERARCHIC:
+    case BERNSTEIN:
+    case SZABAB:
+    case INFINITE_MAP:
+    case JACOBI_20_00:
+    case JACOBI_30_00:
+    case LEGENDRE:
+    case LAGRANGE_VEC:
+      return C_ZERO;
+
+      // C1 elements
+    case CLOUGH:
+    case HERMITE:
+    case SUBDIVISION:
+      return C_ONE;
+
+    case NEDELEC_ONE:
+      return H_CURL;
+
+    default:
+      libmesh_error_msg("Unknown FE Family " << Utility::enum_to_string(fe_type.family));
+    }
+}
+
 
 } // namespace libMesh

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2018 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -170,14 +170,14 @@ public:
    * \deprecated Use the norm_sq() function instead.
    */
 #ifdef LIBMESH_ENABLE_DEPRECATED
-  Real size_sq() const { libmesh_deprecated(); return 0.;}
+  auto size_sq() const -> decltype(std::norm(T())) { libmesh_deprecated(); return 0.;}
 #endif
 
   /**
    * \returns The Frobenius norm of the tensor squared, i.e. the sum of the
    * entry magnitudes squared.
    */
-  Real norm_sq() const { return 0.;}
+  auto norm_sq() const -> decltype(std::norm(T())) { return 0.;}
 
   /**
    * \returns \p true if two tensors are equal, \p false otherwise.
