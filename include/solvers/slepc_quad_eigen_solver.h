@@ -79,7 +79,7 @@ public:
    * the eigenpairs for the quadratic eigenproblem
    * defined by the matrix_A, matrix_B, and matrix_C
    * with the problem formulated as
-   * (lam^2*A + lam*B + C)*x = 0
+   * (A + lam*B + lam^2*C)*x = 0
    * which are of type SparseMatrix. The argument
    * \p nev is the number of eigenpairs to be computed
    * and \p ncv is the number of basis vectors to be
