@@ -4,11 +4,14 @@ export PETSC_DIR=/home/omc0001/soft/petsc
 export PETSC_ARCH=arch-debug-complex
 export SLEPC_DIR=/home/omc0001/soft/slepc
 export SLEPC_ARCH=arch-debug-complex
+export libmesh_CXXFLAGS="-march=native"
+export libmesh_CFLAGS="-march=native"
 
 ../libmesh/configure \
 --prefix=/home/omc0001/soft/my_libmesh/arch-debug-complex \
 --with-methods="dbg" \
 --enable-complex \
 --with-mpi=/home/omc0001/soft/mpich/mpich-3.2.1-install \
---disable-trilinos
+--disable-trilinos \
+--disable-metaphysical
 

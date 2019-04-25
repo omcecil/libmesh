@@ -383,6 +383,29 @@ std::pair<Real, Real> SlepcQuadEigenSolver<T>::get_eigenpair(dof_id_type i,
   return std::make_pair(re, im);
 }
 
+template <typename T>
+std::pair<Real, Real> SlepcQuadEigenSolver<T>::get_eigenvalue(dof_id_type i)
+{
+  PetscErrorCode ierr=0;
+
+  PetscReal re, im;
+
+  // real and imaginary part of the ith eigenvalue.
+  PetscScalar kr, ki;
+
+  ierr = PEPGetEigenpair(_pep, i, &kr, &ki, PETSC_NULL, PETSC_NULL);
+  LIBMESH_CHKERR(ierr);
+
+#ifdef LIBMESH_USE_COMPLEX_NUMBERS
+  re = PetscRealPart(kr);
+  im = PetscImaginaryPart(kr);
+#else
+  re = kr;
+  im = ki;
+#endif
+
+  return std::make_pair(re, im);
+}
 
 template <typename T>
 Real SlepcQuadEigenSolver<T>::get_relative_error(unsigned int i)

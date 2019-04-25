@@ -107,6 +107,12 @@ public:
   get_eigenpair (dof_id_type i,
                  NumericVector<T> & solution_in) libmesh_override;
 
+ /**
+   * Same as above, but does not copy the eigenvector.
+   */
+  virtual std::pair<Real, Real>
+  get_eigenvalue (dof_id_type i) override;
+
   /**
    * @returns the relative error ||A*x-lambda*x||/|lambda*x|
    * of the ith eigenpair. (or the equivalent for a general eigenvalue problem)

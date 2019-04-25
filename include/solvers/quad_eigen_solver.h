@@ -152,6 +152,13 @@ public:
                                                NumericVector<T> & solution) = 0;
 
   /**
+   * \returns The \p ith eigenvalue (real and imaginary part).
+   *
+   * Same as above function, except it does not copy the eigenvector.
+   */
+  virtual std::pair<Real, Real> get_eigenvalue (dof_id_type i) = 0;
+
+  /**
    * Provide one basis vector for the initial guess
    */
   virtual void set_initial_space(NumericVector<T> & initial_space_in) = 0;

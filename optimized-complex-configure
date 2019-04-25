@@ -4,6 +4,8 @@ export PETSC_DIR=/home/omc0001/soft/petsc
 export PETSC_ARCH=arch-optimized-complex
 export SLEPC_DIR=/home/omc0001/soft/slepc
 export SLEPC_ARCH=arch-optimized-complex
+export libmesh_CXXFLAGS="-march=native"
+export libmesh_CFLAGS="-march=native"
 
 ../libmesh/configure \
 --prefix=/home/omc0001/soft/my_libmesh/arch-optimized-complex \
