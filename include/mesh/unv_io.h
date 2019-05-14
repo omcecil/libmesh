@@ -201,6 +201,7 @@ private:
    * label for the groups dataset
    */
   static const std::string _groups_dataset_label;
+  static const std::string _groups_dataset_label2;
 
   /**
    * Map UNV element IDs to libmesh element IDs.

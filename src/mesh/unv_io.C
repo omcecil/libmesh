@@ -57,6 +57,7 @@ namespace libMesh
 const std::string UNVIO::_nodes_dataset_label    = "2411";
 const std::string UNVIO::_elements_dataset_label = "2412";
 const std::string UNVIO::_groups_dataset_label   = "2467";
+const std::string UNVIO::_groups_dataset_label2   = "2477";
 
 
 
@@ -181,7 +182,7 @@ void UNVIO::read_implementation (std::istream & in_stream)
               }
 
             // Parse the groups section
-            else if (current_line == _groups_dataset_label &&
+            else if ((current_line == _groups_dataset_label || current_line ==_groups_dataset_label2) &&
                      old_line == "-1")
               {
                 // The current implementation requires the nodes and
@@ -651,6 +652,15 @@ void UNVIO::elements_in (std::istream & in_file)
       switch (fe_descriptor_id)
         {
         case 11: // Rod
+          {
+            elem = new Edge2;
+
+            assign_elem_nodes[1]=0;
+            assign_elem_nodes[2]=1;
+            break;
+          }
+
+	case 21: // GMSH output uses linear beam instead of rod
           {
             elem = new Edge2;
 

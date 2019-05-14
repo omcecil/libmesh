@@ -159,12 +159,12 @@ SlepcQuadEigenSolver<T>::_solve_quadratic_helper (Mat mat_A,
   ierr = PEPSetFromOptions (_pep);
   LIBMESH_CHKERR(ierr);
 
-  // // If the SolverConfiguration object is provided, use it to override
-  // // solver options.
-  // if (this->_solver_configuration)
-  //   {
-  //     this->_solver_configuration->configure_solver();
-  //   }
+  // If the SolverConfiguration object is provided, use it to override
+  // solver options.
+  if (this->_solver_configuration)
+    {
+      this->_solver_configuration->configure_solver();
+    }
 
   // Solve the eigenproblem.
   ierr = PEPSolve (_pep);
