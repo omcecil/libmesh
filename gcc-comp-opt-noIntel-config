@@ -1,0 +1,13 @@
+#!/bin/bash
+
+export PETSC_DIR=/home/omc0001/soft/petsc
+export PETSC_ARCH=arch-gcc-comp-opt-noIntel
+export SLEPC_DIR=/home/omc0001/soft/slepc
+export SLEPC_ARCH=arch-gcc-comp-opt-noIntel
+
+../libmesh/configure \
+--prefix=/home/omc0001/soft/libmesh/arch-gcc-comp-opt-noIntel \
+--with-methods="opt" \
+--enable-complex \
+--with-mpi=/tools/mpich-3.2.1 \
+--disable-trilinos
