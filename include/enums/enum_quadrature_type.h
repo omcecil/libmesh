@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -43,6 +43,7 @@ enum QuadratureType : int {
                      QGAUSS_LOBATTO    = 9,
                      QCLOUGH           = 21,
                      QCOMPOSITE        = 31,
+                     QNODAL            = 32,
                      // Invalid
                      INVALID_Q_RULE    = 127};
 }

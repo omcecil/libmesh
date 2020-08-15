@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,8 @@
 // Local Includes
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_vector_base.h"
+#include "libmesh/dense_vector.h"
+#include "libmesh/int_range.h"
 
 // C++ includes
 #include <iomanip> // for std::setw()
@@ -30,7 +32,15 @@
 namespace libMesh
 {
 
-
+  template <typename T>
+  DenseVector<T>
+  DenseMatrixBase<T>::diagonal() const
+  {
+    DenseVector<T> ret(_m);
+    for (decltype(_m) i = 0; i < _m; ++i)
+      ret(i) = el(i, i);
+    return ret;
+  }
 
   template<typename T>
   void DenseMatrixBase<T>::multiply (DenseMatrixBase<T> & M1,
@@ -71,14 +81,14 @@ namespace libMesh
 
     // move the known value into the RHS
     // and zero the column
-    for (unsigned int i=0; i<this->m(); i++)
+    for (auto i : make_range(this->m()))
       {
         rhs.el(i) -= this->el(i,jv)*val;
         this->el(i,jv) = 0.;
       }
 
     // zero the row
-    for (unsigned int j=0; j<this->n(); j++)
+    for (auto j : make_range(this->n()))
       this->el(iv,j) = 0.;
 
     this->el(iv,jv) = 1.;
@@ -94,9 +104,9 @@ namespace libMesh
     std::ios_base::fmtflags os_flags = os.flags();
 
     // Print the matrix entries.
-    for (unsigned int i=0; i<this->m(); i++)
+    for (auto i : make_range(this->m()))
       {
-        for (unsigned int j=0; j<this->n(); j++)
+        for (auto j : make_range(this->n()))
           os << std::setw(15)
              << std::scientific
              << std::setprecision(precision)
@@ -114,9 +124,9 @@ namespace libMesh
   template<typename T>
   void DenseMatrixBase<T>::print (std::ostream & os) const
   {
-    for (unsigned int i=0; i<this->m(); i++)
+    for (auto i : make_range(this->m()))
       {
-        for (unsigned int j=0; j<this->n(); j++)
+        for (auto j : make_range(this->n()))
           os << std::setw(8)
              << this->el(i,j) << " ";
 

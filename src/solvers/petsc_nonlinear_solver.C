@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,9 +21,8 @@
 
 #ifdef LIBMESH_HAVE_PETSC
 
-// C++ includes
-
 // Local Includes
+#include "libmesh/libmesh_logging.h"
 #include "libmesh/nonlinear_implicit_system.h"
 #include "libmesh/petsc_nonlinear_solver.h"
 #include "libmesh/petsc_linear_solver.h"
@@ -32,16 +31,7 @@
 #include "libmesh/dof_map.h"
 #include "libmesh/preconditioner.h"
 #include "libmesh/solver_configuration.h"
-
-/* DMlibMesh include. */
 #include "libmesh/petscdmlibmesh.h"
-
-// Pick the right version of the petsc line search getter function name
-#if PETSC_VERSION_LESS_THAN(3,4,0)
-#  define SNESGETLINESEARCH SNESGetSNESLineSearch
-#else
-#  define SNESGETLINESEARCH SNESGetLineSearch
-#endif
 
 namespace libMesh
 {
@@ -160,11 +150,11 @@ extern "C"
     //-----------------------------------------------------------------------------
     // if the user has provided both function pointers and objects only the pointer
     // will be used, so catch that as an error
-    if (rc.solver->residual && rc.solver->residual_object)
-      libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Residual!");
+    libmesh_error_msg_if(rc.solver->residual && rc.solver->residual_object,
+                         "ERROR: cannot specify both a function and object to compute the Residual!");
 
-    if (rc.solver->matvec && rc.solver->residual_and_jacobian_object)
-      libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
+    libmesh_error_msg_if(rc.solver->matvec && rc.solver->residual_and_jacobian_object,
+                         "ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
     if (rc.solver->residual != nullptr)
       rc.solver->residual(*rc.sys.current_local_solution.get(), R, rc.sys);
@@ -181,10 +171,19 @@ extern "C"
     else
       libmesh_error_msg("Error! Unable to compute residual and/or Jacobian!");
 
-    PetscVector<Number> X(x, rc.sys.comm());
+
+    // Synchronize PETSc x to local solution since the local solution may be changed due to the constraints
+    PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(rc.sys.solution.get());
+    PetscVector<Number> X_global(x, rc.sys.comm());
+
+    X_global.swap(X_sys);
+    rc.sys.update();
+    X_global.swap(X_sys);
 
     R.close();
-    rc.sys.get_dof_map().enforce_constraints_on_residual(rc.sys, &R, &X);
+
+    rc.sys.get_dof_map().enforce_constraints_on_residual(rc.sys, &R, rc.sys.current_local_solution.get());
+
     R.close();
 
     return rc.ierr;
@@ -221,9 +220,17 @@ extern "C"
     else
       libmesh_error_msg("Error! Unable to compute residual for forming finite difference Jacobian!");
 
+    // Synchronize PETSc x to local solution since the local solution may be changed due to the constraints
+    PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(rc.sys.solution.get());
+    PetscVector<Number> X_global(x, rc.sys.comm());
+
+    X_global.swap(X_sys);
+    rc.sys.update();
+    X_global.swap(X_sys);
+
     R.close();
-    PetscVector<Number> X(x, rc.sys.comm());
-    rc.sys.get_dof_map().enforce_constraints_on_residual(rc.sys, &R, &X);
+
+    rc.sys.get_dof_map().enforce_constraints_on_residual(rc.sys, &R, rc.sys.current_local_solution.get());
 
     R.close();
 
@@ -263,9 +270,17 @@ extern "C"
       libmesh_error_msg("Error! Unable to compute residual for forming finite differenced"
                         "Jacobian-vector products!");
 
+    // Synchronize PETSc x to local solution since the local solution may be changed due to the constraints
+    PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(rc.sys.solution.get());
+    PetscVector<Number> X_global(x, rc.sys.comm());
+
+    X_global.swap(X_sys);
+    rc.sys.update();
+    X_global.swap(X_sys);
+
     R.close();
-    PetscVector<Number> X(x, rc.sys.comm());
-    rc.sys.get_dof_map().enforce_constraints_on_residual(rc.sys, &R, &X);
+
+    rc.sys.get_dof_map().enforce_constraints_on_residual(rc.sys, &R, rc.sys.current_local_solution.get());
 
     R.close();
 
@@ -282,7 +297,77 @@ extern "C"
     PetscNonlinearSolver<Number> * solver =
       static_cast<PetscNonlinearSolver<Number> *> (ctx);
 
-    return libmesh_petsc_snes_mffd_residual(solver->snes(), x, r, ctx);
+    PetscErrorCode ierr = libmesh_petsc_snes_mffd_residual(solver->snes(), x, r, ctx);
+    CHKERRABORT(solver->comm().get(), ierr);
+
+#if !PETSC_VERSION_LESS_THAN(3,8,4)
+#ifndef NDEBUG
+
+    // When the user requested to reuse the nonlinear residual as the base for doing matrix-free
+    // approximation of the Jacobian, we'll do a sanity check to make sure that that was safe to do
+    if (solver->snes_mf_reuse_base() && (solver->comm().size() == 1) && (libMesh::n_threads() == 1))
+    {
+      SNES snes = solver->snes();
+
+      KSP ksp;
+      ierr = SNESGetKSP(snes, &ksp);
+      CHKERRABORT(solver->comm().get(), ierr);
+
+      PetscInt ksp_it;
+      ierr = KSPGetIterationNumber(ksp, &ksp_it);
+      CHKERRABORT(solver->comm().get(), ierr);
+
+      SNESType snes_type;
+      ierr = SNESGetType(snes, &snes_type);
+      CHKERRABORT(solver->comm().get(), ierr);
+
+      libmesh_assert_msg(snes_type, "We're being called from SNES; snes_type should be non-null");
+
+      Mat J;
+      ierr = SNESGetJacobian(snes, &J, NULL, NULL, NULL);
+      CHKERRABORT(solver->comm().get(), ierr);
+      libmesh_assert_msg(J, "We're being called from SNES; J should be non-null");
+
+      MatType mat_type;
+      ierr = MatGetType(J, &mat_type);
+      CHKERRABORT(solver->comm().get(), ierr);
+      libmesh_assert_msg(mat_type, "We're being called from SNES; mat_type should be non-null");
+
+      bool is_operator_mffd = strcmp(mat_type, MATMFFD) == 0;
+
+      if ((ksp_it == PetscInt(0)) && is_operator_mffd)
+      {
+        bool computing_base_vector = solver->computing_base_vector();
+
+        if (computing_base_vector)
+        {
+          Vec nonlinear_residual;
+
+          ierr = SNESGetFunction(snes, &nonlinear_residual, NULL, NULL);
+          CHKERRABORT(solver->comm().get(), ierr);
+
+          PetscBool vecs_equal;
+          ierr = VecEqual(r, nonlinear_residual, &vecs_equal);
+          CHKERRABORT(solver->comm().get(), ierr);
+
+          libmesh_error_msg_if(!(vecs_equal == PETSC_TRUE),
+                               "You requested to reuse the nonlinear residual vector as the base vector for "
+                               "computing the action of the matrix-free Jacobian, but the vectors are not "
+                               "the same. Your physics must have states; either remove the states "
+                               "from your code or make sure that you set_mf_reuse_base(false)");
+        }
+
+        // There are always exactly two function evaluations for the zeroth ksp iteration when doing
+        // matrix-free approximation of the Jacobian action: one corresponding to the evaluation of
+        // the base vector, and the other corresponding to evaluation of the perturbed vector. So we
+        // toggle back and forth between states
+        solver->set_computing_base_vector(!computing_base_vector);
+      }
+    }
+#endif
+#endif
+
+    PetscFunctionReturn(0);
   }
 
 #ifdef LIBMESH_ENABLE_DEPRECATED
@@ -297,13 +382,7 @@ extern "C"
   //---------------------------------------------------------------
   // this function is called by PETSc to evaluate the Jacobian at X
   PetscErrorCode
-  libmesh_petsc_snes_jacobian(
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-                              SNES snes, Vec x, Mat * jac, Mat * pc, MatStructure * msflag, void * ctx
-#else
-                              SNES snes, Vec x, Mat jac, Mat pc, void * ctx
-#endif
-                              )
+  libmesh_petsc_snes_jacobian(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
   {
     LOG_SCOPE("jacobian()", "PetscNonlinearSolver");
 
@@ -326,13 +405,8 @@ extern "C"
     }
 
     NonlinearImplicitSystem & sys = solver->system();
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-    PetscMatrix<Number> PC(*pc, sys.comm());
-    PetscMatrix<Number> Jac(*jac, sys.comm());
-#else
     PetscMatrix<Number> PC(pc, sys.comm());
     PetscMatrix<Number> Jac(jac, sys.comm());
-#endif
     PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
     PetscVector<Number> X_global(x, sys.comm());
 
@@ -357,11 +431,11 @@ extern "C"
     //-----------------------------------------------------------------------------
     // if the user has provided both function pointers and objects only the pointer
     // will be used, so catch that as an error
-    if (solver->jacobian && solver->jacobian_object)
-      libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Jacobian!");
+    libmesh_error_msg_if(solver->jacobian && solver->jacobian_object,
+                         "ERROR: cannot specify both a function and object to compute the Jacobian!");
 
-    if (solver->matvec && solver->residual_and_jacobian_object)
-      libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
+    libmesh_error_msg_if(solver->matvec && solver->residual_and_jacobian_object,
+                         "ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
     if (solver->jacobian != nullptr)
       solver->jacobian(*sys.current_local_solution.get(), PC, sys);
@@ -383,9 +457,6 @@ extern "C"
 
     PC.close();
     Jac.close();
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-    *msflag = SAME_NONZERO_PATTERN;
-#endif
 
     return ierr;
   }
@@ -408,22 +479,10 @@ extern "C"
 
 #ifdef LIBMESH_ENABLE_DEPRECATED
   PetscErrorCode
-  __libmesh_petsc_snes_jacobian(
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-                                SNES snes, Vec x, Mat * jac, Mat * pc, MatStructure * msflag, void * ctx
-#else
-                                SNES snes, Vec x, Mat jac, Mat pc, void * ctx
-#endif
-                                )
+  __libmesh_petsc_snes_jacobian(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
   {
     libmesh_deprecated();
-    return libmesh_petsc_snes_jacobian(
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-                                       snes, x, jac, pc, msflag, ctx
-#else
-                                       snes, x, jac, pc, ctx
-#endif
-                                       );
+    return libmesh_petsc_snes_jacobian(snes, x, jac, pc, ctx);
   }
 #endif
 
@@ -437,13 +496,7 @@ extern "C"
   // the user is responsible for setting changed_y and changed_w
   // appropriately, depending on whether or not the search
   // direction or solution vector was changed, respectively.
-  PetscErrorCode libmesh_petsc_snes_postcheck(
-#if PETSC_VERSION_LESS_THAN(3,3,0)
-                                              SNES, Vec x, Vec y, Vec w, void * context, PetscBool * changed_y, PetscBool * changed_w
-#else
-                                              SNESLineSearch, Vec x, Vec y, Vec w, PetscBool * changed_y, PetscBool * changed_w, void * context
-#endif
-                                              )
+  PetscErrorCode libmesh_petsc_snes_postcheck(SNESLineSearch, Vec x, Vec y, Vec w, PetscBool * changed_y, PetscBool * changed_w, void * context)
   {
     LOG_SCOPE("postcheck()", "PetscNonlinearSolver");
 
@@ -462,8 +515,8 @@ extern "C"
 
     // If the user has provided both postcheck function pointer and
     // object, this is ambiguous, so throw an error.
-    if (solver->postcheck && solver->postcheck_object)
-      libmesh_error_msg("ERROR: cannot specify both a function and object for performing the solve postcheck!");
+    libmesh_error_msg_if(solver->postcheck && solver->postcheck_object,
+                         "ERROR: cannot specify both a function and object for performing the solve postcheck!");
 
     // It's also possible that we don't need to do anything at all, in
     // that case return early...
@@ -514,22 +567,10 @@ extern "C"
   }
 
 #ifdef LIBMESH_ENABLE_DEPRECATED
-  PetscErrorCode __libmesh_petsc_snes_postcheck(
-#if PETSC_VERSION_LESS_THAN(3,3,0)
-                                                SNES, Vec x, Vec y, Vec w, void * context, PetscBool * changed_y, PetscBool * changed_w
-#else
-                                                SNESLineSearch, Vec x, Vec y, Vec w, PetscBool * changed_y, PetscBool * changed_w, void * context
-#endif
-                                                )
+  PetscErrorCode __libmesh_petsc_snes_postcheck(SNESLineSearch, Vec x, Vec y, Vec w, PetscBool * changed_y, PetscBool * changed_w, void * context)
   {
     libmesh_deprecated();
-    return libmesh_petsc_snes_postcheck(
-#if PETSC_VERSION_LESS_THAN(3,3,0)
-                                        nullptr, x, y, w, context, changed_y, changed_w
-#else
-                                        nullptr, x, y, w, changed_y, changed_w, context
-#endif
-                                        );
+    return libmesh_petsc_snes_postcheck(nullptr, x, y, w, changed_y, changed_w, context);
   }
 #endif
 } // end extern "C"
@@ -548,7 +589,8 @@ PetscNonlinearSolver<T>::PetscNonlinearSolver (sys_type & system_in) :
   _zero_out_residual(true),
   _zero_out_jacobian(true),
   _default_monitor(true),
-  _snesmf_reuse_base(true)
+  _snesmf_reuse_base(true),
+  _computing_base_vector(true)
 {
 }
 
@@ -571,7 +613,7 @@ void PetscNonlinearSolver<T>::clear ()
 
       PetscErrorCode ierr=0;
 
-      ierr = LibMeshSNESDestroy(&_snes);
+      ierr = SNESDestroy(&_snes);
       LIBMESH_CHKERR(ierr);
 
       // Reset the nonlinear iteration counter.  This information is only relevant
@@ -602,7 +644,6 @@ void PetscNonlinearSolver<T>::init (const char * name)
           LIBMESH_CHKERR(ierr);
         }
 
-#if !PETSC_RELEASE_LESS_THAN(3,3,0)
       // Attaching a DM to SNES.
       DM dm;
       ierr = DMCreate(this->comm().get(), &dm);LIBMESH_CHKERR(ierr);
@@ -618,8 +659,6 @@ void PetscNonlinearSolver<T>::init (const char * name)
       // SNES now owns the reference to dm.
       ierr = DMDestroy(&dm);                     LIBMESH_CHKERR(ierr);
 
-#endif
-
       if (_default_monitor)
         {
           ierr = SNESMonitorSet (_snes, libmesh_petsc_snes_monitor,
@@ -633,13 +672,6 @@ void PetscNonlinearSolver<T>::init (const char * name)
         {
           this->_solver_configuration->set_options_during_init();
         }
-
-#if PETSC_VERSION_LESS_THAN(3,1,0)
-      // Cannot call SNESSetOptions before SNESSetFunction when using
-      // any matrix free options with PETSc 3.1.0+
-      ierr = SNESSetFromOptions(_snes);
-      LIBMESH_CHKERR(ierr);
-#endif
 
       if (this->_preconditioner)
         {
@@ -668,22 +700,15 @@ void PetscNonlinearSolver<T>::init (const char * name)
   // attached for no reason.
   if (this->postcheck || this->postcheck_object)
     {
-#if PETSC_VERSION_LESS_THAN(3,3,0)
-      PetscErrorCode ierr = SNESLineSearchSetPostCheck(_snes, libmesh_petsc_snes_postcheck, this);
-      LIBMESH_CHKERR(ierr);
-
-#else
       SNESLineSearch linesearch;
-      PetscErrorCode ierr = SNESGETLINESEARCH(_snes, &linesearch);
+      PetscErrorCode ierr = SNESGetLineSearch(_snes, &linesearch);
       LIBMESH_CHKERR(ierr);
 
       ierr = SNESLineSearchSetPostCheck(linesearch, libmesh_petsc_snes_postcheck, this);
       LIBMESH_CHKERR(ierr);
-#endif
     }
 }
 
-#if !PETSC_VERSION_LESS_THAN(3,3,0)
 template <typename T>
 void
 PetscNonlinearSolver<T>::build_mat_null_space(NonlinearImplicitSystem::ComputeVectorSubspace * computeSubspaceObject,
@@ -704,11 +729,7 @@ PetscNonlinearSolver<T>::build_mat_null_space(NonlinearImplicitSystem::ComputeVe
       PetscScalar * dots;
       PetscInt nmodes = cast_int<PetscInt>(sp.size());
 
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-      ierr = PetscMalloc2(nmodes,Vec,&modes,nmodes,PetscScalar,&dots);
-#else
       ierr = PetscMalloc2(nmodes,&modes,nmodes,&dots);
-#endif
       LIBMESH_CHKERR(ierr);
 
       for (PetscInt i=0; i<nmodes; ++i)
@@ -756,7 +777,6 @@ PetscNonlinearSolver<T>::build_mat_null_space(NonlinearImplicitSystem::ComputeVe
       LIBMESH_CHKERR(ierr);
     }
 }
-#endif
 
 template <typename T>
 std::pair<unsigned int, Real>
@@ -791,7 +811,6 @@ PetscNonlinearSolver<T>::solve (SparseMatrix<T> &  pre_in,  // System Preconditi
     }
 
 
-#if !PETSC_VERSION_LESS_THAN(3,3,0)
   // Only set the nullspace if we have a way of computing it and the result is non-empty.
   if (this->nullspace || this->nullspace_object)
     {
@@ -838,7 +857,6 @@ PetscNonlinearSolver<T>::solve (SparseMatrix<T> &  pre_in,  // System Preconditi
           LIBMESH_CHKERR(ierr);
         }
     }
-#endif
 
   // Have the Krylov subspace method use our good initial guess rather than 0
   KSP ksp;
@@ -855,6 +873,12 @@ PetscNonlinearSolver<T>::solve (SparseMatrix<T> &  pre_in,  // System Preconditi
   ierr = SNESSetTolerances(_snes, this->absolute_residual_tolerance, this->relative_residual_tolerance,
                            this->relative_step_tolerance, this->max_nonlinear_iterations, this->max_function_evaluations);
   LIBMESH_CHKERR(ierr);
+
+  // Set the divergence tolerance for the non-linear solver
+#if !PETSC_VERSION_LESS_THAN(3,8,0)
+  ierr = SNESSetDivergenceTolerance(_snes, this->divergence_tolerance);
+  LIBMESH_CHKERR(ierr);
+#endif
 
   //Pull in command-line options
 #if PETSC_VERSION_LESS_THAN(3,7,0)
@@ -891,7 +915,6 @@ PetscNonlinearSolver<T>::solve (SparseMatrix<T> &  pre_in,  // System Preconditi
   // overzealous check was moved out of SNESSetUp in PETSc 3.5.0
   // (petsc/petsc@154060b), so this code block should be safe to use
   // in 3.5.0 and later.
-#if !PETSC_VERSION_LESS_THAN(3,5,0)
 #if !PETSC_VERSION_LESS_THAN(3,6,0)
   ierr = SNESSetSolution(_snes, x->vec());
   LIBMESH_CHKERR(ierr);
@@ -904,28 +927,31 @@ PetscNonlinearSolver<T>::solve (SparseMatrix<T> &  pre_in,  // System Preconditi
   LIBMESH_CHKERR(ierr);
   ierr = MatMFFDSetFunction(J, libmesh_petsc_snes_mffd_interface, this);
   LIBMESH_CHKERR(ierr);
-#if !PETSC_VERSION_LESS_THAN(3, 8, 4)
+#if !PETSC_VERSION_LESS_THAN(3,8,4)
+#ifndef NDEBUG
+  // If we're in debug mode, do not reuse the nonlinear function evaluation as the base for doing
+  // matrix-free approximations of the Jacobian action. Instead if the user requested that we reuse
+  // the base, we'll check the base function evaluation and compare it to the nonlinear residual
+  // evaluation. If they are different, then we'll error and inform the user that it's unsafe to
+  // reuse the base
+  ierr = MatSNESMFSetReuseBase(J, PETSC_FALSE);
+#else
   // Resue the residual vector from SNES
   ierr = MatSNESMFSetReuseBase(J, static_cast<PetscBool>(_snesmf_reuse_base));
+#endif
   LIBMESH_CHKERR(ierr);
 #endif
-#endif
 
-#if PETSC_VERSION_LESS_THAN(3, 3, 0)
-  if (linesearch_object)
-    libmesh_error_msg("Line search setter interface introduced in petsc version 3.3!");
-#else
   SNESLineSearch linesearch;
   if (linesearch_object)
   {
-    ierr = SNESGETLINESEARCH(_snes, &linesearch);
+    ierr = SNESGetLineSearch(_snes, &linesearch);
     LIBMESH_CHKERR(ierr);
     ierr = SNESLineSearchSetType(linesearch, SNESLINESEARCHSHELL);
     LIBMESH_CHKERR(ierr);
     ierr = SNESLineSearchShellSetUserFunc(linesearch, libmesh_petsc_linesearch_shellfunc, this);
     LIBMESH_CHKERR(ierr);
   }
-#endif
 
   ierr = SNESSolve (_snes, PETSC_NULL, x->vec());
   LIBMESH_CHKERR(ierr);
@@ -943,7 +969,7 @@ PetscNonlinearSolver<T>::solve (SparseMatrix<T> &  pre_in,  // System Preconditi
   Vec f;
   ierr = SNESGetFunction(_snes, &f, 0, 0);
   LIBMESH_CHKERR(ierr);
-  ierr = VecNorm(f, NORM_2, &final_residual_norm);
+  ierr = VecNorm(f, NORM_2, pPR(&final_residual_norm));
   LIBMESH_CHKERR(ierr);
 
   // Get and store the reason for convergence

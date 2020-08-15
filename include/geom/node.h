@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -67,14 +67,16 @@ public:
          const dof_id_type id = invalid_id);
 
   /**
-   * Copy-constructor.
+   * "Copy"-constructor: deliberately slices the source Node and only
+   * copies its' Point information, since copying anything else would
+   * likely be a bug.
    *
-   * \deprecated - anyone copying a Node would almost certainly be
-   * better off copying the much cheaper Point or taking a reference
-   * to the Node.
+   * \deprecated - the constructor from Point is what we really want.
    */
 #ifdef LIBMESH_ENABLE_DEPRECATED
   Node (const Node & n);
+#else
+  Node (const Node & n) = delete;
 #endif
 
   /**
@@ -82,6 +84,16 @@ public:
    */
   explicit Node (const Point & p,
                  const dof_id_type id = invalid_id);
+
+  /**
+   * Disambiguate constructing from non-Real scalars
+   */
+  template <typename T,
+            typename = typename
+              boostcopy::enable_if_c<ScalarTraits<T>::value,void>::type>
+  Node (const T x) :
+    Point (x,0,0)
+  { this->set_id() = invalid_id; }
 
   /**
    * Destructor.
@@ -239,21 +251,20 @@ Node::Node (const Real x,
 }
 
 
-
 #ifdef LIBMESH_ENABLE_DEPRECATED
 inline
 Node::Node (const Node & n) :
   Point(n),
-  DofObject(n),
+  DofObject(), // Deliberately slicing!
   ReferenceCountedObject<Node>()
 #ifdef LIBMESH_ENABLE_NODE_VALENCE
   ,
-  _valence(n._valence)
+  _valence(0)
 #endif
 {
-  libmesh_deprecated();
+  libmesh_deprecated(); // Cast to Point first!
 }
-#endif
+#endif // LIBMESH_ENABLE_DEPRECATED
 
 
 

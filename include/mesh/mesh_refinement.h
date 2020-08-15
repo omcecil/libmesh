@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -319,6 +319,15 @@ public:
    * Adds the element \p elem to the mesh.
    */
   Elem * add_elem (Elem * elem);
+
+  /**
+   * Same as the function above, but makes it clear that the
+   * MeshRefinement object (actually, its Mesh) takes ownership of the
+   * Elem which is passed in, so the user is not responsible for
+   * deleting it. The version of add_elem() taking a dumb pointer will
+   * eventually be deprecated in favor of this version.
+   */
+  Elem * add_elem (std::unique_ptr<Elem> elem);
 
   /**
    * \returns A constant reference to the \p MeshBase object associated

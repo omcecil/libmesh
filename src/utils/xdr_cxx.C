@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -33,7 +33,7 @@
 # include "gzstream.h" // For reading/writing compressed streams
 # include "libmesh/restore_warnings.h"
 #endif
-
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // Anonymous namespace for implementation details.
 namespace {
@@ -176,7 +176,7 @@ void Xdr::open (const std::string & name)
         fp = fopen(name.c_str(), (mode == ENCODE) ? "w" : "r");
         if (!fp)
           libmesh_file_error(name.c_str());
-        xdrs.reset(new XDR);
+        xdrs = libmesh_make_unique<XDR>();
         xdrstdio_create (xdrs.get(), fp, (mode == ENCODE) ? XDR_ENCODE : XDR_DECODE);
 #else
 
@@ -643,9 +643,14 @@ xdrproc_t xdr_translator<float>() { return (xdrproc_t)(xdr_float); }
 template <>
 xdrproc_t xdr_translator<double>() { return (xdrproc_t)(xdr_double); }
 
-// FIXME - no XDR love for long doubles?
+// FIXME - no XDR love for quadruple precision; not even for long double?
 template <>
 xdrproc_t xdr_translator<long double>() { return (xdrproc_t)(xdr_double); }
+
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+template <>
+xdrproc_t xdr_translator<Real>() { return (xdrproc_t)(xdr_double); }
+#endif
 
 } // end anonymous namespace
 
@@ -674,7 +679,7 @@ void Xdr::do_read(std::string & a)
 
   a = "";
 
-  for (unsigned int c=0; c<std::strlen(comm); c++)
+  for (unsigned int c=0, sl=std::strlen(comm); c!=sl; c++)
     {
       if (comm[c] == '\t')
         break;
@@ -689,11 +694,11 @@ void Xdr::do_read(std::vector<T> & a)
   data(length, "# vector length");
   a.resize(length);
 
-  for (std::size_t i=0; i<a.size(); i++)
+  for (T & a_i : a)
     {
       libmesh_assert(in.get());
       libmesh_assert (in->good());
-      *in >> a[i];
+      *in >> a_i;
     }
   in->getline(comm, comm_len);
 }
@@ -705,13 +710,13 @@ void Xdr::do_read(std::vector<std::complex<T>> & a)
   data(length, "# vector length x 2 (complex)");
   a.resize(length);
 
-  for (std::size_t i=0; i<a.size(); i++)
+  for (std::complex<T> & a_i : a)
     {
       T r, im;
       libmesh_assert(in.get());
       libmesh_assert (in->good());
       *in >> r >> im;
-      a[i] = std::complex<T>(r,im);
+      a_i = std::complex<T>(r,im);
     }
   in->getline(comm, comm_len);
 }
@@ -731,11 +736,15 @@ void Xdr::do_write(std::vector<T> & a)
   std::size_t length = a.size();
   data(length, "# vector length");
 
-  for (std::size_t i=0; i<a.size(); i++)
+  // Use scientific precision with lots of digits for the original type T.
+  *out << std::scientific
+       << std::setprecision(std::numeric_limits<T>::max_digits10);
+
+  for (T & a_i : a)
     {
       libmesh_assert(out.get());
       libmesh_assert (out->good());
-      this->do_write(a[i]);
+      this->do_write(a_i);
       *out << "\t ";
     }
 }
@@ -746,11 +755,15 @@ void Xdr::do_write(std::vector<std::complex<T>> & a)
   std::size_t length=a.size();
   data(length, "# vector length x 2 (complex)");
 
-  for (std::size_t i=0; i<a.size(); i++)
+  // Use scientific precision with lots of digits for the original type T.
+  *out << std::scientific
+       << std::setprecision(std::numeric_limits<T>::max_digits10);
+
+  for (std::complex<T> & a_i : a)
     {
       libmesh_assert(out.get());
       libmesh_assert (out->good());
-      this->do_write(a[i]);
+      this->do_write(a_i);
       *out << "\t ";
     }
 }
@@ -796,11 +809,12 @@ void Xdr::data (T & a, const char * comment_in)
         libmesh_assert(out.get());
         libmesh_assert (out->good());
 
-        // We will use scientific notation with a precision of 16
-        // digits in the following output.  The desired precision and
-        // format will automatically determine the width.
+        // We will use scientific notation sufficient to exactly
+        // represent our floating point precision in the following
+        // output.  The desired precision and format will
+        // automatically determine the width.
         *out << std::scientific
-             << std::setprecision(16);
+             << std::setprecision(std::numeric_limits<T>::max_digits10);
 
         this->do_write(a);
 
@@ -891,11 +905,12 @@ void Xdr::data_stream (T * val, const unsigned int len, const unsigned int line_
         libmesh_assert(out.get());
         libmesh_assert (out->good());
 
-        // We will use scientific notation with a precision of 16
-        // digits in the following output.  The desired precision and
-        // format will automatically determine the width.
+        // We will use scientific notation sufficient to exactly
+        // represent our floating point precision in the following
+        // output.  The desired precision and format will
+        // automatically determine the width.
         *out << std::scientific
-             << std::setprecision(16);
+             << std::setprecision(std::numeric_limits<T>::max_digits10);
 
         if (line_break == libMesh::invalid_uint)
           for (unsigned int i=0; i<len; i++)
@@ -910,7 +925,7 @@ void Xdr::data_stream (T * val, const unsigned int len, const unsigned int line_
             unsigned int cnt=0;
             while (cnt < len)
               {
-                for (unsigned int i=0; i<imax; i++)
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
                   {
                     libmesh_assert(out.get());
                     libmesh_assert (out->good());
@@ -988,11 +1003,12 @@ void Xdr::data_stream (double * val, const unsigned int len, const unsigned int 
         // Save stream flags
         std::ios_base::fmtflags out_flags = out->flags();
 
-        // We will use scientific notation with a precision of 16
-        // digits in the following output.  The desired precision and
-        // format will automatically determine the width.
+        // We will use scientific notation sufficient to exactly
+        // represent our floating point precision in the following
+        // output.  The desired precision and format will
+        // automatically determine the width.
         *out << std::scientific
-             << std::setprecision(16);
+             << std::setprecision(std::numeric_limits<double>::max_digits10);
 
         if (line_break == libMesh::invalid_uint)
           for (unsigned int i=0; i<len; i++)
@@ -1007,7 +1023,7 @@ void Xdr::data_stream (double * val, const unsigned int len, const unsigned int 
             unsigned int cnt=0;
             while (cnt < len)
               {
-                for (unsigned int i=0; i<imax; i++)
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
                   {
                     libmesh_assert(out.get());
                     libmesh_assert (out->good());
@@ -1087,11 +1103,12 @@ void Xdr::data_stream (float * val, const unsigned int len, const unsigned int l
         // Save stream flags
         std::ios_base::fmtflags out_flags = out->flags();
 
-        // We will use scientific notation with a precision of 16
-        // digits in the following output.  The desired precision and
-        // format will automatically determine the width.
+        // We will use scientific notation sufficient to exactly
+        // represent our floating point precision in the following
+        // output.  The desired precision and format will
+        // automatically determine the width.
         *out << std::scientific
-             << std::setprecision(16);
+             << std::setprecision(std::numeric_limits<float>::max_digits10);
 
         if (line_break == libMesh::invalid_uint)
           for (unsigned int i=0; i<len; i++)
@@ -1106,7 +1123,7 @@ void Xdr::data_stream (float * val, const unsigned int len, const unsigned int l
             unsigned int cnt=0;
             while (cnt < len)
               {
-                for (unsigned int i=0; i<imax; i++)
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
                   {
                     libmesh_assert(out.get());
                     libmesh_assert (out->good());
@@ -1132,6 +1149,8 @@ void Xdr::data_stream (float * val, const unsigned int len, const unsigned int l
       libmesh_error_msg("Invalid mode = " << mode);
     }
 }
+
+
 template <>
 void Xdr::data_stream (long double * val, const unsigned int len, const unsigned int line_break)
 {
@@ -1212,11 +1231,12 @@ void Xdr::data_stream (long double * val, const unsigned int len, const unsigned
         // Save stream flags
         std::ios_base::fmtflags out_flags = out->flags();
 
-        // We will use scientific notation with a precision of 16
-        // digits in the following output.  The desired precision and
-        // format will automatically determine the width.
+        // We will use scientific notation sufficient to exactly
+        // represent our floating point precision in the following
+        // output.  The desired precision and format will
+        // automatically determine the width.
         *out << std::scientific
-             << std::setprecision(16);
+             << std::setprecision(std::numeric_limits<long double>::max_digits10);
 
         if (line_break == libMesh::invalid_uint)
           for (unsigned int i=0; i<len; i++)
@@ -1231,7 +1251,7 @@ void Xdr::data_stream (long double * val, const unsigned int len, const unsigned
             unsigned int cnt=0;
             while (cnt < len)
               {
-                for (unsigned int i=0; i<imax; i++)
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
                   {
                     libmesh_assert(out.get());
                     libmesh_assert (out->good());
@@ -1257,6 +1277,135 @@ void Xdr::data_stream (long double * val, const unsigned int len, const unsigned
       libmesh_error_msg("Invalid mode = " << mode);
     }
 }
+
+
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+template <>
+void Xdr::data_stream (Real * val, const unsigned int len, const unsigned int line_break)
+{
+  switch (mode)
+    {
+    case ENCODE:
+    case DECODE:
+      {
+#ifdef LIBMESH_HAVE_XDR
+
+        libmesh_assert (this->is_open());
+
+        // FIXME[RHS]: This has the same "xdr_quadruple may not be
+        // defined" problem as long double, and the problem may be
+        // much worse since even _Quad/__float128 aren't standard
+        // either.
+        // if (len > 0)
+        //   xdr_vector(xdrs.get(),
+        //      (char *) val,
+        //      len,
+        //      sizeof(double),
+        //      (xdrproc_t) xdr_quadruple);
+
+        if (len > 0)
+          {
+            std::vector<double> io_buffer (len);
+
+            // Fill io_buffer if we are writing.
+            if (mode == ENCODE)
+              for (unsigned int i=0, cnt=0; i<len; i++)
+                io_buffer[cnt++] = double(val[i]);
+
+            xdr_vector(xdrs.get(),
+                       reinterpret_cast<char *>(io_buffer.data()),
+                       len,
+                       sizeof(double),
+                       (xdrproc_t) xdr_double);
+
+            // Fill val array if we are reading.
+            if (mode == DECODE)
+              for (unsigned int i=0, cnt=0; i<len; i++)
+                {
+                  val[i] = io_buffer[cnt++];
+                }
+          }
+
+#else
+
+        libmesh_error_msg("ERROR: Functionality is not available.\n"    \
+                          << "Make sure LIBMESH_HAVE_XDR is defined at build time\n" \
+                          << "The XDR interface is not available in this installation");
+
+#endif
+        return;
+      }
+
+    case READ:
+      {
+        libmesh_assert(in.get());
+        libmesh_assert (in->good());
+
+        for (unsigned int i=0; i<len; i++)
+          {
+            libmesh_assert(in.get());
+            libmesh_assert (in->good());
+            *in >> val[i];
+          }
+
+        return;
+      }
+
+    case WRITE:
+      {
+        libmesh_assert(out.get());
+        libmesh_assert (out->good());
+
+        // Save stream flags
+        std::ios_base::fmtflags out_flags = out->flags();
+
+        // We will use scientific notation with a precision of 36
+        // digits in the following output.  The desired precision and
+        // format will automatically determine the width.
+        *out << std::scientific
+             << std::setprecision(36);
+
+        if (line_break == libMesh::invalid_uint)
+          for (unsigned int i=0; i<len; i++)
+            {
+              libmesh_assert(out.get());
+              libmesh_assert (out->good());
+              *out << val[i] << ' ';
+            }
+        else
+          {
+            const unsigned imax = std::min(line_break, len);
+            unsigned int cnt=0;
+            while (cnt < len)
+              {
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
+                  {
+                    libmesh_assert(out.get());
+                    libmesh_assert (out->good());
+                    *out << val[cnt++];
+
+                    // Write a space unless this is the last character on the current line.
+                    if (i+1 != imax)
+                      *out << " ";
+                  }
+                libmesh_assert(out.get());
+                libmesh_assert (out->good());
+                *out << '\n';
+              }
+          }
+
+        // Restore stream flags
+        out->flags(out_flags);
+
+        return;
+      }
+
+    default:
+      libmesh_error_msg("Invalid mode = " << mode);
+    }
+}
+#endif // LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+
 
 
 #ifdef LIBMESH_USE_COMPLEX_NUMBERS
@@ -1335,11 +1484,12 @@ void Xdr::data_stream (std::complex<double> * val, const unsigned int len, const
         // Save stream flags
         std::ios_base::fmtflags out_flags = out->flags();
 
-        // We will use scientific notation with a precision of 16
-        // digits in the following output.  The desired precision and
-        // format will automatically determine the width.
+        // We will use scientific notation sufficient to exactly
+        // represent our floating point precision in the following
+        // output.  The desired precision and format will
+        // automatically determine the width.
         *out << std::scientific
-             << std::setprecision(16);
+             << std::setprecision(std::numeric_limits<double>::max_digits10);
 
         if (line_break == libMesh::invalid_uint)
           for (unsigned int i=0; i<len; i++)
@@ -1355,7 +1505,7 @@ void Xdr::data_stream (std::complex<double> * val, const unsigned int len, const
             unsigned int cnt=0;
             while (cnt < len)
               {
-                for (unsigned int i=0; i<imax; i++)
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
                   {
                     libmesh_assert(out.get());
                     libmesh_assert (out->good());
@@ -1466,13 +1616,13 @@ void Xdr::data_stream (std::complex<long double> * val, const unsigned int len, 
         std::ios_base::fmtflags out_flags = out->flags();
 
         // We will use scientific notation with a precision of
-        // 'digits10' digits in the following output.  The desired
+        // 'max_digits10' digits in the following output.  The desired
         // precision and format will automatically determine the
         // width.  Note: digit10 is the number of digits (in decimal
         // base) that can be represented without change.  Equivalent
         // to FLT_DIG, DBL_DIG or LDBL_DIG for floating types.
         *out << std::scientific
-             << std::setprecision(std::numeric_limits<long double>::digits10);
+             << std::setprecision(std::numeric_limits<long double>::max_digits10);
 
         if (line_break == libMesh::invalid_uint)
           for (unsigned int i=0; i<len; i++)
@@ -1487,7 +1637,7 @@ void Xdr::data_stream (std::complex<long double> * val, const unsigned int len, 
             unsigned int cnt=0;
             while (cnt < len)
               {
-                for (unsigned int i=0; i<imax; i++)
+                for (unsigned int i=0; (i<imax && cnt<len); i++)
                   {
                     libmesh_assert(out.get());
                     libmesh_assert (out->good());
@@ -1596,5 +1746,12 @@ template void Xdr::data_stream<unsigned short int> (unsigned short int * val, co
 template void Xdr::data_stream<unsigned int>       (unsigned int * val,       const unsigned int len, const unsigned int line_break);
 template void Xdr::data_stream<unsigned long int>  (unsigned long int * val,  const unsigned int len, const unsigned int line_break);
 template void Xdr::data_stream<unsigned long long> (unsigned long long * val, const unsigned int len, const unsigned int line_break);
+
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+template void Xdr::data<Real>                             (Real &,                            const char *);
+template void Xdr::data<std::complex<Real>>               (std::complex<Real> &,              const char *);
+template void Xdr::data<std::vector<Real>>                (std::vector<Real> &,               const char *);
+template void Xdr::data<std::vector<std::complex<Real>>>  (std::vector<std::complex<Real>> &, const char *);
+#endif
 
 } // namespace libMesh

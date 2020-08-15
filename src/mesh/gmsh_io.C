@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -31,6 +31,7 @@
 #include "libmesh/gmsh_io.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/int_range.h"
+#include "libmesh/utility.h" // map_find
 
 namespace libMesh
 {
@@ -47,7 +48,7 @@ GmshIO::ElementMaps GmshIO::build_element_maps()
   ElementMaps em;
 
   // POINT (import only)
-  em.in.insert(std::make_pair(15, ElementDefinition(NODEELEM, 15, 0, 1)));
+  em.in.emplace(15, ElementDefinition(NODEELEM, 15, 0, 1));
 
   // Add elements with trivial node mappings
   em.add_def(ElementDefinition(EDGE2, 1, 1, 2));
@@ -205,29 +206,24 @@ void GmshIO::read_mesh(std::istream & in)
           if (s.find("$MeshFormat") == static_cast<std::string::size_type>(0))
             {
               in >> version >> format >> size;
-              if (version < 2.0)
-                {
-                  // Some notes on gmsh mesh versions:
-                  //
-                  // Mesh version 2.0 goes back as far as I know.  It's not explicitly
-                  // mentioned here: http://www.geuz.org/gmsh/doc/VERSIONS.txt
-                  //
-                  // As of gmsh-2.4.0:
-                  // bumped mesh version format to 2.1 (small change in the $PhysicalNames
-                  // section, where the group dimension is now required);
-                  // [Since we don't even parse the PhysicalNames section at the time
-                  //  of this writing, I don't think this change affects us.]
-                  //
-                  // Mesh version 2.2 tested by Manav Bhatia; no other
-                  // libMesh code changes were required for support
-                  //
-                  // Mesh version 4.0 is a near complete rewrite of the previous mesh version
-                  //
-                  libmesh_error_msg("Error: Unknown msh file version " << version);
-                }
 
-              if (format)
-                libmesh_error_msg("Error: Unknown data format for mesh in Gmsh reader.");
+              // Some notes on gmsh mesh versions:
+              //
+              // Mesh version 2.0 goes back as far as I know.  It's not explicitly
+              // mentioned here: http://www.geuz.org/gmsh/doc/VERSIONS.txt
+              //
+              // As of gmsh-2.4.0:
+              // bumped mesh version format to 2.1 (small change in the $PhysicalNames
+              // section, where the group dimension is now required);
+              // [Since we don't even parse the PhysicalNames section at the time
+              //  of this writing, I don't think this change affects us.]
+              //
+              // Mesh version 2.2 tested by Manav Bhatia; no other
+              // libMesh code changes were required for support
+              //
+              // Mesh version 4.0 is a near complete rewrite of the previous mesh version
+              libmesh_error_msg_if(version < 2.0, "Error: Unknown msh file version " << version);
+              libmesh_error_msg_if(format, "Error: Unknown data format for mesh in Gmsh reader.");
             }
 
           // Read and process the "PhysicalNames" section.
@@ -297,10 +293,12 @@ void GmshIO::read_mesh(std::istream & in)
                 Real x, y, z;
                 std::size_t num_physical_tags;
                 in >> point_tag >> x >> y >> z >> num_physical_tags;
-                if (num_physical_tags > 1)
-                  libmesh_error_msg("Sorry, you cannot currently specify multiple subdomain or " <<
-                                    "boundary ids for a given geometric entity");
-                else if (num_physical_tags)
+
+                libmesh_error_msg_if(num_physical_tags > 1,
+                                     "Sorry, you cannot currently specify multiple subdomain or "
+                                     "boundary ids for a given geometric entity");
+
+                if (num_physical_tags)
                 {
                   in >> physical_tag;
                   entity_to_physical_id[std::make_pair(0, point_tag)] = physical_tag;
@@ -312,10 +310,12 @@ void GmshIO::read_mesh(std::istream & in)
                 Real minx, miny, minz, maxx, maxy, maxz;
                 std::size_t num_physical_tags;
                 in >> curve_tag >> minx >> miny >> minz >> maxx >> maxy >> maxz >> num_physical_tags;
-                if (num_physical_tags > 1)
-                  libmesh_error_msg("I don't believe that we can specify multiple subdomain or " <<
-                                    "boundary ids for a given geometric entity");
-                else if (num_physical_tags)
+
+                libmesh_error_msg_if(num_physical_tags > 1,
+                                     "I don't believe that we can specify multiple subdomain or "
+                                     "boundary ids for a given geometric entity");
+
+                if (num_physical_tags)
                 {
                   in >> physical_tag;
                   entity_to_physical_id[std::make_pair(1, curve_tag)] = physical_tag;
@@ -330,10 +330,12 @@ void GmshIO::read_mesh(std::istream & in)
                 Real minx, miny, minz, maxx, maxy, maxz;
                 std::size_t num_physical_tags;
                 in >> surface_tag >> minx >> miny >> minz >> maxx >> maxy >> maxz >> num_physical_tags;
-                if (num_physical_tags > 1)
-                  libmesh_error_msg("I don't believe that we can specify multiple subdomain or " <<
-                                    "boundary ids for a given geometric entity");
-                else if (num_physical_tags)
+
+                libmesh_error_msg_if(num_physical_tags > 1,
+                                     "I don't believe that we can specify multiple subdomain or "
+                                     "boundary ids for a given geometric entity");
+
+                if (num_physical_tags)
                 {
                   in >> physical_tag;
                   entity_to_physical_id[std::make_pair(2, surface_tag)] = physical_tag;
@@ -348,10 +350,12 @@ void GmshIO::read_mesh(std::istream & in)
                 Real minx, miny, minz, maxx, maxy, maxz;
                 std::size_t num_physical_tags;
                 in >> volume_tag >> minx >> miny >> minz >> maxx >> maxy >> maxz >> num_physical_tags;
-                if (num_physical_tags > 1)
-                  libmesh_error_msg("I don't believe that we can specify multiple subdomain or " <<
-                                    "boundary ids for a given geometric entity");
-                else if (num_physical_tags)
+
+                libmesh_error_msg_if(num_physical_tags > 1,
+                                     "I don't believe that we can specify multiple subdomain or "
+                                     "boundary ids for a given geometric entity");
+
+                if (num_physical_tags)
                 {
                   in >> physical_tag;
                   entity_to_physical_id[std::make_pair(3, volume_tag)] = physical_tag;
@@ -407,8 +411,7 @@ void GmshIO::read_mesh(std::istream & in)
                 int entity_dim, entity_tag, parametric;
                 std::size_t num_nodes_in_block = 0;
                 in >> entity_dim >> entity_tag >> parametric >> num_nodes_in_block;
-                if (parametric)
-                  libmesh_error_msg("We don't currently support reading parametric gmsh entities");
+                libmesh_error_msg_if(parametric, "We don't currently support reading parametric gmsh entities");
 
                 // Read the node tags/ids
                 std::size_t gmsh_id;
@@ -499,19 +502,13 @@ void GmshIO::read_mesh(std::istream & in)
                   }
                 }
 
-                // Consult the import element table to determine which element to build
-                auto eletypes_it = _element_maps.in.find(type);
-
-                // Make sure we actually found something
-                if (eletypes_it == _element_maps.in.end())
-                  libmesh_error_msg("Element type " << type << " not found!");
-
-                // Get a reference to the ElementDefinition
-                const GmshIO::ElementDefinition & eletype = eletypes_it->second;
+                // Get a reference to the ElementDefinition, throw an error if not found.
+                const GmshIO::ElementDefinition & eletype =
+                  libmesh_map_find(_element_maps.in, type);
 
                 // If we read nnodes, make sure it matches the number in eletype.nnodes
-                if (nnodes != 0 && nnodes != eletype.nnodes)
-                  libmesh_error_msg("nnodes = " << nnodes << " and eletype.nnodes = " << eletype.nnodes << " do not match.");
+                libmesh_error_msg_if(nnodes != 0 && nnodes != eletype.nnodes,
+                                     "nnodes = " << nnodes << " and eletype.nnodes = " << eletype.nnodes << " do not match.");
 
                 // Assign the value from the eletype object.
                 nnodes = eletype.nnodes;
@@ -530,19 +527,18 @@ void GmshIO::read_mesh(std::istream & in)
 
                   // Add the element to the mesh
                   {
-                    Elem * elem = Elem::build(eletype.type).release();
-                    elem->set_id(iel);
-                    elem = mesh.add_elem(elem);
+                    Elem * elem =
+                      mesh.add_elem(Elem::build_with_id(eletype.type, iel));
 
                     // Make sure that the libmesh element we added has nnodes nodes.
-                    if (elem->n_nodes() != nnodes)
-                      libmesh_error_msg("Number of nodes for element " \
-                                        << id \
-                                        << " of type " << eletype.type \
-                                        << " (Gmsh type " << type \
-                                        << ") does not match Libmesh definition. " \
-                                        << "I expected " << elem->n_nodes() \
-                                        << " nodes, but got " << nnodes);
+                    libmesh_error_msg_if(elem->n_nodes() != nnodes,
+                                         "Number of nodes for element "
+                                         << id
+                                         << " of type " << eletype.type
+                                         << " (Gmsh type " << type
+                                         << ") does not match Libmesh definition. "
+                                         << "I expected " << elem->n_nodes()
+                                         << " nodes, but got " << nnodes);
 
                     // Add node pointers to the elements.
                     // If there is a node translation table, use it.
@@ -598,19 +594,14 @@ void GmshIO::read_mesh(std::istream & in)
               // Loop over entity blocks
               for (std::size_t i = 0; i < num_entity_blocks; ++i)
               {
-                int entity_dim, entity_tag, element_type;
+                int entity_dim, entity_tag;
+                unsigned int element_type;
                 std::size_t num_elems_in_block = 0;
                 in >> entity_dim >> entity_tag >> element_type >> num_elems_in_block;
 
-                // Determine which element to build
-                auto eletypes_it = _element_maps.in.find(element_type);
-
-                // Make sure we actually found something
-                if (eletypes_it == _element_maps.in.end())
-                  libmesh_error_msg("Element type " << element_type << " not found!");
-
                 // Get a reference to the ElementDefinition
-                const GmshIO::ElementDefinition & eletype = eletypes_it->second;
+                const GmshIO::ElementDefinition & eletype =
+                  libmesh_map_find(_element_maps.in, element_type);
 
                 // Don't add 0-dimensional "point" elements to the
                 // Mesh.  They should *always* be treated as boundary
@@ -627,9 +618,8 @@ void GmshIO::read_mesh(std::istream & in)
                   // Loop over elements with dim > 0
                   for (std::size_t n = 0; n < num_elems_in_block; ++n)
                   {
-                    Elem * elem = Elem::build(eletype.type).release();
-                    elem->set_id(iel++);
-                    elem = mesh.add_elem(elem);
+                    Elem * elem =
+                      mesh.add_elem(Elem::build_with_id(eletype.type, iel++));
 
                     std::size_t gmsh_element_id;
                     in >> gmsh_element_id;
@@ -650,15 +640,14 @@ void GmshIO::read_mesh(std::istream & in)
                     }
 
                     // Make sure that the libmesh element we added has nnodes nodes.
-                    if (elem->n_nodes() != local_node_counter)
-                      libmesh_error_msg("Number of nodes for element " \
-                                        << gmsh_element_id \
-                                        << " of type " << eletype.type \
-                                        << " (Gmsh type " << element_type \
-                                        << ") does not match Libmesh definition. " \
-                                        << "I expected " << elem->n_nodes() \
-                                        << " nodes, but got " << local_node_counter);
-
+                    libmesh_error_msg_if(elem->n_nodes() != local_node_counter,
+                                         "Number of nodes for element "
+                                         << gmsh_element_id
+                                         << " of type " << eletype.type
+                                         << " (Gmsh type " << element_type
+                                         << ") does not match Libmesh definition. "
+                                         << "I expected " << elem->n_nodes()
+                                         << " nodes, but got " << local_node_counter);
 
                     // Finally, set the subdomain ID to physical.  If this is a lower-dimension element, this ID will
                     // eventually go into the Mesh's BoundaryInfo object.
@@ -707,10 +696,6 @@ void GmshIO::read_mesh(std::istream & in)
             // libMesh::out << "max_elem_dimension_seen=" << max_elem_dimension_seen << std::endl;
             // libMesh::out << "min_elem_dimension_seen=" << min_elem_dimension_seen << std::endl;
 
-            // If the difference between the max and min element dimension seen is larger than
-            // 1, (e.g. the file has 1D and 3D elements only) we don't handle this case.
-            if (max_elem_dimension_seen - min_elem_dimension_seen > 1)
-              libmesh_error_msg("Cannot handle meshes with dimension mismatch greater than 1.");
 
             // How many different element dimensions did we see while reading from file?
             unsigned n_dims_seen = std::accumulate(elem_dimensions_seen.begin(),
@@ -718,10 +703,6 @@ void GmshIO::read_mesh(std::istream & in)
                                                    static_cast<unsigned>(0),
                                                    std::plus<unsigned>());
 
-            // Have not yet tested a case where 1, 2, and 3D elements are all in the same Mesh,
-            // though it should theoretically be possible to handle.
-            if (n_dims_seen == 3)
-              libmesh_error_msg("Reading meshes with 1, 2, and 3D elements not currently supported.");
 
             // Set mesh_dimension based on the largest element dimension seen.
             mesh.set_mesh_dimension(max_elem_dimension_seen);
@@ -783,7 +764,7 @@ void GmshIO::read_mesh(std::istream & in)
                   // Store this elem in a quickly-searchable
                   // container to use it to assign boundary
                   // conditions later.
-                  provide_bcs.insert(std::make_pair(elem->key(), elem));
+                  provide_bcs.emplace(elem->key(), elem);
                 }
 
               // 2nd loop over active elements - use lower dimensional element data to set BCs for higher dimensional elements
@@ -900,7 +881,7 @@ void GmshIO::write_mesh (std::ostream & out_stream)
   out_stream << "$Nodes\n";
   out_stream << mesh.n_nodes() << '\n';
 
-  for (unsigned int v=0; v<mesh.n_nodes(); v++)
+  for (auto v : make_range(mesh.n_nodes()))
     out_stream << mesh.node_ref(v).id()+1 << " "
                << mesh.node_ref(v)(0) << " "
                << mesh.node_ref(v)(1) << " "
@@ -915,19 +896,9 @@ void GmshIO::write_mesh (std::ostream & out_stream)
     // loop over the elements
     for (const auto & elem : mesh.active_element_ptr_range())
       {
-        // Make sure we have a valid entry for
-        // the current element type.
-        libmesh_assert (_element_maps.out.count(elem->type()));
-
-        // consult the export element table
-        auto def_it = _element_maps.out.find(elem->type());
-
-        // Assert that we found it
-        if (def_it == _element_maps.out.end())
-          libmesh_error_msg("Element type " << elem->type() << " not found in _element_maps.");
-
         // Get a reference to the ElementDefinition object
-        const ElementDefinition & eletype = def_it->second;
+        const ElementDefinition & eletype =
+          libmesh_map_find(_element_maps.out, elem->type());
 
         // The element mapper better not require any more nodes
         // than are present in the current element!
@@ -983,15 +954,9 @@ void GmshIO::write_mesh (std::ostream & out_stream)
 
             std::unique_ptr<const Elem> side = elem.build_side_ptr(std::get<1>(t));
 
-            // Map from libmesh elem type to gmsh elem type.
-            auto def_it = _element_maps.out.find(side->type());
-
-            // If we didn't find it, that's an error
-            if (def_it == _element_maps.out.end())
-              libmesh_error_msg("Element type " << side->type() << " not found in _element_maps.");
-
             // consult the export element table
-            const GmshIO::ElementDefinition & eletype = def_it->second;
+            const GmshIO::ElementDefinition & eletype =
+              libmesh_map_find(_element_maps.out, side->type());
 
             // The element mapper better not require any more nodes
             // than are present in the current element!
@@ -1209,15 +1174,19 @@ void GmshIO::write_post (const std::string & fname,
           // Loop over the elements and write out the data
           for (const auto & elem : mesh.active_element_ptr_range())
             {
+              const unsigned int nv = elem->n_vertices();
               // this is quite crappy, but I did not invent that file format!
               for (unsigned int d=0; d<3; d++)  // loop over the dimensions
                 {
-                  for (unsigned int n=0; n < elem->n_vertices(); n++)   // loop over vertices
+                  for (unsigned int n=0; n < nv; n++)   // loop over vertices
                     {
                       const Point & vertex = elem->point(n);
                       if (this->binary())
                         {
-                          double tmp = vertex(d);
+#if defined(LIBMESH_DEFAULT_TRIPLE_PRECISION) || defined(LIBMESH_DEFAULT_QUADRUPLE_PRECISION)
+                          libmesh_warning("Gmsh binary writes use only double precision!");
+#endif
+                          double tmp = double(vertex(d));
                           std::memcpy(buf, &tmp, sizeof(double));
                           out_stream.write(reinterpret_cast<char *>(buf), sizeof(double));
                         }
@@ -1229,7 +1198,7 @@ void GmshIO::write_post (const std::string & fname,
                 }
 
               // now finally write out the data
-              for (unsigned int i=0; i < elem->n_vertices(); i++)   // loop over vertices
+              for (unsigned int i=0; i < nv; i++)   // loop over vertices
                 if (this->binary())
                   {
 #ifdef LIBMESH_USE_COMPLEX_NUMBERS
@@ -1237,7 +1206,7 @@ void GmshIO::write_post (const std::string & fname,
                                  << "complex numbers. Will only write the real part of "
                                  << "variable " << varname << std::endl;
 #endif
-                    double tmp = libmesh_real((*v)[elem->node_id(i)*n_vars + ivar]);
+                    double tmp = double(libmesh_real((*v)[elem->node_id(i)*n_vars + ivar]));
                     std::memcpy(buf, &tmp, sizeof(double));
                     out_stream.write(reinterpret_cast<char *>(buf), sizeof(double));
                   }

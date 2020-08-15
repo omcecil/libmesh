@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,12 +25,11 @@
 namespace libMesh
 {
 
-void QGaussLobatto::init_1D(const ElemType,
-                            unsigned int p)
+void QGaussLobatto::init_1D(const ElemType, unsigned int)
 {
   //----------------------------------------------------------------------
   // 1D quadrature rules
-  switch(_order + 2*p)
+  switch(get_order())
     {
       // Since Gauss-Lobatto rules must include the endpoints of the
       // domain, there is no 1-point rule.  The two-point
@@ -103,7 +102,7 @@ void QGaussLobatto::init_1D(const ElemType,
         _points[ 3]    = -_points[1];
         _points[ 4]    = -_points[0];
 
-        _weights[ 0]   = 0.1;
+        _weights[ 0]   = 1/Real(10);
         _weights[ 1]   = Real(49)/90;
         _weights[ 2]   = Real(32)/45;
         _weights[ 3]   = _weights[1];

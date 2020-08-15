@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -69,9 +69,12 @@ protected:
 
 public:
   /**
-   * Actual copying operation.
+   * Copy assignment operator
    *
-   * \note The copy will have a reference to the same Mesh as the original.
+   * \note \p this will still reference the same MeshBase it was
+   * constructed with.  Boundary data copied from other_boundary_info
+   * will refer to objects in this mesh which have the same
+   * DofObject::id() as the corresponding objects in the other mesh.
    */
   BoundaryInfo & operator=(const BoundaryInfo & other_boundary_info);
 
@@ -161,7 +164,8 @@ public:
    * Only boundary elements with the specified ids are created.
    */
   void add_elements (const std::set<boundary_id_type> & requested_boundary_ids,
-                     UnstructuredMesh & boundary_mesh);
+                     UnstructuredMesh & boundary_mesh,
+                     bool store_parent_side_ids = false);
 
   /**
    * Same as the add_elements() function above, but takes a set of
@@ -171,7 +175,8 @@ public:
    */
   void add_elements(const std::set<boundary_id_type> & requested_boundary_ids,
                     UnstructuredMesh & boundary_mesh,
-                    const std::set<subdomain_id_type> & subdomains_relative_to);
+                    const std::set<subdomain_id_type> & subdomains_relative_to,
+                    bool store_parent_side_ids = false);
 
   /**
    * Add \p Node \p node with boundary id \p id to the boundary
@@ -290,6 +295,12 @@ public:
   void remove (const Elem * elem);
 
   /**
+   * Removes boundary id \p id from node \p node, if it exists.
+   */
+  void remove_node (const Node * node,
+                    const boundary_id_type id);
+
+  /**
    * Removes all boundary conditions associated with edge \p edge of
    * element \p elem, if any exist.
    */
@@ -360,20 +371,8 @@ public:
                         const boundary_id_type id) const;
 
   /**
-   * \returns The boundary ids associated with \p Node \p node.
-   *
-   * \deprecated Instead, use the version of this function that fills
-   * a std::vector.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  std::vector<boundary_id_type> boundary_ids (const Node * node) const;
-#endif
-
-  /**
    * Fills a user-provided std::vector with the boundary ids associated
    * with \p Node \p node.
-   *
-   * This is the non-deprecated version of the function.
    */
   void boundary_ids (const Node * node,
                      std::vector<boundary_id_type> & vec_to_fill) const;
@@ -397,22 +396,6 @@ public:
    * element \p elem.
    *
    * \note Edge-based boundary IDs should only be used in 3D.
-   *
-   * \deprecated Instead, use the version of this function that fills
-   * a std::vector.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  std::vector<boundary_id_type> edge_boundary_ids (const Elem * const elem,
-                                                   const unsigned short int edge) const;
-#endif
-
-  /**
-   * \returns The list of boundary ids associated with the \p edge edge of
-   * element \p elem.
-   *
-   * \note Edge-based boundary IDs should only be used in 3D.
-   *
-   * This is the non-deprecated version of the function.
    */
   void edge_boundary_ids (const Elem * const elem,
                           const unsigned short int edge,
@@ -426,25 +409,6 @@ public:
    * such as a child's inheritance of its ancestors' boundary id.
    *
    * \note Edge-based boundary IDs should only be used in 3D.
-   *
-   * \deprecated Instead, use the version of this function that fills
-   * a std::vector.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  std::vector<boundary_id_type> raw_edge_boundary_ids (const Elem * const elem,
-                                                       const unsigned short int edge) const;
-#endif
-
-  /**
-   * \returns The list of raw boundary ids associated with the \p edge
-   * edge of element \p elem.
-   *
-   * These ids are "raw" because they exclude ids which are implicit,
-   * such as a child's inheritance of its ancestors' boundary id.
-   *
-   * \note Edge-based boundary IDs should only be used in 3D.
-   *
-   * This is the non-deprecated version of the function.
    */
   void raw_edge_boundary_ids (const Elem * const elem,
                               const unsigned short int edge,
@@ -491,24 +455,6 @@ public:
                         const boundary_id_type id) const;
 
   /**
-   * \returns The boundary id associated with the \p side side of
-   * element \p elem, or \p invalid_id if the \p side does not have an
-   * associated boundary id.
-   *
-   * \note Only one id per side is allowed, however multiple sides per
-   * element are allowed.
-   *
-   * \deprecated Asking for just one boundary id means your code isn't
-   * safe to use on meshes with overlapping boundary ids.  Try using
-   * BoundaryInfo::boundary_ids() or BoundaryInfo::has_boundary_id()
-   * instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  boundary_id_type boundary_id (const Elem * const elem,
-                                const unsigned short int side) const;
-#endif
-
-  /**
    * \returns The number of boundary ids associated with the \p side
    * side of element \p elem.
    */
@@ -518,20 +464,6 @@ public:
   /**
    * \returns The list of boundary ids associated with the \p side side of
    * element \p elem.
-   *
-   * \deprecated Instead, use the version of this function that fills
-   * a std::vector.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  std::vector<boundary_id_type> boundary_ids (const Elem * const elem,
-                                              const unsigned short int side) const;
-#endif
-
-  /**
-   * \returns The list of boundary ids associated with the \p side side of
-   * element \p elem.
-   *
-   * This is the non-deprecated version of the function.
    */
   void boundary_ids (const Elem * const elem,
                      const unsigned short int side,
@@ -543,23 +475,6 @@ public:
    *
    * These ids are "raw" because they exclude ids which are implicit,
    * such as a child's inheritance of its ancestors' boundary id.
-   *
-   * \deprecated Instead, use the version of this function that fills
-   * a std::vector.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  std::vector<boundary_id_type> raw_boundary_ids (const Elem * const elem,
-                                                  const unsigned short int side) const;
-#endif
-
-  /**
-   * \returns The list of raw boundary ids associated with the \p side
-   * side of element \p elem.
-   *
-   * These ids are "raw" because they exclude ids which are implicit,
-   * such as a child's inheritance of its ancestors' boundary id.
-   *
-   * This is the non-deprecated version of the function.
    */
   void raw_boundary_ids (const Elem * const elem,
                          const unsigned short int side,
@@ -658,9 +573,15 @@ public:
    * advantage of guaranteed RVO. Note: we could use std::pairs for
    * this, but for consistency with the other build_XYZ_list
    * functions, we're using tuples.
+   *
+   * The "sort_by" parameter controls how the resulting list of tuples
+   * is sorted.  It is possible (but not recommended) to choose
+   * UNSORTED, since in that case the resulting vectors will
+   * potentially be in different orders on different procs.
    */
-  std::vector<std::tuple<dof_id_type, boundary_id_type>>
-  build_node_list() const;
+  typedef std::tuple<dof_id_type, boundary_id_type> NodeBCTuple;
+  enum class NodeBCTupleSortBy {NODE_ID, BOUNDARY_ID, UNSORTED};
+  std::vector<NodeBCTuple> build_node_list(NodeBCTupleSortBy sort_by = NodeBCTupleSortBy::NODE_ID) const;
 
   /**
    * Adds nodes with boundary ids based on the side's boundary
@@ -694,9 +615,16 @@ public:
    * As above, but the library creates and fills in a vector of
    * (elem-id, side-id, bc-id) triplets and returns it to the user,
    * taking advantage of guaranteed RVO.
+   *
+   * The returned vector is sorted by element id by default, but this
+   * can be changed by passing SIDE_ID, BOUNDARY_ID, or UNSORTED to
+   * this function. Note: choosing UNSORTED is not recommended since
+   * the resulting list will potentially be in different orders on
+   * different processors when running in parallel.
    */
-  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
-  build_side_list() const;
+  typedef std::tuple<dof_id_type, unsigned short int, boundary_id_type> BCTuple;
+  enum class BCTupleSortBy {ELEM_ID, SIDE_ID, BOUNDARY_ID, UNSORTED};
+  std::vector<BCTuple> build_side_list(BCTupleSortBy sort_by = BCTupleSortBy::ELEM_ID) const;
 
   /**
    * Creates a list of active element numbers, sides, and ids for those sides.
@@ -847,6 +775,16 @@ public:
   std::string & nodeset_name(boundary_id_type id);
 
   /**
+   * \returns A const reference to an optional edgeset name.
+   */
+  const std::string & get_edgeset_name(boundary_id_type id) const;
+
+  /**
+   * \returns A writable reference to an optional edgeset name.
+   */
+  std::string & edgeset_name(boundary_id_type id);
+
+  /**
    * \returns The id of the named boundary if it exists, \p invalid_id
    * otherwise.
    */
@@ -867,6 +805,14 @@ public:
   { return _ns_id_to_name; }
   const std::map<boundary_id_type, std::string> & get_nodeset_name_map () const
   { return _ns_id_to_name; }
+
+  /**
+   * \returns Writable/const reference to the edgeset name map.
+   */
+  std::map<boundary_id_type, std::string> & set_edgeset_name_map ()
+  { return _es_id_to_name; }
+  const std::map<boundary_id_type, std::string> & get_edgeset_name_map () const
+  { return _es_id_to_name; }
 
   /**
    * Number used for internal use. This is the return value
@@ -984,6 +930,13 @@ private:
    * this is only implemented for ExodusII
    */
   std::map<boundary_id_type, std::string> _ns_id_to_name;
+
+  /**
+   * This structure maintains the mapping of named edge sets
+   * for file formats that support named blocks.  Currently
+   * this is only implemented for ExodusII
+   */
+  std::map<boundary_id_type, std::string> _es_id_to_name;
 };
 
 } // namespace libMesh

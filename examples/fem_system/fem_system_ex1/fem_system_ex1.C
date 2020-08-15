@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -72,15 +72,14 @@ int main (int argc, char ** argv)
   libmesh_example_requires(false, "--disable-singleprecision");
 #endif
 
-  // This example uses the new PetscDMWrapper which currently does not
-  // compile when complex numbers are enabled.
-#ifdef LIBMESH_USE_COMPLEX_NUMBERS
-  libmesh_example_requires(false, "--disable-complex");
-#endif
-
 #ifndef LIBMESH_ENABLE_AMR
   libmesh_example_requires(false, "--enable-amr");
 #else
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // Trilinos and Eigen solvers NaN by default here.
   // We'll skip this example for now.
@@ -121,9 +120,9 @@ int main (int argc, char ** argv)
   std::shared_ptr<UnstructuredMesh> mesh;
 
   if (mesh_type == "distributed")
-    mesh.reset(new DistributedMesh(init.comm()));
+    mesh = std::make_shared<DistributedMesh>(init.comm());
   else if (mesh_type == "replicated")
-    mesh.reset(new ReplicatedMesh(init.comm()));
+    mesh = std::make_shared<ReplicatedMesh>(init.comm());
   else
     libmesh_error_msg("Error: specified mesh_type not understood");
 
@@ -258,13 +257,11 @@ int main (int argc, char ** argv)
               // size at once
               libmesh_assert_equal_to (nelem_target, 0);
 
-              UniformRefinementEstimator * u = new UniformRefinementEstimator;
+              error_estimator = libmesh_make_unique<UniformRefinementEstimator>();
 
               // The lid-driven cavity problem isn't in H1, so
               // lets estimate L2 error
-              u->error_norm = L2;
-
-              error_estimator.reset(u);
+              error_estimator->error_norm = L2;
             }
           else
             {
@@ -276,7 +273,7 @@ int main (int argc, char ** argv)
               // not in H1 - if we were doing more than a few
               // timesteps we'd need to turn off or limit the
               // maximum level of our adaptivity eventually
-              error_estimator.reset(new KellyErrorEstimator);
+              error_estimator = libmesh_make_unique<KellyErrorEstimator>();
             }
 
           // Calculate error based on u and v (and w?) but not p

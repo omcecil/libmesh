@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -82,26 +82,27 @@ int main (int argc, char ** argv)
   GetPot command_line (argc, argv);
 
   // Check for proper calling arguments.
-  if (argc < 3)
-    libmesh_error_msg("Usage:\n" << "\t " << argv[0] << " -n 15");
+  libmesh_error_msg_if(argc < 3, "Usage:\n" << "\t " << argv[0] << " -n 15");
 
   // Brief message to the user regarding the program name
   // and command line arguments.
-  else
-    {
-      libMesh::out << "Running " << argv[0];
+  libMesh::out << "Running " << argv[0];
 
-      for (int i=1; i<argc; i++)
-        libMesh::out << " " << argv[i];
+  for (int i=1; i<argc; i++)
+    libMesh::out << " " << argv[i];
 
-      libMesh::out << std::endl << std::endl;
-    }
+  libMesh::out << std::endl << std::endl;
 
   // This is 3D-only problem
   const unsigned int dim = 3;
 
   // Skip higher-dimensional examples on a lower-dimensional libMesh build
   libmesh_example_requires(dim <= LIBMESH_DIM, "3D support");
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // Read number of elements used in each cube from command line
   int ps = 10;
@@ -179,6 +180,7 @@ void assemble_and_solve(MeshBase & mesh,
   LinearImplicitSystem & system =
     equation_systems.add_system<LinearImplicitSystem> ("Poisson");
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
   unsigned int u_var = system.add_variable("u", FIRST, LAGRANGE);
 
   system.attach_assemble_function (assemble_poisson);
@@ -199,6 +201,7 @@ void assemble_and_solve(MeshBase & mesh,
   DirichletBoundary dirichlet_bc(boundary_ids, variables, zf,
                                  LOCAL_VARIABLE_ORDER);
   system.get_dof_map().add_dirichlet_boundary(dirichlet_bc);
+#endif // LIBMESH_ENABLE_DIRICHLET
 
   equation_systems.init();
   equation_systems.print_info();

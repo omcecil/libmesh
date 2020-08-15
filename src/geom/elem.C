@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -67,7 +67,7 @@
 #include "libmesh/quadrature_gauss.h"
 #include "libmesh/remote_elem.h"
 #include "libmesh/reference_elem.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/threads.h"
 #include "libmesh/enum_elem_quality.h"
 #include "libmesh/enum_io_package.h"
@@ -335,6 +335,18 @@ std::unique_ptr<Elem> Elem::build(const ElemType type,
 
 
 
+std::unique_ptr<Elem> Elem::build_with_id (const ElemType type,
+                                           dof_id_type id)
+{
+  // Call the other build() method with nullptr parent, then set the
+  // required id.
+  auto temp = Elem::build(type, nullptr);
+  temp->set_id(id);
+  return temp;
+}
+
+
+
 const Elem * Elem::reference_elem () const
 {
   return &(ReferenceElem::get(this->type()));
@@ -346,10 +358,12 @@ Point Elem::centroid() const
 {
   Point cp;
 
-  for (unsigned int n=0; n<this->n_vertices(); n++)
+  const auto n_vertices = this->n_vertices();
+
+  for (unsigned int n=0; n<n_vertices; n++)
     cp.add (this->point(n));
 
-  return (cp /= static_cast<Real>(this->n_vertices()));
+  return (cp /= static_cast<Real>(n_vertices));
 }
 
 
@@ -358,10 +372,13 @@ Real Elem::hmin() const
 {
   Real h_min=std::numeric_limits<Real>::max();
 
-  for (unsigned int n_outer=0; n_outer<this->n_vertices(); n_outer++)
-    for (unsigned int n_inner=n_outer+1; n_inner<this->n_vertices(); n_inner++)
+  // Avoid calling a virtual a lot of times
+  const auto n_vertices = this->n_vertices();
+
+  for (unsigned int n_outer=0; n_outer<n_vertices; n_outer++)
+    for (unsigned int n_inner=n_outer+1; n_inner<n_vertices; n_inner++)
       {
-        const Point diff = (this->point(n_outer) - this->point(n_inner));
+        const auto diff = (this->point(n_outer) - this->point(n_inner));
 
         h_min = std::min(h_min, diff.norm_sq());
       }
@@ -375,10 +392,13 @@ Real Elem::hmax() const
 {
   Real h_max=0;
 
-  for (unsigned int n_outer=0; n_outer<this->n_vertices(); n_outer++)
-    for (unsigned int n_inner=n_outer+1; n_inner<this->n_vertices(); n_inner++)
+  // Avoid calling a virtual a lot of times
+  const auto n_vertices = this->n_vertices();
+
+  for (unsigned int n_outer=0; n_outer<n_vertices; n_outer++)
+    for (unsigned int n_inner=n_outer+1; n_inner<n_vertices; n_inner++)
       {
-        const Point diff = (this->point(n_outer) - this->point(n_inner));
+        const auto diff = (this->point(n_outer) - this->point(n_inner));
 
         h_max = std::max(h_max, diff.norm_sq());
       }
@@ -464,10 +484,72 @@ bool Elem::is_semilocal(const processor_id_type my_pid) const
 
 
 
+unsigned int Elem::which_side_am_i (const Elem * e) const
+{
+  libmesh_assert(e);
+
+  const unsigned int ns = this->n_sides();
+  const unsigned int nn = this->n_nodes();
+
+  const unsigned int en = e->n_nodes();
+
+  // e might be on any side until proven otherwise
+  std::vector<bool> might_be_side(ns, true);
+
+  for (unsigned int i=0; i != en; ++i)
+    {
+      Point side_point = e->point(i);
+      unsigned int local_node_id = libMesh::invalid_uint;
+
+      // Look for a node of this that's contiguous with node i of
+      // e. Note that the exact floating point comparison of Point
+      // positions is intentional, see the class documentation for
+      // this function.
+      for (unsigned int j=0; j != nn; ++j)
+        if (this->point(j) == side_point)
+          local_node_id = j;
+
+      // If a node of e isn't contiguous with some node of this, then
+      // e isn't a side of this.
+      if (local_node_id == libMesh::invalid_uint)
+        return libMesh::invalid_uint;
+
+      // If a node of e isn't contiguous with some node on side s of
+      // this, then e isn't on side s.
+      for (unsigned int s=0; s != ns; ++s)
+        if (!this->is_node_on_side(local_node_id, s))
+          might_be_side[s] = false;
+    }
+
+  for (unsigned int s=0; s != ns; ++s)
+    if (might_be_side[s])
+      {
+#ifdef DEBUG
+        for (unsigned int s2=s+1; s2 < ns; ++s2)
+          libmesh_assert (!might_be_side[s2]);
+#endif
+        return s;
+      }
+
+  // Didn't find any matching side
+  return libMesh::invalid_uint;
+}
+
+
+
+unsigned int Elem::which_node_am_i(unsigned int side,
+                                   unsigned int side_node) const
+{
+  libmesh_deprecated();
+  return local_side_node(side, side_node);
+}
+
+
+
 bool Elem::contains_vertex_of(const Elem * e) const
 {
   // Our vertices are the first numbered nodes
-  for (unsigned int n = 0; n != e->n_vertices(); ++n)
+  for (auto n : make_range(e->n_vertices()))
     if (this->contains_point(e->point(n)))
       return true;
   return false;
@@ -480,7 +562,7 @@ bool Elem::contains_edge_of(const Elem * e) const
   unsigned int num_contained_edges = 0;
 
   // Our vertices are the first numbered nodes
-  for (unsigned int n = 0; n != e->n_vertices(); ++n)
+  for (auto n : make_range(e->n_vertices()))
     {
       if (this->contains_point(e->point(n)))
         {
@@ -508,6 +590,10 @@ void Elem::find_point_neighbors(const Point & p,
   std::set<const Elem *> untested_set, next_untested_set;
   untested_set.insert(this);
 
+#ifdef LIBMESH_ENABLE_AMR
+  std::vector<const Elem *> active_neighbor_children;
+#endif // #ifdef LIBMESH_ENABLE_AMR
+
   while (!untested_set.empty())
     {
       // Loop over all the elements in the patch that haven't already
@@ -520,34 +606,34 @@ void Elem::find_point_neighbors(const Point & p,
                 {
                   if (current_neighbor->active())                // ... if it is active
                     {
-                      if (current_neighbor->contains_point(p))   // ... and touches p
+                      auto it = neighbor_set.lower_bound(current_neighbor);
+                      if ((it == neighbor_set.end() || *it != current_neighbor) &&
+                          current_neighbor->contains_point(p))   // ... don't have and touches p
                         {
-                          // Make sure we'll test it
-                          if (!neighbor_set.count(current_neighbor))
-                            next_untested_set.insert (current_neighbor);
-
-                          // And add it
-                          neighbor_set.insert (current_neighbor);
+                          // Add it and test it
+                          next_untested_set.insert(current_neighbor);
+                          neighbor_set.emplace_hint(it, current_neighbor);
                         }
                     }
 #ifdef LIBMESH_ENABLE_AMR
                   else                                 // ... the neighbor is *not* active,
                     {                                  // ... so add *all* neighboring
                                                        // active children that touch p
-                      std::vector<const Elem *> active_neighbor_children;
-
+                      active_neighbor_children.clear();
                       current_neighbor->active_family_tree_by_neighbor
                         (active_neighbor_children, elem);
 
                       for (const auto & current_child : active_neighbor_children)
-                          if (current_child->contains_point(p))
+                        {
+                          auto it = neighbor_set.lower_bound(current_child);
+                          if ((it == neighbor_set.end() || *it != current_child) &&
+                              current_child->contains_point(p))
                             {
-                              // Make sure we'll test it
-                              if (!neighbor_set.count(current_child))
-                                next_untested_set.insert (current_child);
-
-                              neighbor_set.insert (current_child);
+                              // Add it and test it
+                              next_untested_set.insert(current_child);
+                              neighbor_set.emplace_hint(it, current_child);
                             }
+                        }
                     }
 #endif // #ifdef LIBMESH_ENABLE_AMR
                 }
@@ -688,7 +774,8 @@ void Elem::find_interior_neighbors(std::set<Elem *> & neighbor_set)
 const Elem * Elem::interior_parent () const
 {
   // interior parents make no sense for full-dimensional elements.
-  libmesh_assert_less (this->dim(), LIBMESH_DIM);
+  if (this->dim() >= LIBMESH_DIM)
+      return nullptr;
 
   // they USED TO BE only good for level-0 elements, but we now
   // support keeping interior_parent() valid on refined boundary
@@ -710,11 +797,6 @@ const Elem * Elem::interior_parent () const
                   (interior_p == remote_elem) ||
                   (interior_p->dim() > this->dim()));
 
-  // We require consistency between AMR of interior and of boundary
-  // elements
-  if (interior_p && (interior_p != remote_elem))
-    libmesh_assert_less_equal (interior_p->level(), this->level());
-
   return interior_p;
 }
 
@@ -723,14 +805,14 @@ const Elem * Elem::interior_parent () const
 Elem * Elem::interior_parent ()
 {
   // See the const version for comments
-  libmesh_assert_less (this->dim(), LIBMESH_DIM);
+  if (this->dim() >= LIBMESH_DIM)
+      return nullptr;
+
   Elem * interior_p = _elemlinks[1+this->n_sides()];
 
   libmesh_assert (!interior_p ||
                   (interior_p == remote_elem) ||
                   (interior_p->dim() > this->dim()));
-  if (interior_p && (interior_p != remote_elem))
-    libmesh_assert_less_equal (interior_p->level(), this->level());
 
   return interior_p;
 }
@@ -862,7 +944,7 @@ bool Elem::has_topological_neighbor (const Elem * elem,
 void Elem::libmesh_assert_valid_node_pointers() const
 {
   libmesh_assert(this->valid_id());
-  for (unsigned int n=0; n != this->n_nodes(); ++n)
+  for (auto n : this->node_index_range())
     {
       libmesh_assert(this->node_ptr(n));
       libmesh_assert(this->node_ptr(n)->valid_id());
@@ -943,7 +1025,7 @@ void Elem::libmesh_assert_valid_neighbors() const
 
 
 
-void Elem::make_links_to_me_local(unsigned int n)
+void Elem::make_links_to_me_local(unsigned int n, unsigned int nn)
 {
   Elem * neigh = this->neighbor_ptr(n);
 
@@ -970,26 +1052,22 @@ void Elem::make_links_to_me_local(unsigned int n)
   if (neigh->level() != this->level())
     return;
 
-  // What side of neigh are we on?  We can't use the usual Elem
-  // method because we're in the middle of restoring topology
-  const std::unique_ptr<Elem> my_side = this->side_ptr(n);
-  unsigned int nn = 0;
-  for (; nn != neigh->n_sides(); ++nn)
-    {
-      const std::unique_ptr<Elem> neigh_side = neigh->side_ptr(nn);
-      if (*my_side == *neigh_side)
-        break;
-    }
-
-  // we had better be on *some* side of neigh
-  libmesh_assert_less (nn, neigh->n_sides());
+  // What side of neigh are we on?  nn.
+  //
+  // We can't use the usual Elem method because we're in the middle of
+  // restoring topology.  We can't compare side_ptr nodes because
+  // users want to abuse neighbor_ptr to point to
+  // not-technically-neighbors across mesh slits.  We can't compare
+  // node locations because users want to move those
+  // not-technically-neighbors until they're
+  // not-even-geometrically-neighbors.
 
   // Find any elements that ought to point to elem
   std::vector<Elem *> neigh_family;
 #ifdef LIBMESH_ENABLE_AMR
   if (this->active())
     neigh->family_tree_by_side(neigh_family, nn);
-  else if (neigh->subactive())
+  else
 #endif
     neigh_family.push_back(neigh);
 
@@ -1171,7 +1249,7 @@ void Elem::remove_links_to_me()
 #else
               unsigned int my_s = neigh->which_neighbor_am_i(this);
               libmesh_assert_less (my_s, neigh->n_neighbors());
-              libmesh_assert_equal_to (neigh->neighbor(my_s), this);
+              libmesh_assert_equal_to (neigh->neighbor_ptr(my_s), this);
               neigh->set_neighbor(my_s, nullptr);
 #endif
             }
@@ -1237,7 +1315,7 @@ void Elem::write_connectivity (std::ostream & out_stream,
         // This connectivity vector will be used repeatedly instead
         // of being reconstructed inside the loop.
         std::vector<dof_id_type> conn;
-        for (unsigned int sc=0; sc <this->n_sub_elem(); sc++)
+        for (auto sc : make_range(this->n_sub_elem()))
           {
             this->connectivity(sc, TECPLOT, conn);
 
@@ -1869,8 +1947,7 @@ Elem::parent_bracketing_nodes(unsigned int child,
 
                           if (pmid == bracketed_pt)
                             {
-                              cached_bracketing_nodes[em_vers][c][n].push_back
-                                (std::make_pair(parent_n1,parent_n2));
+                              cached_bracketing_nodes[em_vers][c][n].emplace_back(parent_n1, parent_n2);
                               break;
                             }
                           else
@@ -1921,8 +1998,7 @@ Elem::parent_bracketing_nodes(unsigned int child,
 
                           if (pmid == bracketed_pt)
                             {
-                              cached_bracketing_nodes[em_vers][c][n].push_back
-                                (std::make_pair(n1,n2));
+                              cached_bracketing_nodes[em_vers][c][n].emplace_back(n1, n2);
                               break;
                             }
                           else
@@ -1951,8 +2027,7 @@ Elem::bracketing_nodes(unsigned int child,
     {
       const unsigned short n_n = this->n_nodes();
       if (pb.first < n_n && pb.second < n_n)
-        returnval.push_back(std::make_pair(this->node_id(pb.first),
-                                           this->node_id(pb.second)));
+        returnval.emplace_back(this->node_id(pb.first), this->node_id(pb.second));
       else
         {
           // We must be on a non-full-order higher order element...
@@ -1980,7 +2055,7 @@ Elem::bracketing_nodes(unsigned int child,
           // This only doesn't break horribly because we add children
           // and nodes in straightforward + hierarchical orders...
           for (unsigned int c=0; c <= child; ++c)
-            for (unsigned int n=0; n != this->n_nodes_in_child(c); ++n)
+            for (auto n : make_range(this->n_nodes_in_child(c)))
               {
                 if (c == child && n == child_node)
                   break;
@@ -2023,7 +2098,7 @@ Elem::bracketing_nodes(unsigned int child,
 
           if (pt1 != DofObject::invalid_id &&
               pt2 != DofObject::invalid_id)
-            returnval.push_back(std::make_pair(pt1, pt2));
+            returnval.emplace_back(pt1, pt2);
         }
     }
 
@@ -2125,19 +2200,15 @@ bool Elem::point_test(const Point & p, Real box_tol, Real map_tol) const
         return false;
     }
 
-  // Declare a basic FEType.  Will be a Lagrange
-  // element by default.
-  FEType fe_type(this->default_order());
-
   // To be on the safe side, we converge the inverse_map() iteration
   // to a slightly tighter tolerance than that requested by the
   // user...
-  const Point mapped_point = FEInterface::inverse_map(this->dim(),
-                                                      fe_type,
-                                                      this,
-                                                      p,
-                                                      0.1*map_tol, // <- this is |dx| tolerance, the Newton residual should be ~ |dx|^2
-                                                      /*secure=*/ false);
+  const Point mapped_point = FEMap::inverse_map(this->dim(),
+                                                this,
+                                                p,
+                                                0.1*map_tol, // <- this is |dx| tolerance, the Newton residual should be ~ |dx|^2
+                                                /*secure=*/ false,
+                                                /*extra_checks=*/ false);
 
   // Check that the refspace point maps back to p!  This is only necessary
   // for 1D and 2D elements, 3D elements always live in 3D.
@@ -2147,10 +2218,7 @@ bool Elem::point_test(const Point & p, Real box_tol, Real map_tol) const
   // the linear element types.
   if (this->dim() < 3)
     {
-      Point xyz = FEInterface::map(this->dim(),
-                                   fe_type,
-                                   this,
-                                   mapped_point);
+      Point xyz = FEMap::map(this->dim(), this, mapped_point);
 
       // Compute the distance between the original point and the re-mapped point.
       // They should be in the same place.
@@ -2159,7 +2227,7 @@ bool Elem::point_test(const Point & p, Real box_tol, Real map_tol) const
 
       // If dist is larger than some fraction of the tolerance, then return false.
       // This can happen when e.g. a 2D element is living in 3D, and
-      // FEInterface::inverse_map() maps p onto the projection of the element,
+      // FEMap::inverse_map() maps p onto the projection of the element,
       // effectively "tricking" FEInterface::on_reference_element().
       if (dist > this->hmax() * map_tol)
         return false;
@@ -2207,12 +2275,12 @@ std::string Elem::get_info () const
       << "   dim()="     << this->dim()                            << '\n'
       << "   n_nodes()=" << this->n_nodes()                        << '\n';
 
-  for (unsigned int n=0; n != this->n_nodes(); ++n)
+  for (auto n : this->node_index_range())
     oss << "    " << n << this->node_ref(n);
 
   oss << "   n_sides()=" << this->n_sides()                        << '\n';
 
-  for (unsigned int s=0; s != this->n_sides(); ++s)
+  for (auto s : this->side_index_range())
     {
       oss << "    neighbor(" << s << ")=";
       if (this->neighbor_ptr(s))
@@ -2254,9 +2322,9 @@ std::string Elem::get_info () const
       ;
 
   oss << "   DoFs=";
-  for (unsigned int s=0; s != this->n_systems(); ++s)
-    for (unsigned int v=0; v != this->n_vars(s); ++v)
-      for (unsigned int c=0; c != this->n_comp(s,v); ++c)
+  for (auto s : make_range(this->n_systems()))
+    for (auto v : make_range(this->n_vars(s)))
+      for (auto c : make_range(this->n_comp(s,v)))
         oss << '(' << s << '/' << v << '/' << this->dof_number(s,v,c) << ") ";
 
 
@@ -2407,6 +2475,11 @@ ElemType Elem::second_order_equivalent_type (const ElemType et,
         return TRI6;
       }
 
+      // Currently there is no TRISHELL6, so similarly to other types
+      // where this is the case, we just return the input.
+    case TRISHELL3:
+      return TRISHELL3;
+
     case QUAD4:
     case QUAD8:
       {
@@ -2419,10 +2492,9 @@ ElemType Elem::second_order_equivalent_type (const ElemType et,
     case QUADSHELL4:
     case QUADSHELL8:
       {
-        if (full_ordered)
-          libmesh_error();
-        else
-          return QUADSHELL8;
+        // There is no QUADSHELL9, so in that sense QUADSHELL8 is the
+        // "full ordered" element.
+        return QUADSHELL8;
       }
 
     case QUAD9:
@@ -2535,7 +2607,8 @@ ElemType Elem::second_order_equivalent_type (const ElemType et,
     default:
       {
         // what did we miss?
-        libmesh_error();
+        libmesh_error_msg("No second order equivalent element type for et =  "
+                          << Utility::enum_to_string(et));
       }
     }
 }
@@ -2566,7 +2639,8 @@ Real Elem::volume () const
   // order and sums up the JxW contributions.  This can be expensive,
   // so the various element types can overload this method and compute
   // the volume more efficiently.
-  FEType fe_type (this->default_order() , LAGRANGE);
+  const FEFamily mapping_family = FEMap::map_fe_type(*this);
+  const FEType fe_type(this->default_order(), mapping_family);
 
   std::unique_ptr<FEBase> fe (FEBase::build(this->dim(),
                                             fe_type));
@@ -2582,8 +2656,8 @@ Real Elem::volume () const
   fe->reinit(this);
 
   Real vol=0.;
-  for (unsigned int qp=0; qp<qrule.n_points(); ++qp)
-    vol += JxW[qp];
+  for (auto jxw : JxW)
+    vol += jxw;
 
   return vol;
 

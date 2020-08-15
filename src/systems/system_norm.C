@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,6 +19,7 @@
 // libMesh includes
 #include "libmesh/system_norm.h"
 #include "libmesh/enum_norm_type.h"
+#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -56,7 +57,7 @@ SystemNorm::SystemNorm(const std::vector<FEMNormType> & norms,
       _weights_sq.push_back(1.0);
     }
   else
-    for (std::size_t i=0; i != _weights.size(); ++i)
+    for (auto i : index_range(_weights))
       _weights_sq[i] = _weights[i] * _weights[i];
 }
 
@@ -79,7 +80,7 @@ SystemNorm::SystemNorm(const std::vector<FEMNormType> & norms,
     {
       // Loop over the entries of the user provided matrix and store its entries in
       // the _off_diagonal_weights or _diagonal_weights
-      for (std::size_t i=0; i!=_off_diagonal_weights.size(); ++i)
+      for (auto i : index_range(_off_diagonal_weights))
         {
           if (_off_diagonal_weights[i].size() > i)
             {
@@ -89,7 +90,7 @@ SystemNorm::SystemNorm(const std::vector<FEMNormType> & norms,
           else
             _weights[i] = 1.0;
         }
-      for (std::size_t i=0; i != _weights.size(); ++i)
+      for (auto i : index_range(_weights))
         _weights_sq[i] = _weights[i] * _weights[i];
     }
 }

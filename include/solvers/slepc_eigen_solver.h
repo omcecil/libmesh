@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -104,6 +104,30 @@ public:
                   const double tol,
                   const unsigned int m_its) override;
 
+   /**
+    * Same as above except that matrix_A is a ShellMatrix
+    * in this case.
+    */
+   virtual std::pair<unsigned int, unsigned int>
+   solve_standard (ShellMatrix<T> & shell_matrix,
+                   SparseMatrix<T> & precond,
+                   int nev,
+                   int ncv,
+                   const double tol,
+                   const unsigned int m_its) override;
+
+   /**
+    * Same as above except that precond is a ShellMatrix
+    * in this case.
+    */
+   virtual std::pair<unsigned int, unsigned int>
+   solve_standard (ShellMatrix<T> & shell_matrix,
+                   ShellMatrix<T> & precond,
+                   int nev,
+                   int ncv,
+                   const double tol,
+                   const unsigned int m_its) override;
+
 
   /**
    * This function calls the SLEPc solver to compute
@@ -174,6 +198,23 @@ public:
                     const unsigned int m_its) override;
 
 
+  virtual std::pair<unsigned int, unsigned int>
+  solve_generalized(ShellMatrix<T> & matrix_A,
+                    ShellMatrix<T> & matrix_B,
+                    SparseMatrix<T> & precond,
+                    int nev,
+                    int ncv,
+                    const double tol,
+                    const unsigned int m_its) override;
+
+  virtual std::pair<unsigned int, unsigned int>
+  solve_generalized(ShellMatrix<T> & matrix_A,
+                    ShellMatrix<T> & matrix_B,
+                    ShellMatrix<T> & precond,
+                    int nev,
+                    int ncv,
+                    const double tol,
+                    const unsigned int m_its) override;
 
   /**
    * \returns The real and imaginary part of the ith eigenvalue and
@@ -219,6 +260,7 @@ private:
    * Helper function that actually performs the standard eigensolve.
    */
   std::pair<unsigned int, unsigned int> _solve_standard_helper (Mat mat,
+                                                                Mat precond,
                                                                 int nev,
                                                                 int ncv,
                                                                 const double tol,
@@ -229,6 +271,7 @@ private:
    */
   std::pair<unsigned int, unsigned int> _solve_generalized_helper (Mat mat_A,
                                                                    Mat mat_B,
+                                                                   Mat precond,
                                                                    int nev,
                                                                    int ncv,
                                                                    const double tol,

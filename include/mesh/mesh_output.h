@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -117,7 +117,7 @@ public:
   { libmesh_not_implemented(); }
 
   /**
-   * This method should be overridden by "parallel" output formats for
+   * This method may be overridden by "parallel" output formats for
    * writing nodal data.  Instead of getting a localized copy of the
    * nodal solution vector, it is passed a NumericVector of
    * type=PARALLEL which is in node-major order i.e.
@@ -134,9 +134,22 @@ public:
                                  const std::vector<std::string> &);
 
   /**
+   * This method should be overridden by "parallel" output formats for
+   * writing nodal data.  Instead of getting a localized copy of the
+   * nodal solution vector, it directly uses EquationSystems
+   * current_local_solution vectors to look up nodal values.
+   *
+   * If not implemented, reorders the solutions into a nodal-only
+   * NumericVector and calls the above version of this function.
+   */
+  virtual void write_nodal_data (const std::string &,
+                                 const EquationSystems &,
+                                 const std::set<std::string> *);
+
+  /**
    * Return/set the precision to use when writing ASCII files.
    *
-   * By default we use numeric_limits<Real>::digits10 + 2, which
+   * By default we use numeric_limits<Real>::max_digits10, which
    * should be enough to write out to ASCII and get the exact same
    * Real back when reading in.
    */
@@ -195,7 +208,7 @@ MeshOutput<MT>::MeshOutput (const bool is_parallel_format, const bool serial_onl
   _is_parallel_format(is_parallel_format),
   _serial_only_needed_on_proc_0(serial_only_needed_on_proc_0),
   _obj(nullptr),
-  _ascii_precision (std::numeric_limits<Real>::digits10 + 2)
+  _ascii_precision (std::numeric_limits<Real>::max_digits10)
 {}
 
 
@@ -206,7 +219,7 @@ MeshOutput<MT>::MeshOutput (const MT & obj, const bool is_parallel_format, const
   _is_parallel_format(is_parallel_format),
   _serial_only_needed_on_proc_0(serial_only_needed_on_proc_0),
   _obj (&obj),
-  _ascii_precision (std::numeric_limits<Real>::digits10 + 2)
+  _ascii_precision (std::numeric_limits<Real>::max_digits10)
 {
   if (!_is_parallel_format && !this->mesh().is_serial())
     {

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,7 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/function_base.h"
 #include "libmesh/point.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // C++ includes
 #include <string>
@@ -73,8 +74,7 @@ public:
 
   virtual std::unique_ptr<FunctionBase<Output>> clone() const override
   {
-    return std::unique_ptr<FunctionBase<Output>>
-      (new ConstFunction<Output>(_c));
+    return libmesh_make_unique<ConstFunction<Output>>(_c);
   }
 
 private:

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -115,8 +115,7 @@ int main (int argc, char ** argv)
   libmesh_example_requires(2 <= LIBMESH_DIM, "2D support");
 
   // Check for proper usage. frequency has two terms:
-  if ( argc <4 )
-    libmesh_error_msg("Usage: " << argv[0] << " -f [real_frequency imag_frequency]");
+  libmesh_error_msg_if(argc < 4, "Usage: " << argv[0] << " -f [real_frequency imag_frequency]");
 
   if (init.comm().size() > 1)
     {

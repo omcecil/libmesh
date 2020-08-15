@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -87,18 +87,29 @@ dof_id_type Prism::key (const unsigned int s) const
 
 
 
-unsigned int Prism::which_node_am_i(unsigned int side,
+unsigned int Prism::local_side_node(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
 
   // Never more than 4 nodes per side.
-  libmesh_assert_less(side_node, 4);
+  libmesh_assert_less(side_node, Prism6::nodes_per_side);
 
   // Some sides have 3 nodes.
   libmesh_assert(!(side==0 || side==4) || side_node < 3);
 
   return Prism6::side_nodes_map[side][side_node];
+}
+
+
+
+unsigned int Prism::local_edge_node(unsigned int edge,
+                                    unsigned int edge_node) const
+{
+  libmesh_assert_less(edge, this->n_edges());
+  libmesh_assert_less(edge_node, Prism6::nodes_per_edge);
+
+  return Prism6::edge_nodes_map[edge][edge_node];
 }
 
 
@@ -130,7 +141,7 @@ std::unique_ptr<Elem> Prism::side_ptr (const unsigned int i)
     }
 
   // Set the nodes
-  for (unsigned n=0; n<face->n_nodes(); ++n)
+  for (auto n : face->node_index_range())
     face->set_node(n) = this->node_ptr(Prism6::side_nodes_map[i][n]);
 
   return face;
@@ -202,8 +213,15 @@ bool Prism::is_edge_on_side(const unsigned int e,
   libmesh_assert_less (e, this->n_edges());
   libmesh_assert_less (s, this->n_sides());
 
-  return (is_node_on_side(Prism6::edge_nodes_map[e][0],s) &&
-          is_node_on_side(Prism6::edge_nodes_map[e][1],s));
+  return (Prism6::edge_sides_map[e][0] == s ||
+          Prism6::edge_sides_map[e][1] == s);
+}
+
+
+
+std::vector<unsigned int> Prism::sides_on_edge(const unsigned int e) const
+{
+  return {Prism6::edge_sides_map[e][0], Prism6::edge_sides_map[e][1]};
 }
 
 

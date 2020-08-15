@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,8 +19,8 @@
 // Local includes
 #include "libmesh/distributed_mesh.h"
 #include "libmesh/equation_systems.h"
+#include "libmesh/libmesh_logging.h"
 #include "libmesh/mesh_output.h"
-#include "libmesh/parallel.h"
 #include "libmesh/unstructured_mesh.h"
 #include "libmesh/numeric_vector.h"
 
@@ -42,10 +42,11 @@ void MeshOutput<MT>::write_equation_systems (const std::string & fname,
   // mesh, output files full of garbage are the result.
   libmesh_assert_equal_to(&es.get_mesh(), _obj);
 
-  // A non-renumbered mesh may not have a contiguous numbering, and
-  // that needs to be fixed before we can build a solution vector.
-  if (my_mesh.max_elem_id() != my_mesh.n_elem() ||
-      my_mesh.max_node_id() != my_mesh.n_nodes())
+  // A non-parallel format, non-renumbered mesh may not have a contiguous
+  // numbering, and that needs to be fixed before we can build a solution vector.
+  if (!_is_parallel_format &&
+      (my_mesh.max_elem_id() != my_mesh.n_elem() ||
+       my_mesh.max_node_id() != my_mesh.n_nodes()))
     {
       // If we were allowed to renumber then we should have already
       // been properly renumbered...
@@ -64,14 +65,14 @@ void MeshOutput<MT>::write_equation_systems (const std::string & fname,
       my_mesh.allow_renumbering(false);
     }
 
-  MeshSerializer serialize(const_cast<MT &>(*_obj), !_is_parallel_format, _serial_only_needed_on_proc_0);
-
-  // Build the list of variable names that will be written.
-  std::vector<std::string> names;
-  es.build_variable_names  (names, nullptr, system_names);
-
   if (!_is_parallel_format)
     {
+      MeshSerializer serialize(const_cast<MT &>(*_obj), !_is_parallel_format, _serial_only_needed_on_proc_0);
+
+      // Build the list of variable names that will be written.
+      std::vector<std::string> names;
+      es.build_variable_names  (names, nullptr, system_names);
+
       // Build the nodal solution values & get the variable
       // names from the EquationSystems object
       std::vector<Number> soln;
@@ -80,12 +81,7 @@ void MeshOutput<MT>::write_equation_systems (const std::string & fname,
       this->write_nodal_data (fname, soln, names);
     }
   else // _is_parallel_format
-    {
-      std::unique_ptr<NumericVector<Number>> parallel_soln =
-        es.build_parallel_solution_vector(system_names);
-
-      this->write_nodal_data (fname, *parallel_soln, names);
-    }
+    this->write_nodal_data (fname, es, system_names);
 }
 
 template <class MT>
@@ -158,6 +154,21 @@ void MeshOutput<MT>::write_nodal_data (const std::string & fname,
   parallel_soln.localize(soln);
   this->write_nodal_data(fname, soln, names);
 }
+
+template <class MT>
+void MeshOutput<MT>::write_nodal_data (const std::string & fname,
+                                       const EquationSystems & es,
+                                       const std::set<std::string> * system_names)
+{
+  std::vector<std::string> names;
+  es.build_variable_names  (names, nullptr, system_names);
+
+  std::unique_ptr<NumericVector<Number>> parallel_soln =
+    es.build_parallel_solution_vector(system_names);
+
+  this->write_nodal_data (fname, *parallel_soln, names);
+}
+
 
 
 

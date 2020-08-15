@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -136,8 +136,15 @@ public:
   /**
    * \returns \p side after doing some range checking. \p side_node is ignored.
    */
-  virtual unsigned int which_node_am_i(unsigned int side,
+  virtual unsigned int local_side_node(unsigned int side,
                                        unsigned int /*side_node*/) const override final;
+
+  /**
+   * Throws an error. Edge elems have n_edges() == 0, so it does not
+   * make sense to call local_edge_node().
+   */
+  virtual unsigned int local_edge_node(unsigned int edge,
+                                       unsigned int edge_node) const override final;
 
   /**
    * \returns A pointer to a NodeElem for the specified node.
@@ -168,6 +175,11 @@ public:
   { libmesh_not_implemented(); return std::unique_ptr<Elem>(); }
 
   virtual std::vector<unsigned int> nodes_on_side(const unsigned int s) const override;
+
+  virtual std::vector<unsigned int> nodes_on_edge(const unsigned int e) const override;
+
+  virtual std::vector<unsigned int> sides_on_edge(const unsigned int) const override final
+  { return {}; }
 
 protected:
 

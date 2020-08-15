@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -94,7 +94,11 @@ public:
   virtual dof_id_type key (const unsigned int) const override
   { libmesh_not_implemented(); return 0; }
 
-  virtual unsigned int which_node_am_i(unsigned int /*side*/,
+  virtual unsigned int local_side_node(unsigned int /*side*/,
+                                       unsigned int /*side_node*/) const override
+  { libmesh_not_implemented(); return 0; }
+
+  virtual unsigned int local_edge_node(unsigned int /*side*/,
                                        unsigned int /*side_node*/) const override
   { libmesh_not_implemented(); return 0; }
 
@@ -144,6 +148,18 @@ public:
   { libmesh_not_implemented(); return false; }
 
   virtual std::vector<unsigned int> nodes_on_side(const unsigned int) const override
+  {
+    libmesh_not_implemented();
+    return {0};
+  }
+
+  virtual std::vector<unsigned int> nodes_on_edge(const unsigned int) const override
+  {
+    libmesh_not_implemented();
+    return {0};
+  }
+
+  virtual std::vector<unsigned int> sides_on_edge(const unsigned int) const override
   {
     libmesh_not_implemented();
     return {0};

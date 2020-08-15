@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,9 +22,12 @@
 
 // Local includes
 #include "libmesh/reference_counted_object.h"
+#include "libmesh/id_types.h" // subdomain_id_type
+#include "libmesh/libmesh_common.h" // TOLERANCE
 
 // C++ includes
 #include <set>
+#include <ostream>
 
 namespace libMesh
 {
@@ -69,13 +72,13 @@ protected:
    * Constructor.  Protected.
    */
   explicit
-  TreeBase (const MeshBase & m);
+  TreeBase (const MeshBase & m) : mesh(m) {}
 
 public:
   /**
    * Destructor.
    */
-  virtual ~TreeBase() {}
+  virtual ~TreeBase() = default;
 
   /**
    * Prints the nodes.
@@ -101,6 +104,17 @@ public:
                                     const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
                                     Real relative_tol = TOLERANCE) const = 0;
 
+  /**
+   * Fills \p candidate_elements with any elements containing the
+   * specified point \p p,
+   * optionally restricted to a set of allowed subdomains,
+   * optionally using a non-default relative tolerance for searches.
+   */
+  virtual void find_elements(const Point & p,
+                             std::set<const Elem *> & candidate_elements,
+                             const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
+                             Real relative_tol = TOLERANCE) const = 0;
+
 protected:
 
   /**
@@ -109,16 +123,6 @@ protected:
    */
   const MeshBase & mesh;
 };
-
-// ------------------------------------------------------------
-// TreeBase class inline methods
-
-// constructor
-inline
-TreeBase::TreeBase (const MeshBase & m) :
-  mesh(m)
-{
-}
 
 } // namespace libMesh
 

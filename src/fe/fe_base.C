@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -44,6 +44,8 @@
 namespace
 {
 using namespace libMesh;
+
+#ifdef LIBMESH_ENABLE_PERIODIC
 
 // Find the "primary" element around a boundary point:
 const Elem * primary_boundary_point_neighbor(const Elem * elem,
@@ -168,6 +170,8 @@ const Elem * primary_boundary_edge_neighbor(const Elem * elem,
   return primary;
 }
 
+#endif // LIBMESH_ENABLE_PERIODIC
+
 }
 
 namespace libMesh
@@ -216,6 +220,9 @@ FEGenericBase<Real>::build (const unsigned int dim,
 
           case BERNSTEIN:
             return libmesh_make_unique<FE<0,BERNSTEIN>>(fet);
+
+          case RATIONAL_BERNSTEIN:
+            return libmesh_make_unique<FE<0,RATIONAL_BERNSTEIN>>(fet);
 #endif
 
           case XYZ:
@@ -260,6 +267,9 @@ FEGenericBase<Real>::build (const unsigned int dim,
 
           case BERNSTEIN:
             return libmesh_make_unique<FE<1,BERNSTEIN>>(fet);
+
+          case RATIONAL_BERNSTEIN:
+            return libmesh_make_unique<FE<1,RATIONAL_BERNSTEIN>>(fet);
 #endif
 
           case XYZ:
@@ -306,6 +316,9 @@ FEGenericBase<Real>::build (const unsigned int dim,
 
           case BERNSTEIN:
             return libmesh_make_unique<FE<2,BERNSTEIN>>(fet);
+
+          case RATIONAL_BERNSTEIN:
+            return libmesh_make_unique<FE<2,RATIONAL_BERNSTEIN>>(fet);
 #endif
 
           case XYZ:
@@ -355,6 +368,9 @@ FEGenericBase<Real>::build (const unsigned int dim,
 
           case BERNSTEIN:
             return libmesh_make_unique<FE<3,BERNSTEIN>>(fet);
+
+          case RATIONAL_BERNSTEIN:
+            return libmesh_make_unique<FE<3,RATIONAL_BERNSTEIN>>(fet);
 #endif
 
           case XYZ:
@@ -390,6 +406,9 @@ FEGenericBase<RealGradient>::build (const unsigned int dim,
           case LAGRANGE_VEC:
             return libmesh_make_unique<FELagrangeVec<0>>(fet);
 
+          case MONOMIAL_VEC:
+            return libmesh_make_unique<FEMonomialVec<0>>(fet);
+
           default:
             libmesh_error_msg("ERROR: Bad FEType.family= " << fet.family);
           }
@@ -401,6 +420,9 @@ FEGenericBase<RealGradient>::build (const unsigned int dim,
           case LAGRANGE_VEC:
             return libmesh_make_unique<FELagrangeVec<1>>(fet);
 
+          case MONOMIAL_VEC:
+            return libmesh_make_unique<FEMonomialVec<1>>(fet);
+
           default:
             libmesh_error_msg("ERROR: Bad FEType.family= " << fet.family);
           }
@@ -411,6 +433,9 @@ FEGenericBase<RealGradient>::build (const unsigned int dim,
           {
           case LAGRANGE_VEC:
             return libmesh_make_unique<FELagrangeVec<2>>(fet);
+
+          case MONOMIAL_VEC:
+            return libmesh_make_unique<FEMonomialVec<2>>(fet);
 
           case NEDELEC_ONE:
             return libmesh_make_unique<FENedelecOne<2>>(fet);
@@ -425,6 +450,9 @@ FEGenericBase<RealGradient>::build (const unsigned int dim,
           {
           case LAGRANGE_VEC:
             return libmesh_make_unique<FELagrangeVec<3>>(fet);
+
+          case MONOMIAL_VEC:
+            return libmesh_make_unique<FEMonomialVec<3>>(fet);
 
           case NEDELEC_ONE:
             return libmesh_make_unique<FENedelecOne<3>>(fet);
@@ -702,6 +730,79 @@ void FEGenericBase<OutputType>::compute_shape_functions (const Elem * elem,
     this->_fe_trans->map_div(this->dim, elem, qp, (*this), this->div_phi);
 }
 
+template <>
+void FEGenericBase<Real>::compute_dual_shape_coeffs ()
+{
+  // Start logging the dual coeff computation
+  LOG_SCOPE("compute_dual_shape_coeffs()", "FE");
+
+  unsigned int sz=phi.size();
+  libmesh_error_msg_if(!sz, "ERROR:  dual basis should be computed after the primal basis");
+
+  //compute dual basis coefficient (dual_coeff)
+  dual_coeff.resize(sz, sz);
+  DenseMatrix<Real> A(sz, sz), D(sz, sz);
+
+  const std::vector<Real> JxW = this->get_JxW();
+
+  for (auto i : index_range(phi))
+    for (auto qp : index_range(phi[i]))
+    {
+      D(i,i) += JxW[qp]*phi[i][qp];
+      for (auto j : index_range(phi))
+        A(i,j) += JxW[qp]*phi[i][qp]*phi[j][qp];
+    }
+
+  // dual_coeff = A^-1*D
+  for (auto j : index_range(phi))
+  {
+    DenseVector<Real> Dcol(sz), coeffcol(sz);
+    for (auto i : index_range(phi))
+      Dcol(i) = D(i, j);
+    A.cholesky_solve(Dcol, coeffcol);
+
+    for (auto row : index_range(phi))
+      dual_coeff(row, j)=coeffcol(row);
+  }
+}
+
+template <>
+void FEGenericBase<Real>::compute_dual_shape_functions ()
+{
+  // Start logging the shape function computation
+  LOG_SCOPE("compute_dual_shape_functions()", "FE");
+
+  // The dual coeffs matrix should have the same size as phi
+  libmesh_assert(dual_coeff.m() == phi.size());
+  libmesh_assert(dual_coeff.n() == phi.size());
+
+  // initialize dual basis
+  for (auto j : index_range(phi))
+    for (auto qp : index_range(phi[j]))
+    {
+      dual_phi[j][qp] = 0;
+      if (calculate_dphi)
+        dual_dphi[j][qp] = 0;
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+      if (calculate_d2phi)
+        dual_d2phi[j][qp] = 0;
+#endif
+    }
+
+  // compute dual basis
+  for (auto j : index_range(phi))
+    for (auto i : index_range(phi))
+      for (auto qp : index_range(phi[j]))
+      {
+        dual_phi[j][qp] += dual_coeff(i, j) * phi[i][qp];
+        if (calculate_dphi)
+          dual_dphi[j][qp] += dual_coeff(i, j) * dphi[i][qp];
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+        if (calculate_d2phi)
+          dual_d2phi[j][qp] += dual_coeff(i, j) * d2phi[i][qp];
+#endif
+      }
+}
 
 template <typename OutputType>
 void FEGenericBase<OutputType>::print_phi(std::ostream & os) const
@@ -709,6 +810,14 @@ void FEGenericBase<OutputType>::print_phi(std::ostream & os) const
   for (auto i : index_range(phi))
     for (auto j : index_range(phi[i]))
       os << " phi[" << i << "][" << j << "]=" << phi[i][j] << std::endl;
+}
+
+template <typename OutputType>
+void FEGenericBase<OutputType>::print_dual_phi(std::ostream & os) const
+{
+  for (auto i : index_range(dual_phi))
+    for (auto j : index_range(dual_phi[i]))
+      os << " dual_phi[" << i << "][" << j << "]=" << dual_phi[i][j] << std::endl;
 }
 
 
@@ -722,6 +831,14 @@ void FEGenericBase<OutputType>::print_dphi(std::ostream & os) const
       os << " dphi[" << i << "][" << j << "]=" << dphi[i][j];
 }
 
+template <typename OutputType>
+void FEGenericBase<OutputType>::print_dual_dphi(std::ostream & os) const
+{
+  for (auto i : index_range(dphi))
+    for (auto j : index_range(dphi[i]))
+      os << " dual_dphi[" << i << "][" << j << "]=" << dual_dphi[i][j];
+}
+
 
 
 template <typename OutputType>
@@ -729,12 +846,19 @@ void FEGenericBase<OutputType>::determine_calculations()
 {
   this->calculations_started = true;
 
-  // If the user forgot to request anything, we'll be safe and
-  // calculate everything:
+  // If the user forgot to request anything, but we're enabling
+  // deprecated backwards compatibility, then we'll be safe and
+  // calculate everything.  If we haven't enable deprecated backwards
+  // compatibility then we'll scream and die.
+#ifdef LIBMESH_ENABLE_DEPRECATED
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
-  if (!this->calculate_phi && !this->calculate_dphi && !this->calculate_d2phi
-      && !this->calculate_curl_phi && !this->calculate_div_phi)
+  if (!this->calculate_nothing &&
+      !this->calculate_phi && !this->calculate_dphi &&
+      !this->calculate_dphiref &&
+      !this->calculate_d2phi && !this->calculate_curl_phi &&
+      !this->calculate_div_phi && !this->calculate_map)
     {
+      libmesh_deprecated();
       this->calculate_phi = this->calculate_dphi = this->calculate_d2phi = this->calculate_dphiref = true;
       if (FEInterface::field_type(fe_type.family) == TYPE_VECTOR)
         {
@@ -743,8 +867,13 @@ void FEGenericBase<OutputType>::determine_calculations()
         }
     }
 #else
-  if (!this->calculate_phi && !this->calculate_dphi && !this->calculate_curl_phi && !this->calculate_div_phi)
+  if (!this->calculate_nothing &&
+      !this->calculate_phi && !this->calculate_dphi &&
+      !this->calculate_dphiref &&
+      !this->calculate_curl_phi && !this->calculate_div_phi &&
+      !this->calculate_map)
     {
+      libmesh_deprecated();
       this->calculate_phi = this->calculate_dphi = this->calculate_dphiref = true;
       if (FEInterface::field_type(fe_type.family) == TYPE_VECTOR)
         {
@@ -753,6 +882,22 @@ void FEGenericBase<OutputType>::determine_calculations()
         }
     }
 #endif // LIBMESH_ENABLE_SECOND_DERIVATIVES
+#else
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+  libmesh_assert (this->calculate_nothing ||
+      this->calculate_phi || this->calculate_dphi ||
+      this->calculate_d2phi ||
+      this->calculate_dphiref ||
+      this->calculate_curl_phi || this->calculate_div_phi ||
+      this->calculate_map);
+#else
+  libmesh_assert (this->calculate_nothing ||
+      this->calculate_phi || this->calculate_dphi ||
+      this->calculate_dphiref ||
+      this->calculate_curl_phi || this->calculate_div_phi ||
+      this->calculate_map);
+#endif // LIBMESH_ENABLE_SECOND_DERIVATIVES
+#endif // LIBMESH_ENABLE_DEPRECATED
 
   // Request whichever terms are necessary from the FEMap
   if (this->calculate_phi)
@@ -778,6 +923,14 @@ void FEGenericBase<OutputType>::print_d2phi(std::ostream & os) const
   for (auto i : index_range(dphi))
     for (auto j : index_range(dphi[i]))
       os << " d2phi[" << i << "][" << j << "]=" << d2phi[i][j];
+}
+
+template <typename OutputType>
+void FEGenericBase<OutputType>::print_dual_d2phi(std::ostream & os) const
+{
+  for (auto i : index_range(dual_d2phi))
+    for (auto j : index_range(dual_d2phi[i]))
+      os << " dual_d2phi[" << i << "][" << j << "]=" << dual_d2phi[i][j];
 }
 
 #endif
@@ -852,19 +1005,12 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
   const std::vector<Point> & xyz_values =
     fe->get_xyz();
 
-
-
-  FEType fe_type = base_fe_type, temp_fe_type;
-  const ElemType elem_type = elem->type();
-  fe_type.order = static_cast<Order>(fe_type.order +
-                                     elem->max_descendant_p_level());
-
   // Number of nodes on parent element
   const unsigned int n_nodes = elem->n_nodes();
 
   // Number of dofs on parent element
   const unsigned int new_n_dofs =
-    FEInterface::n_dofs(dim, fe_type, elem_type);
+    FEInterface::n_dofs(base_fe_type, elem->max_descendant_p_level(), elem);
 
   // Fixed vs. free DoFs on edge/face projections
   std::vector<char> dof_is_fixed(new_n_dofs, false); // bools
@@ -896,31 +1042,23 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
         // FIXME: this should go through the DofMap,
         // not duplicate dof_indices code badly!
         const unsigned int my_nc =
-          FEInterface::n_dofs_at_node (dim, fe_type,
-                                       elem_type, n);
+          FEInterface::n_dofs_at_node (base_fe_type, elem->max_descendant_p_level(), elem, n);
         if (!elem->is_vertex(n))
           {
             current_dof += my_nc;
             continue;
           }
 
-        temp_fe_type = base_fe_type;
         // We're assuming here that child n shares vertex n,
         // which is wrong on non-simplices right now
         // ... but this code isn't necessary except on elements
         // where p refinement creates more vertex dofs; we have
         // no such elements yet.
-        /*
-          if (elem->child_ptr(n)->p_level() < elem->p_level())
-          {
-          temp_fe_type.order =
-          static_cast<Order>(temp_fe_type.order +
-          elem->child_ptr(n)->p_level());
-          }
-        */
+        int extra_order = 0;
+        // if (elem->child_ptr(n)->p_level() < elem->p_level())
+        //   extra_order = elem->child_ptr(n)->p_level();
         const unsigned int nc =
-          FEInterface::n_dofs_at_node (dim, temp_fe_type,
-                                       elem_type, n);
+          FEInterface::n_dofs_at_node (base_fe_type, extra_order, elem, n);
         for (unsigned int i=0; i!= nc; ++i)
           {
             Ue(current_dof) =
@@ -930,6 +1068,10 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
           }
       }
   }
+
+  FEType fe_type = base_fe_type, temp_fe_type;
+  fe_type.order = static_cast<Order>(fe_type.order +
+                                     elem->max_descendant_p_level());
 
   // In 3D, project any edge values next
   if (dim > 2 && cont != DISCONTINUOUS)
@@ -985,8 +1127,8 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
             fe->edge_reinit (child, e);
             const unsigned int n_qp = qedgerule->n_points();
 
-            FEInterface::inverse_map (dim, fe_type, elem,
-                                      xyz_values, coarse_qpoints);
+            FEMap::inverse_map (dim, elem, xyz_values,
+                                coarse_qpoints);
 
             fe_coarse->reinit(elem, &coarse_qpoints);
 
@@ -1125,8 +1267,8 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
             fe->reinit (child, s);
             const unsigned int n_qp = qsiderule->n_points();
 
-            FEInterface::inverse_map (dim, fe_type, elem,
-                                      xyz_values, coarse_qpoints);
+            FEMap::inverse_map (dim, elem, xyz_values,
+                                coarse_qpoints);
 
             fe_coarse->reinit(elem, &coarse_qpoints);
 
@@ -1243,8 +1385,7 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
       fe->reinit (&child);
       const unsigned int n_qp = qrule->n_points();
 
-      FEInterface::inverse_map (dim, fe_type, elem,
-                                xyz_values, coarse_qpoints);
+      FEMap::inverse_map (dim, elem, xyz_values, coarse_qpoints);
 
       fe_coarse->reinit(elem, &coarse_qpoints);
 
@@ -1353,7 +1494,7 @@ FEGenericBase<OutputType>::coarsened_dof_values(const NumericVector<Number> & ol
       DenseVector<Number> Usub;
 
       coarsened_dof_values(old_vector, dof_map, elem, Usub,
-                           use_old_dof_indices);
+                           v, use_old_dof_indices);
 
       Ue.append (Usub);
     }
@@ -1487,8 +1628,7 @@ FEGenericBase<OutputType>::compute_proj_constraints (DofConstraints & constraint
 
           const unsigned int n_qp = my_qface.n_points();
 
-          FEInterface::inverse_map (Dim, base_fe_type, neigh,
-                                    q_point, neigh_qface);
+          FEMap::inverse_map (Dim, neigh, q_point, neigh_qface);
 
           neigh_fe->reinit(neigh, &neigh_qface);
 
@@ -1626,8 +1766,7 @@ FEGenericBase<OutputType>::compute_proj_constraints (DofConstraints & constraint
                   if (std::abs(their_dof_value) < 10*TOLERANCE)
                     continue;
 
-                  constraint_row->insert(std::make_pair(their_dof_g,
-                                                        their_dof_value));
+                  constraint_row->emplace(their_dof_g, their_dof_value);
                 }
             }
 
@@ -1757,8 +1896,8 @@ compute_periodic_constraints (DofConstraints & constraints,
               // Get pointers to the element's neighbor.
               const Elem * neigh = boundaries.neighbor(boundary_id, *point_locator, elem, s);
 
-              if (neigh == nullptr)
-                libmesh_error_msg("PeriodicBoundaries point locator object returned nullptr!");
+              libmesh_error_msg_if(neigh == nullptr,
+                                   "PeriodicBoundaries point locator object returned nullptr!");
 
               // periodic (and possibly h refinement) constraints:
               // constrain dofs shared between
@@ -1829,8 +1968,8 @@ compute_periodic_constraints (DofConstraints & constraints,
                   for (auto i : index_range(neigh_point))
                     neigh_point[i] = periodic->get_corresponding_pos(q_point[i]);
 
-                  FEInterface::inverse_map (Dim, base_fe_type, neigh,
-                                            neigh_point, neigh_qface);
+                  FEMap::inverse_map (Dim, neigh, neigh_point,
+                                      neigh_qface);
 
                   neigh_fe->reinit(neigh, &neigh_qface);
 
@@ -1957,7 +2096,7 @@ compute_periodic_constraints (DofConstraints & constraints,
                   // Container to catch boundary IDs handed back by BoundaryInfo.
                   std::vector<boundary_id_type> new_bc_ids;
 
-                  for (unsigned int n = 0; n != elem->n_nodes(); ++n)
+                  for (auto n : elem->node_index_range())
                     {
                       if (!elem->is_node_on_side(n,s))
                         continue;
@@ -2071,8 +2210,8 @@ compute_periodic_constraints (DofConstraints & constraints,
                       else if (elem->is_edge(n))
                         {
                           // Find which edge we're on
-                          unsigned int e=0;
-                          for (; e != elem->n_edges(); ++e)
+                          unsigned int e=0, ne = elem->n_edges();
+                          for (; e != ne; ++e)
                             {
                               if (elem->is_node_on_edge(n,e))
                                 break;
@@ -2083,7 +2222,7 @@ compute_periodic_constraints (DofConstraints & constraints,
                           const Node
                             * e1 = nullptr,
                             * e2 = nullptr;
-                          for (unsigned int nn = 0; nn != elem->n_nodes(); ++nn)
+                          for (auto nn : elem->node_index_range())
                             {
                               if (nn == n)
                                 continue;
@@ -2355,8 +2494,7 @@ compute_periodic_constraints (DofConstraints & constraints,
 
                           if(!periodic->has_transformation_matrix())
                             {
-                              constraint_row->insert(std::make_pair(their_dof_g,
-                                                                    their_dof_value));
+                              constraint_row->emplace(their_dof_g, their_dof_value);
                             }
                           else
                             {
@@ -2374,8 +2512,8 @@ compute_periodic_constraints (DofConstraints & constraints,
                                   libmesh_assert_msg(base_fe_type == dof_map.variable_type(other_var), "FE types must match for all variables involved in constraint");
 
                                   Real var_weighting = periodic->get_transformation_matrix()(variable_number, other_var);
-                                  constraint_row->insert(std::make_pair(neigh_dof_indices_all_variables[index][i],
-                                                                        var_weighting*their_dof_value));
+                                  constraint_row->emplace(neigh_dof_indices_all_variables[index][i],
+                                                          var_weighting*their_dof_value);
                                   index++;
                                 }
                             }

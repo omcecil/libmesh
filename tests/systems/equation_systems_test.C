@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/dof_map.h>
 #include <libmesh/elem.h>
 #include <libmesh/equation_systems.h>
@@ -16,16 +10,8 @@
 #include <libmesh/node_elem.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -133,12 +119,10 @@ public:
     MeshTools::Generation::build_line (mesh, 10, 0., 1., EDGE2);
     es.init();
 
-    Elem* e = Elem::build(EDGE2).release();
-    e->set_id(mesh.max_elem_id());
+    Elem * e = mesh.add_elem(Elem::build_with_id(EDGE2, mesh.max_elem_id()));
     e->processor_id() = 0;
     e->set_node(0) = mesh.node_ptr(2);
     e->set_node(1) = mesh.node_ptr(8);
-    mesh.add_elem(e);
     mesh.prepare_for_use();
 
     es.reinit();
@@ -149,7 +133,7 @@ public:
     ReplicatedMesh mesh(*TestCommWorld);
 
     MeshTools::Generation::build_line (mesh, 10, 0., 1., EDGE2);
-    Elem* node_elem = mesh.add_elem (new NodeElem);
+    auto node_elem = mesh.add_elem(Elem::build(NODEELEM));
     node_elem->set_node(0) = mesh.node_ptr(0);
     mesh.prepare_for_use();
 
@@ -222,9 +206,9 @@ public:
       for (Real y = 0.1; y < 1; y += 0.2)
         {
           Point p(x,y);
-          CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(0,p)),
-                                       libmesh_real(bilinear_test(p,es.parameters,"","")),
-                                       TOLERANCE*TOLERANCE);
+          LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys.point_value(0,p)),
+                                  libmesh_real(bilinear_test(p,es.parameters,"","")),
+                                  TOLERANCE*TOLERANCE);
         }
   }
 
@@ -252,7 +236,7 @@ public:
     CPPUNIT_ASSERT_EQUAL(n_ghosts(), 1);
 
     // Add another functor, making two
-    GhostPointNeighbors gpn(mesh);
+    auto gpn = std::make_shared<GhostPointNeighbors>(mesh);
     mesh.add_ghosting_functor(gpn);
     CPPUNIT_ASSERT_EQUAL(n_ghosts(), 2);
 
@@ -261,7 +245,7 @@ public:
     CPPUNIT_ASSERT_EQUAL(n_ghosts(), 1);
 
     // Which can be removed too
-    mesh.remove_ghosting_functor(gpn);
+    mesh.remove_ghosting_functor(*gpn);
     CPPUNIT_ASSERT_EQUAL(n_ghosts(), 0);
 
     // Adding a new system shouldn't add any default ghosting if the
@@ -291,13 +275,14 @@ public:
 
     // Adding a user functor to evaluables and couplings should add it
     // to the mesh
-    GhostPointNeighbors gpn2(mesh), gpn3(mesh);
+    GhostPointNeighbors gpn2(mesh);
     sys1.get_dof_map().add_algebraic_ghosting_functor(gpn2);
     CPPUNIT_ASSERT_EQUAL(n_ghosts(), 6);
     CPPUNIT_ASSERT_EQUAL(n_evaluables(sys1), 2);
     CPPUNIT_ASSERT_EQUAL(n_couplings(sys1), 1);
 
     // Unless we say not to.
+    auto gpn3 = std::make_shared<GhostPointNeighbors>(mesh);
     sys1.get_dof_map().add_coupling_functor(gpn3, /*to_mesh=*/false);
     CPPUNIT_ASSERT_EQUAL(n_ghosts(), 6);
     CPPUNIT_ASSERT_EQUAL(n_evaluables(sys1), 2);

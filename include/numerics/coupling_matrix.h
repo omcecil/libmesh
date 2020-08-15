@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -225,8 +225,8 @@ public:
     if (lb == _my_mat._ranges.end())
       {
         if (new_value == true)
-          _my_mat._ranges.insert(_my_mat._ranges.begin(),
-                                 std::make_pair(_location, _location));
+          _my_mat._ranges.emplace
+            (_my_mat._ranges.begin(), _location, _location);
       }
     else
       {
@@ -277,8 +277,7 @@ public:
 
                 libmesh_assert_less_equal(firstloc, _location-1);
 
-                _my_mat._ranges.insert
-                  (lb, std::make_pair(firstloc, _location-1));
+                _my_mat._ranges.emplace(lb, firstloc, _location-1);
               }
           }
 
@@ -313,8 +312,7 @@ public:
                     if (_location == nextloc - 1)
                       next->first--;
                     else
-                      _my_mat._ranges.insert
-                        (next, std::make_pair(_location, _location));
+                      _my_mat._ranges.emplace(next, _location, _location);
                   }
               }
           }

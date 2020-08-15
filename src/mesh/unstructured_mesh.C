@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,16 +17,6 @@
 
 
 
-// C++ includes
-#include <fstream>
-#include <sstream>
-#include <iomanip>
-#include <unordered_map>
-
-// C includes
-#include <sys/types.h> // for pid_t
-#include <unistd.h>    // for getpid(), unlink()
-
 // Local includes
 #include "libmesh/boundary_info.h"
 #include "libmesh/ghosting_functor.h"
@@ -41,7 +31,15 @@
 #include "libmesh/enum_order.h"
 #include "libmesh/mesh_communication.h"
 
+// C++ includes
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <unordered_map>
 
+// C includes
+#include <sys/types.h> // for pid_t
+#include <unistd.h>    // for getpid(), unlink()
 
 namespace libMesh
 {
@@ -69,6 +67,14 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
                                                )
 {
   LOG_SCOPE("copy_nodes_and_elements()", "UnstructuredMesh");
+
+  std::pair<std::vector<unsigned int>, std::vector<unsigned int>>
+    extra_int_maps = this->merge_extra_integer_names(other_mesh);
+
+  const unsigned int n_old_node_ints = extra_int_maps.second.size(),
+                     n_new_node_ints = _node_integer_names.size(),
+                     n_old_elem_ints = extra_int_maps.first.size(),
+                     n_new_elem_ints = _elem_integer_names.size();
 
   // If we are partitioned into fewer parts than the incoming mesh,
   // then we need to "wrap" the other Mesh's processor ids to fit
@@ -98,16 +104,18 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
           (wrap_proc_ids ? oldn->processor_id() % _n_parts : oldn->processor_id());
 
         // Add new nodes in old node Point locations
-#ifdef LIBMESH_ENABLE_UNIQUE_ID
         Node * newn =
-#endif
           this->add_point(*oldn,
                           oldn->id() + node_id_offset,
                           added_pid);
 
+        newn->add_extra_integers(n_new_node_ints);
+        for (unsigned int i = 0; i != n_old_node_ints; ++i)
+          newn->set_extra_integer(extra_int_maps.second[i],
+                                  oldn->get_extra_integer(i));
+
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-        newn->set_unique_id() =
-          oldn->unique_id() + unique_id_offset;
+        newn->set_unique_id(oldn->unique_id() + unique_id_offset);
 #endif
       }
   }
@@ -119,7 +127,7 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
 
     // Declare a map linking old and new elements, needed to copy the neighbor lists
     typedef std::unordered_map<const Elem *, Elem *> map_type;
-    map_type old_elems_to_new_elems;
+    map_type old_elems_to_new_elems, ip_map;
 
     // Loop over the elements
     for (const auto & old : other_mesh.element_ptr_range())
@@ -128,10 +136,14 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
         Elem * newparent = old->parent() ?
           this->elem_ptr(old->parent()->id() + element_id_offset) :
           nullptr;
-        std::unique_ptr<Elem> ap = Elem::build(old->type(), newparent);
-        Elem * el = ap.release();
+        auto el = Elem::build(old->type(), newparent);
 
         el->subdomain_id() = old->subdomain_id();
+
+        // Hold off on trying to set the interior parent because we may actually
+        // add lower dimensional elements before their interior parents
+        if (el->dim() < other_mesh.mesh_dimension() && old->interior_parent())
+          ip_map[old] = el.get();
 
 #ifdef LIBMESH_ENABLE_AMR
         if (old->has_children())
@@ -143,7 +155,7 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
         if (newparent)
           {
             unsigned int oldc = old->parent()->which_child_am_i(old);
-            newparent->add_child(el, oldc);
+            newparent->add_child(el.get(), oldc);
           }
 
         // Copy the refinement flags
@@ -168,9 +180,13 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
         // Give it the same element and unique ids
         el->set_id(old->id() + element_id_offset);
 
+        el->add_extra_integers(n_new_elem_ints);
+        for (unsigned int i = 0; i != n_old_elem_ints; ++i)
+          el->set_extra_integer(extra_int_maps.first[i],
+                                old->get_extra_integer(i));
+
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-        el->set_unique_id() =
-          old->unique_id() + unique_id_offset;
+        el->set_unique_id(old->unique_id() + unique_id_offset);
 #endif
 
         //Hold onto it
@@ -179,14 +195,18 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
             for (auto s : old->side_index_range())
               if (old->neighbor_ptr(s) == remote_elem)
                 el->set_neighbor(s, const_cast<RemoteElem *>(remote_elem));
-            this->add_elem(el);
+            this->add_elem(std::move(el));
           }
         else
           {
-            Elem * new_el = this->add_elem(el);
+            Elem * new_el = this->add_elem(std::move(el));
             old_elems_to_new_elems[old] = new_el;
           }
       }
+
+    for (auto & elem_pair : ip_map)
+      elem_pair.second->set_interior_parent(
+        this->elem_ptr(elem_pair.first->interior_parent()->id() + element_id_offset));
 
     // Loop (again) over the elements to fill in the neighbors
     if (skip_find_neighbors)
@@ -210,15 +230,17 @@ void UnstructuredMesh::copy_nodes_and_elements(const UnstructuredMesh & other_me
   //partitioning for now.
   this->allow_renumbering(false);
   this->allow_remote_element_removal(false);
+  this->allow_find_neighbors(!skip_find_neighbors);
 
   // We should generally be able to skip *all* partitioning here
   // because we're only adding one already-consistent mesh to another.
   this->skip_partitioning(true);
 
-  this->prepare_for_use(false, skip_find_neighbors);
+  this->prepare_for_use();
 
   //But in the long term, use the same renumbering and partitioning
   //policies as our source mesh.
+  this->allow_find_neighbors(other_mesh.allow_find_neighbors());
   this->allow_renumbering(other_mesh.allow_renumbering());
   this->allow_remote_element_removal(other_mesh.allow_remote_element_removal());
   this->skip_partitioning(other_mesh._skip_all_partitioning);
@@ -265,8 +287,6 @@ void UnstructuredMesh::find_neighbors (const bool reset_remote_elements,
     // data structures -- Use the hash_multimap if available
     typedef unsigned int                    key_type;
     typedef std::pair<Elem *, unsigned char> val_type;
-    typedef std::pair<key_type, val_type>   key_val_pair;
-
     typedef std::unordered_multimap<key_type, val_type> map_type;
 
     // A map from side keys to corresponding elements & side numbers
@@ -357,12 +377,8 @@ void UnstructuredMesh::find_neighbors (const bool reset_remote_elements,
 
                 // didn't find a match...
                 // Build the map entry for this element
-                key_val_pair kvp;
-
-                kvp.first         = key;
-                kvp.second.first  = element;
-                kvp.second.second = cast_int<unsigned char>(ms);
-                side_to_elem_map.insert (kvp);
+                side_to_elem_map.emplace
+                  (key, std::make_pair(element, cast_int<unsigned char>(ms)));
               }
           }
       }
@@ -625,8 +641,10 @@ void UnstructuredMesh::read (const std::string & name,
     }
 
   // Done reading the mesh.  Now prepare it for use.
-  this->prepare_for_use(/*skip_renumber (deprecated)*/ false,
-                        skip_find_neighbors);
+  const bool old_allow_find_neighbors = this->allow_find_neighbors();
+  this->allow_find_neighbors(!skip_find_neighbors);
+  this->prepare_for_use();
+  this->allow_find_neighbors(old_allow_find_neighbors);
 }
 
 
@@ -712,19 +730,28 @@ void UnstructuredMesh::create_submesh (UnstructuredMesh & new_mesh,
   // Container to catch boundary IDs handed back by BoundaryInfo
   std::vector<boundary_id_type> bc_ids;
 
+  // Put any extra integers on the new mesh too
+  new_mesh.merge_extra_integer_names(*this);
+  const unsigned int n_node_ints = _node_integer_names.size(),
+                     n_elem_ints = _elem_integer_names.size();
+
   for (const auto & old_elem : as_range(it, it_end))
     {
       // Add an equivalent element type to the new_mesh.
       // Copy ids for this element.
-      Elem * new_elem = Elem::build(old_elem->type()).release();
-      new_elem->set_id() = old_elem->id();
+      auto uelem = Elem::build(old_elem->type());
+      uelem->set_id() = old_elem->id();
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-      new_elem->set_unique_id() = old_elem->unique_id();
+      uelem->set_unique_id(old_elem->unique_id());
 #endif
-      new_elem->subdomain_id() = old_elem->subdomain_id();
-      new_elem->processor_id() = old_elem->processor_id();
+      uelem->subdomain_id() = old_elem->subdomain_id();
+      uelem->processor_id() = old_elem->processor_id();
 
-      new_mesh.add_elem (new_elem);
+      uelem->add_extra_integers(n_elem_ints);
+      for (unsigned int i = 0; i != n_elem_ints; ++i)
+        uelem->set_extra_integer(i, old_elem->get_extra_integer(i));
+
+      Elem * new_elem = new_mesh.add_elem(std::move(uelem));
 
       libmesh_assert(new_elem);
 
@@ -736,15 +763,17 @@ void UnstructuredMesh::create_submesh (UnstructuredMesh & new_mesh,
           // Add this node to the new mesh if it's not there already
           if (!new_mesh.query_node_ptr(this_node_id))
             {
-#ifdef LIBMESH_ENABLE_UNIQUE_ID
               Node * newn =
-#endif
                 new_mesh.add_point (old_elem->point(n),
                                     this_node_id,
                                     old_elem->node_ptr(n)->processor_id());
 
+              newn->add_extra_integers(n_node_ints);
+              for (unsigned int i = 0; i != n_node_ints; ++i)
+                newn->set_extra_integer(i, old_elem->node_ptr(n)->get_extra_integer(i));
+
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-              newn->set_unique_id() = old_elem->node_ptr(n)->unique_id();
+              newn->set_unique_id(old_elem->node_ptr(n)->unique_id());
 #endif
             }
 
@@ -761,7 +790,7 @@ void UnstructuredMesh::create_submesh (UnstructuredMesh & new_mesh,
     } // end loop over elements
 
   // Prepare the new_mesh for use
-  new_mesh.prepare_for_use(/*skip_renumber =*/false);
+  new_mesh.prepare_for_use();
 }
 
 
@@ -859,9 +888,9 @@ void UnstructuredMesh::all_first_order ()
        * build the first-order equivalent, add to
        * the new_elements list.
        */
-      Elem * lo_elem = Elem::build
+      auto lo_elem = Elem::build
         (Elem::first_order_equivalent_type
-         (so_elem->type()), so_elem->parent()).release();
+         (so_elem->type()), so_elem->parent());
 
       const unsigned short n_sides = so_elem->n_sides();
 
@@ -877,7 +906,8 @@ void UnstructuredMesh::all_first_order ()
         for (unsigned int c = 0, nc = so_elem->n_children(); c != nc; ++c)
           {
             Elem * child = so_elem->child_ptr(c);
-            child->set_parent(lo_elem);
+            if (child != remote_elem)
+              child->set_parent(lo_elem.get());
             lo_elem->add_child(child, c);
           }
 
@@ -888,7 +918,7 @@ void UnstructuredMesh::all_first_order ()
         {
           unsigned int c =
             so_elem->parent()->which_child_am_i(so_elem);
-          lo_elem->parent()->replace_child(lo_elem, c);
+          lo_elem->parent()->replace_child(lo_elem.get(), c);
         }
 
       /*
@@ -906,7 +936,7 @@ void UnstructuredMesh::all_first_order ()
        * second order element are identically numbered.
        * transfer these.
        */
-      for (unsigned int v=0; v < so_elem->n_vertices(); v++)
+      for (unsigned int v=0, snv=so_elem->n_vertices(); v < snv; v++)
         {
           lo_elem->set_node(v) = so_elem->node_ptr(v);
           node_touched_by_me[lo_elem->node_id(v)] = true;
@@ -929,7 +959,7 @@ void UnstructuredMesh::all_first_order ()
        * data structure by insert_elem.
        */
       this->get_boundary_info().copy_boundary_ids
-        (this->get_boundary_info(), so_elem, lo_elem);
+        (this->get_boundary_info(), so_elem, lo_elem.get());
 
       /*
        * The new first-order element is ready.
@@ -938,11 +968,11 @@ void UnstructuredMesh::all_first_order ()
        */
       lo_elem->set_id(so_elem->id());
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-      lo_elem->set_unique_id() = so_elem->unique_id();
+      lo_elem->set_unique_id(so_elem->unique_id());
 #endif
       lo_elem->processor_id() = so_elem->processor_id();
       lo_elem->subdomain_id() = so_elem->subdomain_id();
-      this->insert_elem(lo_elem);
+      this->insert_elem(std::move(lo_elem));
     }
 
   // Deleting nodes does not invalidate iterators, so this is safe.
@@ -1020,6 +1050,16 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
   std::map<std::vector<dof_id_type>, Node *> adj_vertices_to_so_nodes;
 
   /*
+   * The maximum number of new second order nodes we might be adding,
+   * for use when picking unique unique_id values later
+   */
+  unsigned int max_new_nodes_per_elem;
+
+#ifdef LIBMESH_ENABLE_UNIQUE_ID
+    unique_id_type max_unique_id = this->parallel_max_unique_id();
+#endif
+
+  /*
    * for speed-up of the \p add_point() method, we
    * can reserve memory.  Guess the number of additional
    * nodes for different dimensions
@@ -1032,6 +1072,7 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        * to Edge3.  Something like 1/2 of n_nodes() have
        * to be added
        */
+      max_new_nodes_per_elem = 3 - 2;
       this->reserve_nodes(static_cast<unsigned int>
                           (1.5*static_cast<double>(this->n_nodes())));
       break;
@@ -1041,6 +1082,7 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        * in 2D, either refine from Tri3 to Tri6 (double the nodes)
        * or from Quad4 to Quad8 (again, double) or Quad9 (2.25 that much)
        */
+      max_new_nodes_per_elem = 9 - 4;
       this->reserve_nodes(static_cast<unsigned int>
                           (2*static_cast<double>(this->n_nodes())));
       break;
@@ -1053,6 +1095,7 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        * quite some nodes, and since we do not want to overburden the memory by
        * a too conservative guess, use the lower bound
        */
+      max_new_nodes_per_elem = 27 - 8;
       this->reserve_nodes(static_cast<unsigned int>
                           (2.5*static_cast<double>(this->n_nodes())));
       break;
@@ -1074,28 +1117,36 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
   std::vector<dof_id_type> adjacent_vertices_ids;
 
   /**
+   * On distributed meshes we currently only support unpartitioned
+   * meshes (where we'll add every node in sync) or
+   * completely-partitioned meshes (where we'll sync nodes later);
+   * let's keep track to make sure we're not in any in-between state.
+   */
+  dof_id_type n_unpartitioned_elem = 0,
+              n_partitioned_elem = 0;
+  const processor_id_type my_pid = this->processor_id();
+
+  /**
    * Loop over the low-ordered elements in the _elements vector.
    * First make sure they _are_ indeed low-order, and then replace
    * them with an equivalent second-order element.  Don't
    * forget to delete the low-order element, or else it will leak!
    */
-  element_iterator
-    it = elements_begin(),
-    endit = elements_end();
-
-  for (; it != endit; ++it)
+  for (auto & lo_elem : element_ptr_range())
     {
-      // the linear-order element
-      Elem * lo_elem = *it;
-
-      libmesh_assert(lo_elem);
-
       // make sure it is linear order
-      if (lo_elem->default_order() != FIRST)
-        libmesh_error_msg("ERROR: This is not a linear element: type=" << lo_elem->type());
+      libmesh_error_msg_if(lo_elem->default_order() != FIRST,
+                           "ERROR: This is not a linear element: type=" << lo_elem->type());
 
       // this does _not_ work for refined elements
       libmesh_assert_equal_to (lo_elem->level (), 0);
+
+      const processor_id_type lo_pid = lo_elem->processor_id();
+
+      if (lo_pid == DofObject::invalid_processor_id)
+        ++n_unpartitioned_elem;
+      else
+        ++n_partitioned_elem;
 
       /*
        * build the second-order equivalent, add to
@@ -1105,9 +1156,9 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        * for either type of second-order equivalent, e.g.
        * Hex20 or Hex27, as equivalents for Hex8
        */
-      Elem * so_elem =
+      auto so_elem =
         Elem::build (Elem::second_order_equivalent_type(lo_elem->type(),
-                                                        full_ordered) ).release();
+                                                        full_ordered));
 
       libmesh_assert_equal_to (lo_elem->n_vertices(), so_elem->n_vertices());
 
@@ -1117,7 +1168,7 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        * second order element are identically numbered.
        * transfer these.
        */
-      for (unsigned int v=0; v < lo_elem->n_vertices(); v++)
+      for (unsigned int v=0, lnv=lo_elem->n_vertices(); v < lnv; v++)
         so_elem->set_node(v) = lo_elem->node_ptr(v);
 
       /*
@@ -1130,7 +1181,6 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        */
       const unsigned int son_begin = so_elem->n_vertices();
       const unsigned int son_end   = so_elem->n_nodes();
-
 
       for (unsigned int son=son_begin; son<son_end; son++)
         {
@@ -1173,9 +1223,11 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
               new_location /= static_cast<Real>(n_adjacent_vertices);
 
               /* Add the new point to the mesh.
+               *
                * If we are on a serialized mesh, then we're doing this
                * all in sync, and the node processor_id will be
                * consistent between processors.
+               *
                * If we are on a distributed mesh, we can fix
                * inconsistent processor ids later, but only if every
                * processor gives new nodes a *locally* consistent
@@ -1184,8 +1236,31 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
                * we'll update that later if appropriate.
                */
               Node * so_node = this->add_point
-                (new_location, DofObject::invalid_id,
-                 lo_elem->processor_id());
+                (new_location, DofObject::invalid_id, lo_pid);
+
+              /* Come up with a unique unique_id for a potentially new
+               * node.  On a distributed mesh we don't yet know what
+               * processor_id will definitely own it, so we can't let
+               * the pid determine the unique_id.  But we're not
+               * adding unpartitioned nodes in sync, so we can't let
+               * the mesh autodetermine a unique_id for a new
+               * unpartitioned node either.  So we have to pick unique
+               * unique_id values manually.
+               *
+               * We don't have to pick the *same* unique_id value as
+               * will be picked on other processors, though; we'll
+               * sync up each node later.  We just need to make sure
+               * we don't duplicate any unique_id that might be chosen
+               * by the same process elsewhere.
+               */
+#ifdef LIBMESH_ENABLE_UNIQUE_ID
+              unique_id_type new_unique_id = max_unique_id +
+                max_new_nodes_per_elem * lo_elem->id() +
+                son - son_begin;
+
+              so_node->set_unique_id(new_unique_id);
+#endif
+              libmesh_ignore(max_new_nodes_per_elem);
 
               /*
                * insert the new node with its defining vertex
@@ -1193,9 +1268,8 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
                * new entry, so that the so_elem can use
                * \p pos for inserting the node
                */
-              adj_vertices_to_so_nodes.insert(pos.first,
-                                              std::make_pair(adjacent_vertices_ids,
-                                                             so_node));
+              adj_vertices_to_so_nodes.emplace_hint
+                (pos.first, adjacent_vertices_ids, so_node);
 
               so_elem->set_node(son) = so_node;
             }
@@ -1213,15 +1287,14 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
               // which may not yet be authoritative, we still have to
               // use a dumb-but-id-independent partitioning heuristic.
               processor_id_type chosen_pid =
-                std::min (so_node->processor_id(),
-                          lo_elem->processor_id());
+                std::min (so_node->processor_id(), lo_pid);
 
               // Plus, if we just discovered that we own this node,
               // then on a distributed mesh we need to make sure to
               // give it a valid id, not just a placeholder id!
               if (!this->is_replicated() &&
-                  so_node->processor_id() != this->processor_id() &&
-                  chosen_pid == this->processor_id())
+                  so_node->processor_id() != my_pid &&
+                  chosen_pid == my_pid)
                 this->own_node(*so_node);
 
               so_node->processor_id() = chosen_pid;
@@ -1250,7 +1323,7 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        * here.
        */
       this->get_boundary_info().copy_boundary_ids
-        (this->get_boundary_info(), lo_elem, so_elem);
+        (this->get_boundary_info(), lo_elem, so_elem.get());
 
       /*
        * The new second-order element is ready.
@@ -1259,15 +1332,22 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
        */
       so_elem->set_id(lo_elem->id());
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-      so_elem->set_unique_id() = lo_elem->unique_id();
+      so_elem->set_unique_id(lo_elem->unique_id());
 #endif
-      so_elem->processor_id() = lo_elem->processor_id();
+      so_elem->processor_id() = lo_pid;
       so_elem->subdomain_id() = lo_elem->subdomain_id();
-      this->insert_elem(so_elem);
+      this->insert_elem(std::move(so_elem));
     }
 
   // we can clear the map
   adj_vertices_to_so_nodes.clear();
+
+#ifdef LIBMESH_ENABLE_UNIQUE_ID
+  const unique_id_type new_max_unique_id = max_unique_id +
+    max_new_nodes_per_elem * this->n_elem();
+  this->set_next_unique_id(new_max_unique_id);
+#endif
+
 
 
   STOP_LOG("all_second_order()", "Mesh");
@@ -1278,11 +1358,28 @@ void UnstructuredMesh::all_second_order (const bool full_ordered)
   // partitioning of new nodes may not be well balanced.
   //
   // make_nodes_parallel_consistent() will fix all this.
-  if (!this->is_serial())
-    MeshCommunication().make_nodes_parallel_consistent (*this);
+  if (!this->is_replicated())
+    {
+      dof_id_type max_unpartitioned_elem = n_unpartitioned_elem;
+      this->comm().max(max_unpartitioned_elem);
+      if (max_unpartitioned_elem)
+        {
+          // We'd better be effectively serialized here.  In theory we
+          // could support more complicated cases but in practice we
+          // only support "completely partitioned" and/or "serialized"
+          if (!this->comm().verify(n_unpartitioned_elem) ||
+              !this->comm().verify(n_partitioned_elem) ||
+              !this->is_serial())
+            libmesh_not_implemented();
+        }
+      else
+        {
+          MeshCommunication().make_nodes_parallel_consistent (*this);
+        }
+    }
 
   // renumber nodes, elements etc
-  this->prepare_for_use(/*skip_renumber =*/ false);
+  this->prepare_for_use();
 }
 
 } // namespace libMesh

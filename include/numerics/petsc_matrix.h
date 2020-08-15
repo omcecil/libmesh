@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,10 +27,13 @@
 // Local includes
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/petsc_macro.h"
-#include "libmesh/parallel.h"
 
 // C++ includes
 #include <algorithm>
+#ifdef LIBMESH_HAVE_CXX11_THREAD
+#include <atomic>
+#include <mutex>
+#endif
 
 // Macro to identify and debug functions which should be called in
 // parallel on parallel matrices but which may be called in serial on
@@ -50,7 +53,13 @@
 
 
 // Petsc include files.
+#ifdef I
+# define LIBMESH_SAW_I
+#endif
 #include <petscmat.h>
+#ifndef LIBMESH_SAW_I
+# undef I // Avoid complex.h contamination
+#endif
 
 
 
@@ -142,7 +151,7 @@ public:
              const std::vector<numeric_index_type> & n_oz,
              const numeric_index_type blocksize=1);
 
-  virtual void init () override;
+  virtual void init (ParallelType = PARALLEL) override;
 
   /**
    * Update the sparsity pattern based on \p dof_map, and set the matrix
@@ -151,9 +160,18 @@ public:
    */
   void update_preallocation_and_zero();
 
+  /**
+   * Reset matrix to use the original nonzero pattern provided by users
+   */
+  void reset_preallocation();
+
   virtual void clear () override;
 
   virtual void zero () override;
+
+  virtual std::unique_ptr<SparseMatrix<T>> zero_clone () const override;
+
+  virtual std::unique_ptr<SparseMatrix<T>> clone () const override;
 
   virtual void zero_rows (std::vector<numeric_index_type> & rows, T diag_value = 0.0) override;
 
@@ -163,7 +181,21 @@ public:
 
   virtual numeric_index_type m () const override;
 
+  numeric_index_type local_m () const final;
+
   virtual numeric_index_type n () const override;
+
+  /**
+   * Get the number of columns owned by this process
+   */
+  numeric_index_type local_n () const;
+
+  /**
+   * Get the number of rows and columns owned by this process
+   * @param i Row size
+   * @param j Column size
+   */
+  void get_local_size (numeric_index_type & m, numeric_index_type & n) const;
 
   virtual numeric_index_type row_start () const override;
 
@@ -207,6 +239,20 @@ public:
    */
   virtual void add (const T a, const SparseMatrix<T> & X) override;
 
+  /**
+   * Compute Y = A*X for matrix \p X.
+   */
+  virtual void matrix_matrix_mult (SparseMatrix<T> & X, SparseMatrix<T> & Y) override;
+
+  /**
+    * Add \p scalar* \p spm to the rows and cols of this matrix (A):
+    * A(rows[i], cols[j]) += scalar * spm(i,j)
+    */
+  void add_sparse_matrix (const SparseMatrix<T> & spm,
+                          const std::map<numeric_index_type,numeric_index_type> & row_ltog,
+                          const std::map<numeric_index_type,numeric_index_type> & col_ltog,
+                          const T scalar) override;
+
   virtual T operator () (const numeric_index_type i,
                          const numeric_index_type j) const override;
 
@@ -247,11 +293,14 @@ public:
    *
    * \note This is generally not required in user-level code.
    *
-   * \note Don't do anything crazy like calling LibMeshMatDestroy() on
+   * \note Don't do anything crazy like calling MatDestroy() on
    * it, or very bad things will likely happen!
    */
   Mat mat () { libmesh_assert (_mat); return _mat; }
 
+  void get_row(numeric_index_type i,
+               std::vector<numeric_index_type> & indices,
+               std::vector<T> & values) const override;
 protected:
 
   /**
@@ -283,6 +332,12 @@ private:
   bool _destroy_mat_on_exit;
 
   PetscMatrixType _mat_type;
+
+#ifdef LIBMESH_HAVE_CXX11_THREAD
+  mutable std::mutex _petsc_matrix_mutex;
+#else
+  mutable Threads::spin_mutex _petsc_matrix_mutex;
+#endif
 };
 
 } // namespace libMesh

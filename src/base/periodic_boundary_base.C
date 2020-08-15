@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,8 +20,10 @@
 
 #ifdef LIBMESH_ENABLE_PERIODIC
 
-#include "libmesh/boundary_info.h" // BoundaryInfo::invalid_id
 #include "libmesh/periodic_boundary_base.h"
+
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/boundary_info.h" // BoundaryInfo::invalid_id
 
 namespace libMesh
 {
@@ -80,10 +82,8 @@ bool PeriodicBoundaryBase::has_transformation_matrix() const
 
 const DenseMatrix<Real> & PeriodicBoundaryBase::get_transformation_matrix() const
 {
-  if(!has_transformation_matrix())
-  {
-    libmesh_error_msg("Transformation matrix is not defined");
-  }
+  libmesh_error_msg_if(!has_transformation_matrix(),
+                       "Transformation matrix is not defined");
 
   return *_transformation_matrix;
 }

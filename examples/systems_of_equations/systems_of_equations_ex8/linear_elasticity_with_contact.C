@@ -23,6 +23,7 @@
 #include "libmesh/fe_compute_data.h"
 #include "libmesh/petsc_matrix.h"
 #include "libmesh/edge_edge2.h"
+#include "libmesh/boundary_info.h"
 
 // The nonlinear solver and system we will be using
 #include "libmesh/nonlinear_solver.h"
@@ -157,8 +158,8 @@ void LinearElasticityWithContact::initialize_contact_load_paths()
           bool on_upper_contact_surface =
             mesh.get_boundary_info().has_boundary_id (elem, side, CONTACT_BOUNDARY_UPPER);
 
-          if (on_lower_contact_surface && on_upper_contact_surface)
-            libmesh_error_msg("Should not be on both surfaces at the same time");
+          libmesh_error_msg_if(on_lower_contact_surface && on_upper_contact_surface,
+                               "Should not be on both surfaces at the same time");
 
           if (on_lower_contact_surface || on_upper_contact_surface)
             {
@@ -218,7 +219,7 @@ void LinearElasticityWithContact::add_contact_edge_elements()
       Node & master_node = mesh.node_ref(master_node_id);
       Node & slave_node = mesh.node_ref(slave_node_id);
 
-      Elem * connector_elem = mesh.add_elem (new Edge2);
+      Elem * connector_elem = mesh.add_elem(Elem::build(EDGE2));
       connector_elem->set_node(0) = &master_node;
       connector_elem->set_node(1) = &slave_node;
 
@@ -616,8 +617,7 @@ std::pair<Real, Real> LinearElasticityWithContact::update_lambdas()
       dof_id_type upper_node_id = it->first;
 
       std::map<dof_id_type, Real>::iterator new_lambda_it = _lambda_plus_penalty_values.find(upper_node_id);
-      if (new_lambda_it == _lambda_plus_penalty_values.end())
-        libmesh_error_msg("New lambda value not found");
+      libmesh_error_msg_if(new_lambda_it == _lambda_plus_penalty_values.end(), "New lambda value not found");
 
       Real new_lambda = new_lambda_it->second;
       Real old_lambda = it->second;

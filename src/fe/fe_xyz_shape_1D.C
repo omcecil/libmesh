@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,37 +23,28 @@
 #include "libmesh/elem.h"
 
 
-
 namespace libMesh
 {
 
 
-template <>
-Real FE<1,XYZ>::shape(const ElemType,
-                      const Order,
-                      const unsigned int,
-                      const Point &)
-{
-  libmesh_error_msg("XYZ polynomials require the element \n because the centroid is needed.");
-  return 0.;
-}
-
+LIBMESH_DEFAULT_VECTORIZED_FE(1,XYZ)
 
 
 template <>
 Real FE<1,XYZ>::shape(const Elem * elem,
                       const Order libmesh_dbg_var(order),
                       const unsigned int i,
-                      const Point & point_in)
+                      const Point & point_in,
+                      const bool libmesh_dbg_var(add_p_level))
 {
   libmesh_assert(elem);
-  libmesh_assert_less_equal (i, order + elem->p_level());
+  libmesh_assert_less_equal (i, order + add_p_level * elem->p_level());
 
   Point centroid = elem->centroid();
   Real max_distance = 0.;
-  for (unsigned int p = 0; p < elem->n_nodes(); p++)
+  for (const Point & p : elem->node_ref_range())
     {
-      const Real distance = std::abs(centroid(0) - elem->point(p)(0));
+      const Real distance = std::abs(centroid(0) - p(0));
       max_distance = std::max(distance, max_distance);
     }
 
@@ -90,11 +81,10 @@ Real FE<1,XYZ>::shape(const Elem * elem,
 
 
 template <>
-Real FE<1,XYZ>::shape_deriv(const ElemType,
-                            const Order,
-                            const unsigned int,
-                            const unsigned int,
-                            const Point &)
+Real FE<1,XYZ>::shape(const ElemType,
+                      const Order,
+                      const unsigned int,
+                      const Point &)
 {
   libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
   return 0.;
@@ -102,15 +92,28 @@ Real FE<1,XYZ>::shape_deriv(const ElemType,
 
 
 
+
+template <>
+Real FE<1,XYZ>::shape(const FEType fet,
+                      const Elem * elem,
+                      const unsigned int i,
+                      const Point & p,
+                      const bool add_p_level)
+{
+  return FE<1,XYZ>::shape(elem, fet.order, i, p, add_p_level);
+}
+
+
 template <>
 Real FE<1,XYZ>::shape_deriv(const Elem * elem,
                             const Order libmesh_dbg_var(order),
                             const unsigned int i,
                             const unsigned int libmesh_dbg_var(j),
-                            const Point & point_in)
+                            const Point & point_in,
+                            const bool libmesh_dbg_var(add_p_level))
 {
   libmesh_assert(elem);
-  libmesh_assert_less_equal (i, order + elem->p_level());
+  libmesh_assert_less_equal (i, order + add_p_level * elem->p_level());
 
   // only d()/dxi in 1D!
 
@@ -118,9 +121,9 @@ Real FE<1,XYZ>::shape_deriv(const Elem * elem,
 
   Point centroid = elem->centroid();
   Real max_distance = 0.;
-  for (unsigned int p = 0; p < elem->n_nodes(); p++)
+  for (const Point & p : elem->node_ref_range())
     {
-      const Real distance = std::abs(centroid(0) - elem->point(p)(0));
+      const Real distance = std::abs(centroid(0) - p(0));
       max_distance = std::max(distance, max_distance);
     }
 
@@ -135,7 +138,7 @@ Real FE<1,XYZ>::shape_deriv(const Elem * elem,
       return 0.;
 
     case 1:
-      return 1.;
+      return 1./max_distance;
 
     case 2:
       return 2.*dx/max_distance;
@@ -155,18 +158,35 @@ Real FE<1,XYZ>::shape_deriv(const Elem * elem,
 }
 
 
-#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 template <>
-Real FE<1,XYZ>::shape_second_deriv(const ElemType,
-                                   const Order,
-                                   const unsigned int,
-                                   const unsigned int,
-                                   const Point &)
+Real FE<1,XYZ>::shape_deriv(const ElemType,
+                            const Order,
+                            const unsigned int,
+                            const unsigned int,
+                            const Point &)
 {
   libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
   return 0.;
 }
+
+
+template <>
+Real FE<1,XYZ>::shape_deriv(const FEType fet,
+                            const Elem * elem,
+                            const unsigned int i,
+                            const unsigned int j,
+                            const Point & p,
+                            const bool add_p_level)
+{
+  return FE<1,XYZ>::shape_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
+
+
+
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 
 
@@ -175,10 +195,11 @@ Real FE<1,XYZ>::shape_second_deriv(const Elem * elem,
                                    const Order libmesh_dbg_var(order),
                                    const unsigned int i,
                                    const unsigned int libmesh_dbg_var(j),
-                                   const Point & point_in)
+                                   const Point & point_in,
+                                   const bool libmesh_dbg_var(add_p_level))
 {
   libmesh_assert(elem);
-  libmesh_assert_less_equal (i, order + elem->p_level());
+  libmesh_assert_less_equal (i, order + add_p_level * elem->p_level());
 
   // only d2()/dxi2 in 1D!
 
@@ -186,9 +207,9 @@ Real FE<1,XYZ>::shape_second_deriv(const Elem * elem,
 
   Point centroid = elem->centroid();
   Real max_distance = 0.;
-  for (unsigned int p = 0; p < elem->n_nodes(); p++)
+  for (const Point & p : elem->node_ref_range())
     {
-      const Real distance = std::abs(centroid(0) - elem->point(p)(0));
+      const Real distance = std::abs(centroid(0) - p(0));
       max_distance = std::max(distance, max_distance);
     }
 
@@ -220,6 +241,32 @@ Real FE<1,XYZ>::shape_second_deriv(const Elem * elem,
       return val/dist2;
     }
 }
+
+
+template <>
+Real FE<1,XYZ>::shape_second_deriv(const ElemType,
+                                   const Order,
+                                   const unsigned int,
+                                   const unsigned int,
+                                   const Point &)
+{
+  libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
+  return 0.;
+}
+
+
+
+template <>
+Real FE<1,XYZ>::shape_second_deriv(const FEType fet,
+                                   const Elem * elem,
+                                   const unsigned int i,
+                                   const unsigned int j,
+                                   const Point & p,
+                                   const bool add_p_level)
+{
+  return FE<1,XYZ>::shape_second_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
 #endif
 
 } // namespace libMesh

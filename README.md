@@ -1,7 +1,10 @@
+## IMPORTANT -- READ BEFORE BUILDING!
+Do not download a GitHub-generated "ZIP" archive. These do not contain the required submodules, and therefore cannot be used to build libmesh. Use only git clones or "release" tarballs when following these instructions.
+
 ## Build Instructions
 The default is to build libmesh "out of tree," i.e. within a separate `build` directory, rather than in the source tree itself. This simplifies the process of having multiple, independently-configured builds.
-1. `cd` to location of libmesh clone or extracted tarball.
-1. (Only if using a git clone) `git submodule update --init`
+1. `cd` to location of libmesh clone or extracted release tarball.
+1. (Only if using a git clone) `git submodule update --init --recursive`
 1. `mkdir build`
 1. `cd build`
 1. `../configure --prefix=/path/to/libmesh/install`
@@ -58,9 +61,9 @@ the same source tree by creating a subdirectory for each compiler build:
 
 
 ## Dependencies
-libMesh has no required dependencies other than a reasonably modern C
-& C++ compiler.  To run on distributed memory platforms in parallel,
-you will also need MPI.
+libMesh has no required dependencies other than a C++ compiler which
+fully supports the C++11 standard. To run on distributed memory
+platforms in parallel, you will also need MPI.
 
 ## Optional Packages
 We support a [large number](http://libmesh.github.io/externalsoftware.html) of

@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/equation_systems.h>
 #include <libmesh/mesh.h>
 #include <libmesh/node.h>
@@ -26,18 +20,21 @@
 #include <libmesh/enum_solver_type.h>
 #include <libmesh/enum_preconditioner_type.h>
 #include <libmesh/linear_solver.h>
+#include <libmesh/parallel.h>
+#include <libmesh/face_quad4.h>
+#include <libmesh/face_quad9.h>
+#include <libmesh/face_quad8.h>
+#include <libmesh/face_tri3.h>
+#include <libmesh/face_tri6.h>
+#include <libmesh/cell_hex8.h>
+#include <libmesh/cell_hex20.h>
+#include <libmesh/cell_hex27.h>
+#include <libmesh/cell_tet10.h>
+#include <libmesh/boundary_info.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -80,22 +77,22 @@ public:
           {
             if (elem->processor_id() != p)
               {
-                coupled_elements.insert (std::make_pair(elem, null_mat));
+                coupled_elements.emplace(elem, null_mat);
 
                 const Elem * neighbor = _mesh.elem_ptr(node_elem_id_2);
                 if (neighbor->processor_id() != p)
-                  coupled_elements.insert (std::make_pair(neighbor, null_mat));
+                  coupled_elements.emplace(neighbor, null_mat);
               }
           }
         if (elem->id() == node_elem_id_2)
           {
             if (elem->processor_id() != p)
               {
-                coupled_elements.insert (std::make_pair(elem, null_mat));
+                coupled_elements.emplace(elem, null_mat);
 
                 const Elem * neighbor = _mesh.elem_ptr(node_elem_id_1);
                 if (neighbor->processor_id() != p)
-                  coupled_elements.insert (std::make_pair(neighbor, null_mat));
+                  coupled_elements.emplace(neighbor, null_mat);
               }
           }
       }
@@ -223,6 +220,10 @@ void assembly_with_dg_fem_context(EquationSystems& es,
     context.get_side_fe( 0, side_fe );
     side_fe->get_JxW();
     side_fe->get_phi();
+
+    FEBase* neighbor_side_fe = NULL;
+    context.get_neighbor_side_fe(0, neighbor_side_fe);
+    neighbor_side_fe->get_phi();
   }
 
   for (const auto & elem : mesh.active_local_element_ptr_range())
@@ -434,15 +435,31 @@ public:
 #if LIBMESH_DIM > 1
   CPPUNIT_TEST( testProjectHierarchicQuad9 );
   CPPUNIT_TEST( testProjectHierarchicTri6 );
+  CPPUNIT_TEST( test2DProjectVectorFETri3 );
+  CPPUNIT_TEST( test2DProjectVectorFEQuad4 );
+  CPPUNIT_TEST( test2DProjectVectorFETri6 );
+  CPPUNIT_TEST( test2DProjectVectorFEQuad8 );
+  CPPUNIT_TEST( test2DProjectVectorFEQuad9 );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testBlockRestrictedVarNDofs );
+#endif
 #endif // LIBMESH_DIM > 1
 #if LIBMESH_DIM > 2
   CPPUNIT_TEST( testProjectHierarchicHex27 );
   CPPUNIT_TEST( testProjectMeshFunctionHex27 );
   CPPUNIT_TEST( testBoundaryProjectCube );
+  CPPUNIT_TEST( test3DProjectVectorFETet4 );
+  CPPUNIT_TEST( test3DProjectVectorFEHex8 );
+  CPPUNIT_TEST( test3DProjectVectorFETet10 );
+  CPPUNIT_TEST( test3DProjectVectorFEHex20 );
+  CPPUNIT_TEST( test3DProjectVectorFEHex27 );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testAssemblyWithDgFemContext );
+#endif
 #endif // LIBMESH_DIM > 2
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testDofCouplingWithVarGroups );
+#endif
 
 #ifdef LIBMESH_ENABLE_AMR
 #ifdef LIBMESH_HAVE_METAPHYSICL
@@ -477,39 +494,39 @@ private:
 
     if (u_subdomains.count(sbd_id))
       {
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(0,p)),
-                                     libmesh_real(cubic_test(p,param,"","")),
-                                     TOLERANCE*TOLERANCE*10);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(0,p,sys.old_local_solution.get())),
-                                     libmesh_real(cubic_test(p,param,"","") + Number(10)),
-                                     TOLERANCE*TOLERANCE*100);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(0,p,sys.older_local_solution.get())),
-                                     libmesh_real(cubic_test(p,param,"","") + Number(20)),
-                                     TOLERANCE*TOLERANCE*100);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(cubic_test(p,param,"","")),
+                                libmesh_real(sys.point_value(0,p)),
+                                TOLERANCE*TOLERANCE*10);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(cubic_test(p,param,"","") + Number(10)),
+                                libmesh_real(sys.point_value(0,p,sys.old_local_solution.get())),
+                                TOLERANCE*TOLERANCE*100);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(cubic_test(p,param,"","") + Number(20)),
+                                libmesh_real(sys.point_value(0,p,sys.older_local_solution.get())),
+                                TOLERANCE*TOLERANCE*100);
       }
     if (v_subdomains.count(sbd_id))
       {
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(1,p)),
-                                     libmesh_real(new_linear_test(p,param,"","")),
-                                     TOLERANCE*TOLERANCE*10);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(1,p,sys.old_local_solution.get())),
-                                     libmesh_real(new_linear_test(p,param,"","") + Number(10)),
-                                     TOLERANCE*TOLERANCE*100);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(1,p,sys.older_local_solution.get())),
-                                     libmesh_real(new_linear_test(p,param,"","") + Number(20)),
-                                     TOLERANCE*TOLERANCE*100);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(new_linear_test(p,param,"","")),
+                                libmesh_real(sys.point_value(1,p)),
+                                TOLERANCE*TOLERANCE*10);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(new_linear_test(p,param,"","") + Number(10)),
+                                libmesh_real(sys.point_value(1,p,sys.old_local_solution.get())),
+                                TOLERANCE*TOLERANCE*100);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(new_linear_test(p,param,"","") + Number(20)),
+                                libmesh_real(sys.point_value(1,p,sys.older_local_solution.get())),
+                                TOLERANCE*TOLERANCE*100);
       }
     if (w_subdomains.count(sbd_id))
       {
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(2,p)),
-                                     libmesh_real(disc_thirds_test(p,param,"","")),
-                                     TOLERANCE*TOLERANCE*10);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(2,p,sys.old_local_solution.get())),
-                                     libmesh_real(disc_thirds_test(p,param,"","") + Number(10)),
-                                     TOLERANCE*TOLERANCE*100);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys.point_value(2,p,sys.older_local_solution.get())),
-                                     libmesh_real(disc_thirds_test(p,param,"","") + Number(20)),
-                                     TOLERANCE*TOLERANCE*100);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(disc_thirds_test(p,param,"","")),
+                                libmesh_real(sys.point_value(2,p)),
+                                TOLERANCE*TOLERANCE*10);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(disc_thirds_test(p,param,"","") + Number(10)),
+                                libmesh_real(sys.point_value(2,p,sys.old_local_solution.get())),
+                                TOLERANCE*TOLERANCE*100);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(disc_thirds_test(p,param,"","") + Number(20)),
+                                libmesh_real(sys.point_value(2,p,sys.older_local_solution.get())),
+                                TOLERANCE*TOLERANCE*100);
       }
   }
 
@@ -572,6 +589,109 @@ public:
                       u_subdomains, v_subdomains, w_subdomains,
                       es.parameters);
 #endif
+  }
+
+  void test2DProjectVectorFE(const ElemType elem_type)
+  {
+    Mesh mesh(*TestCommWorld);
+
+    EquationSystems es(mesh);
+    TransientExplicitSystem &sys =
+      es.add_system<TransientExplicitSystem> ("SimpleSystem");
+
+    auto generic_elem = Elem::build(elem_type);
+
+    auto u_var = sys.add_variable("u", generic_elem->default_order(), LAGRANGE_VEC);
+
+    MeshTools::Generation::build_square (mesh,
+                                         1, 1,
+                                         0., 1., 0., 1.,
+                                         elem_type);
+
+    es.init();
+
+    // Manually set-up the solution because I'm too lazy to set-up all the generic
+    // function projection code right now
+    for (const auto & node : mesh.local_node_ptr_range())
+    {
+      for (unsigned int i = 0; i < generic_elem->dim(); ++i)
+      {
+        auto dof_index = node->dof_number(sys.number(), u_var, i);
+        sys.solution->set(dof_index, (*node)(i));
+      }
+    }
+
+    // After setting values, we need to assemble
+    sys.solution->close();
+
+
+#ifdef LIBMESH_ENABLE_AMR
+    for (auto & elem : mesh.element_ptr_range())
+        elem->set_refinement_flag(Elem::REFINE);
+    es.reinit();
+#endif
+
+    for (const auto & node : mesh.local_node_ptr_range())
+    {
+      // 2D element here
+      for (unsigned int i = 0; i < generic_elem->dim(); ++i)
+      {
+        auto dof_index = node->dof_number(sys.number(), u_var, i);
+        auto value = (*sys.solution)(dof_index);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(value), (*node)(i), TOLERANCE*TOLERANCE);
+      }
+    }
+  }
+
+  void test3DProjectVectorFE(const ElemType elem_type)
+  {
+    Mesh mesh(*TestCommWorld);
+
+    EquationSystems es(mesh);
+    TransientExplicitSystem &sys =
+      es.add_system<TransientExplicitSystem> ("SimpleSystem");
+
+    auto generic_elem = Elem::build(elem_type);
+
+    auto u_var = sys.add_variable("u", generic_elem->default_order(), LAGRANGE_VEC);
+
+    MeshTools::Generation::build_cube (mesh,
+                                       1, 1, 1,
+                                       0., 1., 0., 1., 0., 1.,
+                                       elem_type);
+
+    es.init();
+
+    // Manually set-up the solution because I'm too lazy to set-up all the generic
+    // function projection code right now
+    for (const auto & node : mesh.local_node_ptr_range())
+    {
+      for (unsigned int i = 0; i < generic_elem->dim(); ++i)
+      {
+        auto dof_index = node->dof_number(sys.number(), u_var, i);
+        sys.solution->set(dof_index, (*node)(i));
+      }
+    }
+
+    // After setting values, we need to assemble
+    sys.solution->close();
+
+
+#ifdef LIBMESH_ENABLE_AMR
+    for (auto & elem : mesh.element_ptr_range())
+        elem->set_refinement_flag(Elem::REFINE);
+    es.reinit();
+#endif
+
+    for (const auto & node : mesh.local_node_ptr_range())
+    {
+      for (unsigned int i = 0; i < generic_elem->dim(); ++i)
+      {
+        auto dof_index = node->dof_number(sys.number(), u_var, i);
+        auto value = (*sys.solution)(dof_index);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(value), (*node)(i), TOLERANCE*TOLERANCE);
+      }
+    }
   }
 
   void testProjectSquare(const ElemType elem_type)
@@ -696,7 +816,7 @@ public:
 
     EquationSystems es(mesh);
     System &sys = es.add_system<System> ("SimpleSystem");
-    sys.add_variable("u", THIRD, HIERARCHIC);
+    sys.add_variable("u", THIRD, MONOMIAL);
 
     MeshTools::Generation::build_cube (mesh,
                                        3, 3, 3,
@@ -726,7 +846,9 @@ public:
     EquationSystems proj_es(proj_mesh);
 
     System &proj_sys = proj_es.add_system<System> ("ProjectionSystem");
-    proj_sys.add_variable("u", SECOND, LAGRANGE);
+
+    // use 3rd order again so we can expect exact results
+    proj_sys.add_variable("u", THIRD, HIERARCHIC);
 
     MeshTools::Generation::build_cube (proj_mesh,
                                        5, 5, 5,
@@ -741,9 +863,9 @@ public:
         for (Real z = 0.1; z < 1; z += 0.2)
           {
             Point p(x,y,z);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(proj_sys.point_value(0,p)),
-                                         libmesh_real(cubic_test(p,es.parameters,"","")),
-                                         TOLERANCE*TOLERANCE);
+            LIBMESH_ASSERT_FP_EQUAL(libmesh_real(cubic_test(p,es.parameters,"","")),
+                                    libmesh_real(proj_sys.point_value(0,p)),
+                                    TOLERANCE*TOLERANCE);
           }
   }
 
@@ -887,7 +1009,7 @@ public:
     // number of nodes in the mesh and the number of nodes we zero on.
     Real ref_l1_norm = static_cast<Real>(mesh.n_nodes()) - static_cast<Real>(projected_nodes_set.size());
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(sys.solution->l1_norm(), ref_l1_norm, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(sys.solution->l1_norm(), ref_l1_norm, TOLERANCE*TOLERANCE);
   }
 
   void testDofCouplingWithVarGroups()
@@ -907,7 +1029,7 @@ public:
     Point new_point_b(3.);
     Node* new_node_a = mesh.add_point( new_point_a );
     Node* new_node_b = mesh.add_point( new_point_b );
-    Elem* new_edge_elem = mesh.add_elem (new Edge2);
+    auto new_edge_elem = mesh.add_elem(Elem::build(EDGE2));
     new_edge_elem->set_node(0) = new_node_a;
     new_edge_elem->set_node(1) = new_node_b;
 
@@ -915,9 +1037,9 @@ public:
     mesh.elem_ref(1).subdomain_id() = 10;
 
     // Add NodeElems for coupling purposes
-    Elem* node_elem_1 = mesh.add_elem (new NodeElem);
+    auto node_elem_1 = mesh.add_elem(Elem::build(NODEELEM));
     node_elem_1->set_node(0) = mesh.elem_ref(0).node_ptr(1);
-    Elem* node_elem_2 = mesh.add_elem (new NodeElem);
+    auto node_elem_2 = mesh.add_elem(Elem::build(NODEELEM));
     node_elem_2->set_node(0) = new_node_a;
 
     mesh.prepare_for_use();
@@ -955,7 +1077,7 @@ public:
     // solution is the product of the number of variables and number of nodes.
     Real ref_l1_norm = static_cast<Real>(mesh.n_nodes() * system.n_vars());
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(system.solution->l1_norm(), ref_l1_norm, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(system.solution->l1_norm(), ref_l1_norm, TOLERANCE*TOLERANCE);
   }
 
   void testAssemblyWithDgFemContext()
@@ -1339,9 +1461,7 @@ public:
         mesh.add_point( Point(0,1,0), 2 );
         mesh.add_point( Point(1./3.,1./3.,1), 3 );
 
-        Elem * elem = new Tet4();
-        elem->set_id(0);
-        elem = mesh.add_elem(elem);
+        Elem * elem = mesh.add_elem(Elem::build_with_id(TET4, 0));
         elem->set_node(0) = mesh.node_ptr(0);
         elem->set_node(1) = mesh.node_ptr(1);
         elem->set_node(2) = mesh.node_ptr(2);
@@ -1511,6 +1631,16 @@ public:
   void testProjectHierarchicTri6()  { testProjectSquare(TRI6); }
   void testProjectHierarchicHex27() { testProjectCube(HEX27); }
   void testProjectMeshFunctionHex27() { testProjectCubeWithMeshFunction(HEX27); }
+  void test2DProjectVectorFETri3() { test2DProjectVectorFE(TRI3); }
+  void test2DProjectVectorFEQuad4() { test2DProjectVectorFE(QUAD4); }
+  void test2DProjectVectorFETri6() { test2DProjectVectorFE(TRI6); }
+  void test2DProjectVectorFEQuad8() { test2DProjectVectorFE(QUAD8); }
+  void test2DProjectVectorFEQuad9() { test2DProjectVectorFE(QUAD9); }
+  void test3DProjectVectorFETet4() { test3DProjectVectorFE(TET4); }
+  void test3DProjectVectorFEHex8() { test3DProjectVectorFE(HEX8); }
+  void test3DProjectVectorFETet10() { test3DProjectVectorFE(TET10); }
+  void test3DProjectVectorFEHex20() { test3DProjectVectorFE(HEX20); }
+  void test3DProjectVectorFEHex27() { test3DProjectVectorFE(HEX27); }
 
 #ifdef LIBMESH_ENABLE_AMR
 #ifdef LIBMESH_HAVE_METAPHYSICL

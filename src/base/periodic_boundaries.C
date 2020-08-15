@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,10 +21,13 @@
 #ifdef LIBMESH_ENABLE_PERIODIC
 
 #include "libmesh/periodic_boundaries.h"
-#include "libmesh/point_locator_base.h"
+
+#include "libmesh/boundary_info.h"
 #include "libmesh/elem.h"
-#include "libmesh/periodic_boundary.h"
 #include "libmesh/mesh_base.h"
+#include "libmesh/periodic_boundary.h"
+#include "libmesh/point_locator_base.h"
+#include "libmesh/remote_elem.h"
 
 namespace libMesh
 {
@@ -91,8 +94,13 @@ const Elem * PeriodicBoundaries::neighbor(boundary_id_type boundary_id,
         }
     }
 
-  libmesh_error_msg("Periodic boundary neighbor not found");
-  return nullptr;
+  // If we should have found a periodic neighbor but didn't then
+  // either we're on a ghosted element with a remote periodic neighbor
+  // or we're on a mesh with an inconsistent periodic boundary.
+  libmesh_assert_msg(!mesh.is_serial() &&
+                     (e->processor_id() != mesh.processor_id()),
+                     "Periodic boundary neighbor not found");
+  return remote_elem;
 }
 
 } // namespace libMesh

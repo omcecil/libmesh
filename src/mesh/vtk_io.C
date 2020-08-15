@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -15,9 +15,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-
-// C++ includes
-#include <fstream>
 
 // Local includes
 #include "libmesh/libmesh_config.h"
@@ -50,7 +47,17 @@
 #include "vtkPoints.h"
 #include "vtkSmartPointer.h"
 
+#ifdef LIBMESH_HAVE_MPI
+#include "vtkMPI.h"
+#include "vtkMPICommunicator.h"
+#include "vtkMPIController.h"
+#endif
+
 #include "libmesh/restore_warnings.h"
+
+// C++ includes
+#include <fstream>
+
 
 // A convenient macro for comparing VTK versions.  Returns 1 if the
 // current VTK version is < major.minor.subminor and zero otherwise.
@@ -200,10 +207,10 @@ void VTKIO::read (const std::string & name)
 
       // Get the libMesh element type corresponding to this VTK element type.
       ElemType libmesh_elem_type = _element_maps.find(cell->GetCellType());
-      Elem * elem = Elem::build(libmesh_elem_type).release();
+      auto elem = Elem::build(libmesh_elem_type);
 
       // get the straightforward numbering from the VTK cells
-      for (unsigned int j=0; j<elem->n_nodes(); ++j)
+      for (auto j : elem->node_index_range())
         elem->set_node(j) =
           mesh.node_ptr(cast_int<dof_id_type>(cell->GetPointId(j)));
 
@@ -222,7 +229,7 @@ void VTKIO::read (const std::string & name)
 
       elems_of_dimension[elem->dim()] = true;
 
-      mesh.add_elem(elem);
+      mesh.add_elem(std::move(elem));
     } // end loop over VTK cells
 
   // Set the mesh dimension to the largest encountered for an element
@@ -231,12 +238,12 @@ void VTKIO::read (const std::string & name)
       mesh.set_mesh_dimension(i);
 
 #if LIBMESH_DIM < 3
-  if (mesh.mesh_dimension() > LIBMESH_DIM)
-    libmesh_error_msg("Cannot open dimension "  \
-                      << mesh.mesh_dimension()              \
-                      << " mesh file when configured without "  \
-                      << mesh.mesh_dimension()                  \
-                      << "D support.");
+  libmesh_error_msg_if(mesh.mesh_dimension() > LIBMESH_DIM,
+                       "Cannot open dimension "
+                       << mesh.mesh_dimension()
+                       << " mesh file when configured without "
+                       << mesh.mesh_dimension()
+                       << "D support.");
 #endif // LIBMESH_DIM < 3
 }
 
@@ -256,12 +263,27 @@ void VTKIO::write_nodal_data (const std::string & fname,
   // should not be empty, it should have been broadcast to all
   // processors by the MeshOutput base class, since VTK is a parallel
   // format.  Verify this before going further.
-  if (!names.empty() && soln.empty())
-    libmesh_error_msg("Empty soln vector in VTKIO::write_nodal_data().");
+  libmesh_error_msg_if(!names.empty() && soln.empty(),
+                       "Empty soln vector in VTKIO::write_nodal_data().");
+
+  // Get a reference to the mesh
+  const MeshBase & mesh = MeshOutput<MeshBase>::mesh();
 
   // we only use Unstructured grids
   _vtk_grid = vtkSmartPointer<vtkUnstructuredGrid>::New();
   vtkSmartPointer<vtkXMLPUnstructuredGridWriter> writer = vtkSmartPointer<vtkXMLPUnstructuredGridWriter>::New();
+#ifdef LIBMESH_HAVE_MPI
+  // Set VTK to the same communicator as libMesh
+  vtkSmartPointer<vtkMPICommunicator> vtk_comm = vtkSmartPointer<vtkMPICommunicator>::New();
+  MPI_Comm mpi_comm = mesh.comm().get();
+  vtkMPICommunicatorOpaqueComm vtk_opaque_comm(&mpi_comm);
+  vtk_comm->InitializeExternal(&vtk_opaque_comm);
+
+  vtkSmartPointer<vtkMPIController> vtk_mpi_ctrl = vtkSmartPointer<vtkMPIController>::New();
+  vtk_mpi_ctrl->SetCommunicator(vtk_comm);
+
+  writer->SetController(vtk_mpi_ctrl);
+#endif
 
   // add nodes to the grid and update _local_node_map
   _local_node_map.clear();
@@ -306,9 +328,9 @@ void VTKIO::write_nodal_data (const std::string & fname,
 
   // Tell the writer how many partitions exist and on which processor
   // we are currently
-  writer->SetNumberOfPieces(MeshOutput<MeshBase>::mesh().n_processors());
-  writer->SetStartPiece(MeshOutput<MeshBase>::mesh().processor_id());
-  writer->SetEndPiece(MeshOutput<MeshBase>::mesh().processor_id());
+  writer->SetNumberOfPieces(mesh.n_processors());
+  writer->SetStartPiece(mesh.processor_id());
+  writer->SetEndPiece(mesh.processor_id());
 
   // partitions overlap by one node
   // FIXME: According to this document
@@ -333,6 +355,7 @@ void VTKIO::write_nodal_data (const std::string & fname,
     {
 #if !VTK_VERSION_LESS_THAN(5,6,0)
       writer->SetCompressorTypeToZLib();
+      writer->SetDataModeToBinary();
 #else
       libmesh_do_once(libMesh::err << "Compression not implemented with old VTK libs!" << std::endl;);
 #endif
@@ -489,7 +512,7 @@ void VTKIO::node_values_to_vtk(const std::string & name,
   data->SetNumberOfValues(_local_node_map.size());
 
   // copy values into vtk
-  for (size_t i=0; i<local_values.size(); ++i) {
+  for (auto i : index_range(local_values)) {
     data->SetValue(i, local_values[i]);
   }
 

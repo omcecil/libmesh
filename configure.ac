@@ -2,7 +2,7 @@
 # configure.ac file for libmesh.  Used by Automake to generate
 # aclocal.m4 and Makefile.in. See also: http://tinyurl.com/hatuyfn
 # --------------------------------------------------------------
-AC_INIT([libmesh], [1.5.0-pre], [libmesh-users@lists.sourceforge.net], [libmesh], [http://libmesh.github.io])
+AC_INIT([libmesh], [1.6.0-pre], [libmesh-users@lists.sourceforge.net], [libmesh], [http://libmesh.github.io])
 AC_PREREQ([2.69])
 
 # by default CFLAGS and CXXFLAGS are set to '-g -O2' on systems that support them.
@@ -121,6 +121,18 @@ AC_LANG([C++])
 AC_PATH_PROG(PERL, perl)
 AC_SUBST(PERL)
 
+#--------------------------------------------------------------------
+# Check for whether to enable MPI and PETSc which will influence our
+# choice of compiler
+#--------------------------------------------------------------------
+ACSM_COMPILER_CONTROL_ARGS
+
+#-----------------------------------------------------------------------
+# Scrape PETSc configure information for their CXX, MPI_INCLUDE, MPI_LIB,
+# PETSCLINKLIBS, PETSCINCLUDEDIRS, and other variables
+#-----------------------------------------------------------------------
+ACSM_SCRAPE_PETSC_CONFIGURE
+
 # --------------------------------------------------------------
 # Set our preferred compilers
 # --------------------------------------------------------------
@@ -218,7 +230,7 @@ LIBMESH_SET_CXX_FLAGS
 # Checks for code coverage
 # this must be done after we look for our own compilers
 #------------------------------------------------------
-AX_CODE_COVERAGE
+ACSM_CODE_COVERAGE
 libmesh_CFLAGS="$GCOV_FLAGS $libmesh_CFLAGS"
 libmesh_CXXFLAGS="$GCOV_FLAGS $libmesh_CXXFLAGS"
 
@@ -357,6 +369,10 @@ LIBMESH_TEST_CXX11_CONTAINER_ERASE
 AS_IF([test "x$have_cxx11_container_erase" != "xyes"],
       [AC_MSG_ERROR([libMesh requires C++11 support for std container erase() functions returning iterators])])
 
+LIBMESH_TEST_CXX11_CONTAINER_EMPLACE
+AS_IF([test "x$have_cxx11_container_emplace" != "xyes"],
+      [AC_MSG_ERROR([libMesh requires C++11 support for std container emplace() functions])])
+
 LIBMESH_TEST_CXX11_IOTA
 AS_IF([test "x$have_cxx11_iota" != "xyes"],
       [AC_MSG_ERROR([libMesh requires C++11 support for std::iota])])
@@ -427,9 +443,12 @@ AX_ALL_STATIC
 # --------------------------------------------------------------
 AX_SPLIT_VERSION
 
+# Strip any '-pre' suffix from version; our code expects a number
+LIBMESH_NUMERIC_POINT_VERSION=`echo "$AX_POINT_VERSION" | $SED 's/-.*//'`
+
 AC_DEFINE_UNQUOTED(MAJOR_VERSION,            [$AX_MAJOR_VERSION],  [libMesh major version number])
 AC_DEFINE_UNQUOTED(MINOR_VERSION,            [$AX_MINOR_VERSION],  [libMesh minor version number])
-AC_DEFINE_UNQUOTED(MICRO_VERSION,            [$AX_POINT_VERSION],  [libMesh micro version number])
+AC_DEFINE_UNQUOTED(MICRO_VERSION,            [$LIBMESH_NUMERIC_POINT_VERSION],  [libMesh micro version number])
 AC_DEFINE_UNQUOTED(LIB_VERSION,              ["$VERSION"],         [libMesh version number])
 AC_DEFINE_UNQUOTED(LIB_RELEASE,              ["$BUILD_DEVSTATUS"], [libMesh source code version])
 AC_DEFINE_UNQUOTED(CXX,                      ["$CXX"],             [C++ compiler])
@@ -553,7 +572,7 @@ LIBMESH_CONFIGURE_OPTIONAL_PACKAGES
 
 
 # Query configuration environment
-AX_SUMMARIZE_ENV
+ACSM_SUMMARIZE_ENV
 
 # Each example gets a makefile
 AS_IF([test "x$enableexamples" = "xyes"],
@@ -581,6 +600,7 @@ AS_IF([test "x$enableexamples" = "xyes"],
                          examples/fem_system/fem_system_ex2/Makefile
                          examples/fem_system/fem_system_ex3/Makefile
                          examples/fem_system/fem_system_ex4/Makefile
+                         examples/fem_system/fem_system_ex5/Makefile
                          examples/solution_transfer/solution_transfer_ex1/Makefile
                          examples/miscellaneous/miscellaneous_ex1/Makefile
                          examples/miscellaneous/miscellaneous_ex2/Makefile
@@ -623,6 +643,7 @@ AS_IF([test "x$enableexamples" = "xyes"],
                          examples/vector_fe/vector_fe_ex2/Makefile
                          examples/vector_fe/vector_fe_ex3/Makefile
                          examples/vector_fe/vector_fe_ex4/Makefile
+                         examples/vector_fe/vector_fe_ex5/Makefile
                          examples/Makefile])
      ])
 
@@ -637,6 +658,8 @@ AS_IF([test "x$enablenested" = "xyes"],
         ac_configure_args_SAVE="$ac_configure_args"
         ac_configure_args="$ac_configure_args $libmesh_subpackage_arguments CXX='$CXX' CC='$CC' F77='$F77' FC='$FC' CPPFLAGS='$HDF5_CPPFLAGS $CPPFLAGS' LIBS='$HDF5_LIBS $LIBS'"
       ])
+
+AC_CONFIG_SUBDIRS([contrib/timpi])
 
 # Create output files. Also configures any subpackages
 AC_OUTPUT

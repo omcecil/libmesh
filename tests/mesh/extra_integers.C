@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/libmesh.h>
 #include <libmesh/mesh.h>
 #include <libmesh/elem.h>
@@ -11,16 +5,9 @@
 #include <libmesh/mesh_refinement.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
+#include <array>
 
 using namespace libMesh;
 
@@ -35,39 +22,117 @@ public:
   CPPUNIT_TEST_SUITE( ExtraIntegersTest );
 
   CPPUNIT_TEST( testExtraIntegersEdge2 );
+  CPPUNIT_TEST( testExtraIntegersTri6 );
+
+#ifdef LIBMESH_HAVE_XDR
+  CPPUNIT_TEST( testExtraIntegersCheckpointEdge3 );
+  CPPUNIT_TEST( testExtraIntegersCheckpointHex8 );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
 protected:
-  // Helper function called by the test implementations, saves a few lines of code.
-  void test_helper_1D(ElemType elem_type)
+  // Helper functions called by the test implementations, saves a few lines of code.
+  std::array<unsigned int, 6>
+    build_mesh(Mesh & mesh, ElemType elem_type, unsigned int n_elem_per_side)
   {
-    Mesh mesh(*TestCommWorld, /*dim=*/2);
-
     // Request some extra integers before building
     unsigned int i1 = mesh.add_elem_integer("i1");
+    unsigned int r1 = mesh.add_elem_datum<Real>("r1");
     unsigned int ni1 = mesh.add_node_integer("ni1");
     unsigned int ni2 = mesh.add_node_integer("ni2");
+    unsigned int nr1 = mesh.add_node_datum<Real>("nr1");
+    unsigned int nr2 = mesh.add_node_datum<Real>("nr2");
 
-    MeshTools::Generation::build_line(mesh,
-                                      /*nx=*/10,
-                                      /*xmin=*/0., /*xmax=*/1.,
-                                      elem_type);
+    const std::unique_ptr<Elem> test_elem = Elem::build(elem_type);
+    const unsigned int ymax = test_elem->dim() > 1;
+    const unsigned int zmax = test_elem->dim() > 2;
+    const unsigned int ny = ymax * n_elem_per_side;
+    const unsigned int nz = zmax * n_elem_per_side;
 
+    MeshTools::Generation::build_cube (mesh,
+                                       n_elem_per_side,
+                                       ny,
+                                       nz,
+                                       0., 1.,
+                                       0., ymax,
+                                       0., zmax,
+                                       elem_type);
+    return {i1, r1, ni1, ni2, nr1, nr2};
+  }
+
+
+  void test_and_set_initial_data
+    (Mesh & mesh, std::array<unsigned int, 6> ini)
+  {
+    const unsigned int i1 = ini[0],
+                       r1 = ini[1],
+                       ni1 = ini[2],
+                       ni2 = ini[3],
+                       nr1 = ini[4];
     for (const auto & elem : mesh.element_ptr_range())
       {
-        CPPUNIT_ASSERT_EQUAL(elem->n_extra_integers(), 1u);
+        const unsigned int expected_extra_ints =
+          2 + (sizeof(Real)-1)/sizeof(dof_id_type);
+        CPPUNIT_ASSERT_EQUAL(elem->n_extra_integers(), expected_extra_ints);
         CPPUNIT_ASSERT_EQUAL(elem->get_extra_integer(i1), DofObject::invalid_id);
         elem->set_extra_integer(i1, dof_id_type(elem->point(0)(0)*100));
         CPPUNIT_ASSERT_EQUAL(elem->get_extra_integer(i1), dof_id_type(elem->point(0)(0)*100));
+        elem->set_extra_datum<Real>(r1, elem->point(0)(0)*1000);
+        CPPUNIT_ASSERT_EQUAL(elem->get_extra_datum<Real>(r1), elem->point(0)(0)*1000);
       }
 
     for (const auto & node : mesh.node_ptr_range())
       {
-        CPPUNIT_ASSERT_EQUAL(node->n_extra_integers(), 2u);
+        const unsigned int expected_extra_ints =
+          4 + (sizeof(Real)-1)/sizeof(dof_id_type)*2;
+        CPPUNIT_ASSERT_EQUAL(node->n_extra_integers(), expected_extra_ints);
         CPPUNIT_ASSERT_EQUAL(node->get_extra_integer(ni1), DofObject::invalid_id);
         CPPUNIT_ASSERT_EQUAL(node->get_extra_integer(ni2), DofObject::invalid_id);
+        node->set_extra_datum<Real>(nr1, (*node)(0)*1000);
+        CPPUNIT_ASSERT_EQUAL(node->get_extra_datum<Real>(nr1), (*node)(0)*1000);
       }
+
+  }
+
+
+  void test_final_integers(Mesh & mesh, unsigned int i1)
+  {
+    // Make sure old (level 0) elements have the same integers and any new
+    // elements have inherited their ancestors' settings
+    for (const auto & elem : mesh.element_ptr_range())
+      {
+        const Elem * top_parent = elem;
+#ifdef LIBMESH_ENABLE_AMR
+        top_parent = elem->top_parent();
+
+        if (!elem->level())
+#endif
+          for (auto & node : elem->node_ref_range())
+            {
+              const unsigned int expected_extra_ints =
+                4 + (sizeof(Real)-1)/sizeof(dof_id_type)*2;
+              CPPUNIT_ASSERT_EQUAL(node.n_extra_integers(), expected_extra_ints);
+            }
+
+        const unsigned int expected_extra_ints =
+          2 + (sizeof(Real)-1)/sizeof(dof_id_type);
+        CPPUNIT_ASSERT_EQUAL(elem->n_extra_integers(), expected_extra_ints);
+        CPPUNIT_ASSERT_EQUAL(elem->get_extra_integer(i1), dof_id_type(top_parent->point(0)(0)*100));
+      }
+  }
+
+
+  void test_helper(ElemType elem_type, unsigned int n_elem_per_side)
+  {
+    Mesh mesh(*TestCommWorld);
+
+    std::array<unsigned int, 6> ini = build_mesh(mesh, elem_type, n_elem_per_side);
+    const unsigned int i1 = ini[0],
+                       ni1 = ini[2],
+                       ni2 = ini[3];
+
+    test_and_set_initial_data(mesh, ini);
 
     // Force (in parallel) a different partitioning - we'll simply put
     // everything on rank 0, which hopefully is not what our default
@@ -79,34 +144,43 @@ protected:
     CPPUNIT_ASSERT_EQUAL(ni2, mesh.add_node_integer("ni2"));
 
     // Make sure we didn't screw up any extra integers thereby.
-    for (const auto & elem : mesh.element_ptr_range())
-      {
-        CPPUNIT_ASSERT_EQUAL(elem->n_extra_integers(), 1u);
-        CPPUNIT_ASSERT_EQUAL(elem->get_extra_integer(i1), dof_id_type(elem->point(0)(0)*100));
-      }
-
-    for (const auto & node : mesh.node_ptr_range())
-      {
-        CPPUNIT_ASSERT_EQUAL(node->n_extra_integers(), 2u);
-        CPPUNIT_ASSERT_EQUAL(node->get_extra_integer(ni1), DofObject::invalid_id);
-        CPPUNIT_ASSERT_EQUAL(node->get_extra_integer(ni2), DofObject::invalid_id);
-      }
+    test_final_integers(mesh, i1);
 
 #ifdef LIBMESH_ENABLE_AMR
     MeshRefinement mr(mesh);
     mr.uniformly_refine(1);
 
-    // Make sure the old elements have the same integers and the new
-    // elements have be initialized as undefined.
-    for (const auto & elem : mesh.element_ptr_range())
-      {
-        CPPUNIT_ASSERT_EQUAL(elem->n_extra_integers(), 1u);
-        CPPUNIT_ASSERT_EQUAL(elem->get_extra_integer(i1), dof_id_type(elem->top_parent()->point(0)(0)*100));
-        if (!elem->level())
-          for (auto & node : elem->node_ref_range())
-            CPPUNIT_ASSERT_EQUAL(node.n_extra_integers(), 2u);
-      }
+    test_final_integers(mesh, i1);
 #endif
+  }
+
+  void checkpoint_helper(ElemType elem_type, unsigned int n_elem_per_side, bool binary)
+  {
+    Mesh mesh(*TestCommWorld);
+
+    std::array<unsigned int, 6> ini = build_mesh(mesh, elem_type, n_elem_per_side);
+    const unsigned int i1 = ini[0], ni1 = ini[2], ni2 = ini[3];
+
+    test_and_set_initial_data(mesh, ini);
+
+    const std::string filename =
+      std::string("extra_integers.cp") + (binary ? "r" : "a");
+
+    mesh.write(filename);
+
+    TestCommWorld->barrier();
+
+    Mesh mesh2(*TestCommWorld);
+
+    mesh2.read(filename);
+
+    // Make sure the integers got transferred to the second mesh
+    CPPUNIT_ASSERT_EQUAL(i1, mesh2.add_elem_integer("i1"));
+    CPPUNIT_ASSERT_EQUAL(ni1, mesh2.add_node_integer("ni1"));
+    CPPUNIT_ASSERT_EQUAL(ni2, mesh2.add_node_integer("ni2"));
+
+    // Make sure we didn't screw up any extra integers thereby.
+    test_final_integers(mesh2, i1);
   }
 
 public:
@@ -114,7 +188,14 @@ public:
 
   void tearDown() {}
 
-  void testExtraIntegersEdge2() { test_helper_1D(EDGE2); }
+  void testExtraIntegersEdge2() { test_helper(EDGE2, 5); }
+
+  void testExtraIntegersTri6() { test_helper(TRI6, 4); }
+
+  void testExtraIntegersCheckpointEdge3() { checkpoint_helper(EDGE3, 5, false); }
+
+  void testExtraIntegersCheckpointHex8() { checkpoint_helper(HEX8, 2, true); }
+
 };
 
 

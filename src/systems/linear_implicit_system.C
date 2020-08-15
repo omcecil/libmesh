@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -122,8 +122,8 @@ void LinearImplicitSystem::solve ()
     linear_solver->init();
 
   // Get the user-specified linear solver tolerance
-  const Real tol            =
-    es.parameters.get<Real>("linear solver tolerance");
+  const double tol =
+    double(es.parameters.get<Real>("linear solver tolerance"));
 
   // Get the user-specified maximum # of linear solver iterations
   const unsigned int maxits =

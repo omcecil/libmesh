@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,14 +19,20 @@
 #ifndef LIBMESH_PARALLEL_NODE_H
 #define LIBMESH_PARALLEL_NODE_H
 
-// Local Includes
+// libMesh includes
+#include "libmesh/id_types.h"
 #include "libmesh/libmesh_config.h"
 
-#include "libmesh/node.h"
-#include "libmesh/id_types.h"
+// TIMPI includes
+#include "timpi/packing.h"
+
 
 namespace libMesh
 {
+
+// Forward declarations
+class Node;
+
 namespace Parallel
 {
 

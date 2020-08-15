@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,7 +28,6 @@
 #include "libmesh/quadrature.h"
 #include "libmesh/elem_cutter.h"
 #include "libmesh/fe_base.h"
-#include "libmesh/auto_ptr.h" // deprecated
 
 // C++ includes
 #include <memory>

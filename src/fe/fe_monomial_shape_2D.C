@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,10 +22,12 @@
 #include "libmesh/fe.h"
 #include "libmesh/elem.h"
 
+
 namespace libMesh
 {
 
 
+LIBMESH_DEFAULT_VECTORIZED_FE(2,MONOMIAL)
 
 
 template <>
@@ -107,8 +109,10 @@ Real FE<2,MONOMIAL>::shape(const ElemType,
       return val;
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM == 1
+  libmesh_ignore(i, p);
+  libmesh_assert(order);
+  libmesh_not_implemented();
 #endif
 }
 
@@ -118,12 +122,26 @@ template <>
 Real FE<2,MONOMIAL>::shape(const Elem * elem,
                            const Order order,
                            const unsigned int i,
-                           const Point & p)
+                           const Point & p,
+                           const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // by default call the orientation-independent shape functions
-  return FE<2,MONOMIAL>::shape(elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  return FE<2,MONOMIAL>::shape(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
+}
+
+
+template <>
+Real FE<2,MONOMIAL>::shape(const FEType fet,
+                           const Elem * elem,
+                           const unsigned int i,
+                           const Point & p,
+                           const bool add_p_level)
+{
+  libmesh_assert(elem);
+  // by default call the orientation-independent shape functions
+  return FE<2,MONOMIAL>::shape(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, p);
 }
 
 
@@ -293,8 +311,10 @@ Real FE<2,MONOMIAL>::shape_deriv(const ElemType,
       libmesh_error_msg("Invalid shape function derivative j = " << j);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM == 1
+  libmesh_ignore(i, j, p);
+  libmesh_assert(order);
+  libmesh_not_implemented();
 #endif
 }
 
@@ -305,12 +325,28 @@ Real FE<2,MONOMIAL>::shape_deriv(const Elem * elem,
                                  const Order order,
                                  const unsigned int i,
                                  const unsigned int j,
-                                 const Point & p)
+                                 const Point & p,
+                                 const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // by default call the orientation-independent shape functions
-  return FE<2,MONOMIAL>::shape_deriv(elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  return FE<2,MONOMIAL>::shape_deriv(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
+}
+
+
+
+template <>
+Real FE<2,MONOMIAL>::shape_deriv(const FEType fet,
+                                 const Elem * elem,
+                                 const unsigned int i,
+                                 const unsigned int j,
+                                 const Point & p,
+                                 const bool add_p_level)
+{
+  libmesh_assert(elem);
+  // by default call the orientation-independent shape functions
+  return FE<2,MONOMIAL>::shape_deriv(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
 }
 
 
@@ -528,8 +564,10 @@ Real FE<2,MONOMIAL>::shape_second_deriv(const ElemType,
       libmesh_error_msg("Invalid shape function derivative j = " << j);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM == 1
+  libmesh_assert(order);
+  libmesh_ignore(i, j, p);
+  libmesh_not_implemented();
 #endif
 }
 
@@ -540,12 +578,27 @@ Real FE<2,MONOMIAL>::shape_second_deriv(const Elem * elem,
                                         const Order order,
                                         const unsigned int i,
                                         const unsigned int j,
-                                        const Point & p)
+                                        const Point & p,
+                                        const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // by default call the orientation-independent shape functions
-  return FE<2,MONOMIAL>::shape_second_deriv(elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  return FE<2,MONOMIAL>::shape_second_deriv(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
+}
+
+
+template <>
+Real FE<2,MONOMIAL>::shape_second_deriv(const FEType fet,
+                                        const Elem * elem,
+                                        const unsigned int i,
+                                        const unsigned int j,
+                                        const Point & p,
+                                        const bool add_p_level)
+{
+  libmesh_assert(elem);
+  // by default call the orientation-independent shape functions
+  return FE<2,MONOMIAL>::shape_second_deriv(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
 }
 
 #endif

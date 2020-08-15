@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,10 +23,12 @@
 #include <sstream>
 
 // Local includes
+#include "libmesh/mesh_tetgen_interface.h"
+
+#include "libmesh/boundary_info.h"
 #include "libmesh/cell_tet4.h"
 #include "libmesh/face_tri3.h"
 #include "libmesh/unstructured_mesh.h"
-#include "libmesh/mesh_tetgen_interface.h"
 #include "libmesh/utility.h" // binary_find
 #include "libmesh/mesh_tetgen_wrapper.h"
 
@@ -94,17 +96,17 @@ void TetGenMeshInterface::triangulate_pointset ()
 
   for (unsigned int i=0; i<num_elements; ++i)
     {
-      Elem * elem = new Tet4;
+      auto elem = Elem::build(TET4);
 
       // Get the nodes associated with this element
-      for (unsigned int j=0; j<elem->n_nodes(); ++j)
+      for (auto j : elem->node_index_range())
         node_labels[j] = tetgen_wrapper.get_element_node(i,j);
 
       // Associate the nodes with this element
-      this->assign_nodes_to_elem(node_labels, elem);
+      this->assign_nodes_to_elem(node_labels, elem.get());
 
       // Finally, add this element to the mesh.
-      this->_mesh.add_elem(elem);
+      this->_mesh.add_elem(std::move(elem));
     }
 }
 
@@ -145,16 +147,16 @@ void TetGenMeshInterface::pointset_convexhull ()
 
   for (unsigned int i=0; i<num_elements; ++i)
     {
-      Elem * elem = new Tri3;
+      auto elem = Elem::build(TRI3);
 
       // Get node labels associated with this element
-      for (unsigned int j=0; j<elem->n_nodes(); ++j)
+      for (auto j : elem->node_index_range())
         node_labels[j] = tetgen_wrapper.get_triface_node(i,j);
 
-      this->assign_nodes_to_elem(node_labels, elem);
+      this->assign_nodes_to_elem(node_labels, elem.get());
 
       // Finally, add this element to the mesh.
-      this->_mesh.add_elem(elem);
+      this->_mesh.add_elem(std::move(elem));
     }
 }
 
@@ -206,7 +208,7 @@ void TetGenMeshInterface::triangulate_conformingDelaunayMesh_carvehole  (const s
         tetgen_wrapper.allocate_facet_polygonlist(insertnum, 1);
         tetgen_wrapper.allocate_polygon_vertexlist(insertnum, 0, 3);
 
-        for (unsigned int j=0; j<elem->n_nodes(); ++j)
+        for (auto j : elem->node_index_range())
           {
             // We need to get the sequential index of elem->node_ptr(j), but
             // it should already be stored in _sequential_to_libmesh_node_map...
@@ -221,8 +223,8 @@ void TetGenMeshInterface::triangulate_conformingDelaunayMesh_carvehole  (const s
 
             // Check to see if not found: this could also indicate the sequential
             // node map is not sorted...
-            if (node_iter == _sequential_to_libmesh_node_map.end())
-              libmesh_error_msg("Global node " << libmesh_node_id << " not found in sequential node map!");
+            libmesh_error_msg_if(node_iter == _sequential_to_libmesh_node_map.end(),
+                                 "Global node " << libmesh_node_id << " not found in sequential node map!");
 
             int sequential_index = cast_int<int>
               (std::distance(_sequential_to_libmesh_node_map.begin(),
@@ -249,20 +251,24 @@ void TetGenMeshInterface::triangulate_conformingDelaunayMesh_carvehole  (const s
   // fill hole list (if there are holes):
   if (holes.size() > 0)
     {
-      std::vector<Point>::const_iterator ihole;
       unsigned hole_index = 0;
-      for (ihole=holes.begin(); ihole!=holes.end(); ++ihole)
-        tetgen_wrapper.set_hole(hole_index++, (*ihole)(0), (*ihole)(1), (*ihole)(2));
+      for (Point ihole : holes)
+        tetgen_wrapper.set_hole(hole_index++,
+                                REAL(ihole(0)),
+                                REAL(ihole(1)),
+                                REAL(ihole(2)));
     }
 
 
   // Run TetGen triangulation method
 
-  // Assemble switches: we append the user's switches (if any) to 'p',
-  // which tetrahedralizes a piecewise linear complex (see definition
-  // in user manual)
+  // Assemble switches: we append the user's switches (if any) to
+  //  - 'p'  tetrahedralize a piecewise linear complex
+  //  - 'C'  check consistency of mesh (avoid inverted elements)
+  //  (see definition and further options in user manual
+  //  http://wias-berlin.de/software/tetgen/1.5/doc/manual/manual005.html )
   std::ostringstream oss;
-  oss << "p";
+  oss << "pC";
   oss << _switches;
 
   if (quality_constraint != 0)
@@ -322,17 +328,17 @@ void TetGenMeshInterface::triangulate_conformingDelaunayMesh_carvehole  (const s
   for (unsigned int i=0; i<num_elements; i++)
     {
       // TetGen only supports Tet4 elements.
-      Elem * elem = new Tet4;
+      auto elem = Elem::build(TET4);
 
       // Fill up the the node_labels vector
-      for (unsigned int j=0; j<elem->n_nodes(); j++)
+      for (auto j : elem->node_index_range())
         node_labels[j] = tetgen_wrapper.get_element_node(i,j);
 
       // Associate nodes with this element
-      this->assign_nodes_to_elem(node_labels, elem);
+      this->assign_nodes_to_elem(node_labels, elem.get());
 
       // Finally, add this element to the mesh
-      this->_mesh.add_elem(elem);
+      this->_mesh.add_elem(std::move(elem));
     }
 
   // Delete original convex hull elements.  Is there ever a case where
@@ -360,7 +366,10 @@ void TetGenMeshInterface::fill_pointlist(TetGenWrapper & wrapper)
     for (auto & node : this->_mesh.node_ptr_range())
       {
         _sequential_to_libmesh_node_map[index] = node->id();
-        wrapper.set_node(index++, (*node)(0), (*node)(1), (*node)(2));
+        wrapper.set_node(index++,
+                         REAL((*node)(0)),
+                         REAL((*node)(1)),
+                         REAL((*node)(2)));
       }
   }
 }
@@ -371,7 +380,7 @@ void TetGenMeshInterface::fill_pointlist(TetGenWrapper & wrapper)
 
 void TetGenMeshInterface::assign_nodes_to_elem(unsigned * node_labels, Elem * elem)
 {
-  for (unsigned int j=0; j<elem->n_nodes(); ++j)
+  for (auto j : elem->node_index_range())
     {
       // Get the mapped node index to ask the Mesh for
       unsigned mapped_node_id = _sequential_to_libmesh_node_map[ node_labels[j] ];

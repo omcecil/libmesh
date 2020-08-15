@@ -36,6 +36,7 @@ using libMesh::Real;
 using libMesh::TransientRBEvaluation;
 using libMesh::TransientRBConstruction;
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
 
 // A simple subclass of RBEvaluation, which just needs to specify
 // (a lower bound for) the coercivity constant for this problem.
@@ -142,6 +143,10 @@ public:
     elem_fe->get_JxW();
     elem_fe->get_phi();
     elem_fe->get_dphi();
+
+    FEBase * side_fe = nullptr;
+    c.get_side_fe(u_var, side_fe);
+    side_fe->get_nothing();
   }
 
   /**
@@ -162,5 +167,7 @@ public:
   std::unique_ptr<DirichletBoundary> dirichlet_bc;
 
 };
+
+#endif // LIBMESH_ENABLE_DIRICHLET
 
 #endif

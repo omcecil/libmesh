@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,6 +27,7 @@
 #include "libmesh/qoi_set.h"
 #include "libmesh/enum_error_estimator_type.h"
 #include "libmesh/int_range.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // C++ includes
 #include <iostream>
@@ -41,8 +42,8 @@ namespace libMesh
 AdjointResidualErrorEstimator::AdjointResidualErrorEstimator () :
   ErrorEstimator(),
   error_plot_suffix(),
-  _primal_error_estimator(new PatchRecoveryErrorEstimator()),
-  _dual_error_estimator(new PatchRecoveryErrorEstimator()),
+  _primal_error_estimator(libmesh_make_unique<PatchRecoveryErrorEstimator>()),
+  _dual_error_estimator(libmesh_make_unique<PatchRecoveryErrorEstimator>()),
   _qoi_set(QoISet())
 {
 }

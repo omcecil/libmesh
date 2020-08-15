@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -16,9 +16,6 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-#include <fstream>
-
 // Local includes
 #include "libmesh/libmesh_config.h"
 #include "libmesh/ucd_io.h"
@@ -31,12 +28,17 @@
 #include "libmesh/enum_io_package.h"
 #include "libmesh/enum_elem_type.h"
 #include "libmesh/int_range.h"
+#include "libmesh/utility.h"
 
 #ifdef LIBMESH_HAVE_GZSTREAM
 # include "libmesh/ignore_warnings.h" // shadowing in gzstream.h
 # include "gzstream.h" // For reading/writing compressed streams
 # include "libmesh/restore_warnings.h"
 #endif
+
+// C++ includes
+#include <array>
+#include <fstream>
 
 
 namespace libMesh
@@ -153,19 +155,31 @@ void UCDIO::read_implementation (std::istream & in)
   // however.  So, we read in x,y,z for each node and make a point
   // in the proper way based on what dimension we're in
   {
-    Point xyz;
-
     for (unsigned int i=0; i<nNodes; i++)
       {
         libmesh_assert (in.good());
 
+        std::array<Real, 3> xyz;
+
         in >> dummy   // Point number
-           >> xyz(0)  // x-coordinate value
-           >> xyz(1)  // y-coordinate value
-           >> xyz(2); // z-coordinate value
+           >> xyz[0]  // x-coordinate value
+           >> xyz[1]  // y-coordinate value
+           >> xyz[2]; // z-coordinate value
+
+        Point p(xyz[0]);
+#if LIBMESH_DIM > 1
+        p(1) = xyz[1];
+#else
+        libmesh_assert_equal_to(xyz[1], 0);
+#endif
+#if LIBMESH_DIM > 2
+        p(2) = xyz[2];
+#else
+        libmesh_assert_equal_to(xyz[2], 0);
+#endif
 
         // Build the node
-        mesh.add_point (xyz, i);
+        mesh.add_point (p, i);
       }
   }
 
@@ -187,15 +201,13 @@ void UCDIO::read_implementation (std::istream & in)
            >> material_id  // We'll use this for the element subdomain id.
            >> type;        // string describing cell type
 
-        // Convert the UCD type string to a libmesh ElementType
-        auto it = _reading_element_map.find(type);
-        if (it == _reading_element_map.end())
-          libmesh_error_msg("Unsupported element type = " << type);
+        // Convert the UCD type string to a libmesh ElemType
+        ElemType et = libmesh_map_find(_reading_element_map, type);
 
         // Build the required type and release it into our custody.
-        Elem * elem = Elem::build(it->second).release();
+        auto elem = Elem::build(et);
 
-        for (unsigned int n=0; n<elem->n_nodes(); n++)
+        for (auto n : elem->node_index_range())
           {
             libmesh_assert (in.good());
 
@@ -215,7 +227,7 @@ void UCDIO::read_implementation (std::istream & in)
 
         // Add the element to the mesh
         elem->set_id(i);
-        mesh.add_elem (elem);
+        mesh.add_elem (std::move(elem));
       }
 
     // Set the mesh dimension to the largest encountered for an element
@@ -224,12 +236,12 @@ void UCDIO::read_implementation (std::istream & in)
         mesh.set_mesh_dimension(i);
 
 #if LIBMESH_DIM < 3
-    if (mesh.mesh_dimension() > LIBMESH_DIM)
-      libmesh_error_msg("Cannot open dimension " \
-                        << mesh.mesh_dimension() \
-                        << " mesh file when configured without " \
-                        << mesh.mesh_dimension() \
-                        << "D support.");
+    libmesh_error_msg_if(mesh.mesh_dimension() > LIBMESH_DIM,
+                         "Cannot open dimension "
+                         << mesh.mesh_dimension()
+                         << " mesh file when configured without "
+                         << mesh.mesh_dimension()
+                         << "D support.");
 #endif
   }
 }
@@ -243,9 +255,9 @@ void UCDIO::write_implementation (std::ostream & out_stream)
   const MeshBase & mesh = MeshOutput<MeshBase>::mesh();
 
   // UCD doesn't work any dimension except 3?
-  if (mesh.mesh_dimension() != 3)
-    libmesh_error_msg("Error: Can't write boundary elements for meshes of dimension less than 3. " \
-                      << "Mesh dimension = " << mesh.mesh_dimension());
+  libmesh_error_msg_if(mesh.mesh_dimension() != 3,
+                       "Error: Can't write boundary elements for meshes of dimension less than 3. "
+                       "Mesh dimension = " << mesh.mesh_dimension());
 
   // Write header
   this->write_header(out_stream, mesh, mesh.n_elem(), 0);
@@ -308,13 +320,10 @@ void UCDIO::write_interior_elems(std::ostream & out_stream,
       libmesh_assert (out_stream.good());
 
       // Look up the corresponding UCD element type in the static map.
-      const ElemType etype = elem->type();
-      auto it = _writing_element_map.find(etype);
-      if (it == _writing_element_map.end())
-        libmesh_error_msg("Error: Unsupported ElemType " << etype << " for UCDIO.");
+      std::string elem_string = libmesh_map_find(_writing_element_map, elem->type());
 
       // Write the element's subdomain ID as the UCD "material_id".
-      out_stream << e++ << " " << elem->subdomain_id() << " " << it->second << "\t";
+      out_stream << e++ << " " << elem->subdomain_id() << " " << elem_string << "\t";
       elem->write_connectivity(out_stream, UCD);
     }
 }
@@ -363,7 +372,7 @@ void UCDIO::write_soln(std::ostream & out_stream,
 
   // First write out how many variables and how many components per variable
   out_stream << names.size();
-  for (std::size_t i = 0; i < names.size(); i++)
+  for (std::size_t i = 0, ns = names.size(); i < ns; i++)
     {
       libmesh_assert (out_stream.good());
       // Each named variable has only 1 component
@@ -382,7 +391,7 @@ void UCDIO::write_soln(std::ostream & out_stream,
   // Now, for each node, write out the solution variables.
   // We use a 1-based node numbering for UCD.
   std::size_t nv = names.size();
-  for (std::size_t n = 1; n <= mesh.n_nodes(); n++)
+  for (auto n : IntRange<std::size_t>(1, mesh.n_nodes()))
     {
       libmesh_assert (out_stream.good());
       out_stream << n;

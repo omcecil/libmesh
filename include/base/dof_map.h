@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,7 +22,6 @@
 
 // Local Includes
 #include "libmesh/libmesh_common.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h" // libMesh::invalid_uint
 #include "libmesh/variable.h"
@@ -306,6 +305,18 @@ public:
                             bool to_mesh = true);
 
   /**
+   * Adds a functor which can specify coupling requirements for
+   * creation of sparse matrices.
+   *
+   * GhostingFunctor memory when using this method is managed by the
+   * shared_ptr mechanism.
+   */
+  void add_coupling_functor(std::shared_ptr<GhostingFunctor> coupling_functor,
+                            bool to_mesh = true)
+  { _shared_functors[coupling_functor.get()] = coupling_functor;
+    this->add_coupling_functor(*coupling_functor, to_mesh); }
+
+  /**
    * Removes a functor which was previously added to the set of
    * coupling functors, from both this DofMap and from the underlying
    * mesh.
@@ -354,6 +365,18 @@ public:
    */
   void add_algebraic_ghosting_functor(GhostingFunctor & evaluable_functor,
                                       bool to_mesh = true);
+
+  /**
+   * Adds a functor which can specify algebraic ghosting requirements
+   * for use with distributed vectors.
+   *
+   * GhostingFunctor memory when using this method is managed by the
+   * shared_ptr mechanism.
+   */
+  void add_algebraic_ghosting_functor(std::shared_ptr<GhostingFunctor> evaluable_functor,
+                                      bool to_mesh = true)
+  { _shared_functors[evaluable_functor.get()] = evaluable_functor;
+    this->add_algebraic_ghosting_functor(*evaluable_functor, to_mesh); }
 
   /**
    * Removes a functor which was previously added to the set of
@@ -576,24 +599,24 @@ public:
    */
   bool has_blocked_representation() const
   {
-#ifdef LIBMESH_ENABLE_BLOCKED_STORAGE
     return ((this->n_variable_groups() == 1) && (this->n_variables() > 1));
-#else
-    return false;
-#endif
   }
 
   /**
    * \returns The block size, if the variables are amenable to block storage.
    * Otherwise 1.
+   * This routine was originally designed to enable a blocked storage, but
+   * it turns out this information is still super useful for solvers even when
+   * we do not use the blocked storage (e.g., MATMPIBAIJ in PETSc). For example (in PCHMG),
+   * for a system of PDEs, to construct an efficient multilevel preconditioner, we coarsen
+   * the matrix of one single PDE instead of the entire huge matrix. In order to
+   * accomplish this, we need to know many PDEs we have. Another use case,
+   * the fieldsplit preconditioner can be constructed in place with this info wihtout
+   * involving any user efforts.
    */
   unsigned int block_size() const
   {
-#ifdef LIBMESH_ENABLE_BLOCKED_STORAGE
     return (this->has_blocked_representation() ? this->n_variables() : 1);
-#else
-    return 1;
-#endif
   }
 
   /**
@@ -641,24 +664,6 @@ public:
   { return this->first_old_dof(this->processor_id()); }
 
 #endif //LIBMESH_ENABLE_AMR
-
-  /**
-   * \returns The last dof index that is local to processor \p proc.
-   *
-   * \deprecated This function returns nonsense in the rare case where
-   * \p proc has no local dof indices.  Use end_dof() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  dof_id_type last_dof(const processor_id_type proc) const
-  {
-    libmesh_deprecated();
-    libmesh_assert_less (proc, _end_df.size());
-    return cast_int<dof_id_type>(_end_df[proc] - 1);
-  }
-
-  dof_id_type last_dof() const
-  { return this->last_dof(this->processor_id()); }
-#endif
 
   /**
    * \returns The first dof index that is after all indices local to
@@ -740,6 +745,8 @@ public:
                     std::vector<dof_id_type> & di,
                     const unsigned int vn) const;
 
+#ifdef LIBMESH_ENABLE_AMR
+
   /**
    * Appends to the vector \p di the old global degree of freedom
    * indices for \p elem.node_ref(n), for one variable \p vn.  On
@@ -750,6 +757,8 @@ public:
                         unsigned int n,
                         std::vector<dof_id_type> & di,
                         const unsigned int vn) const;
+
+#endif // LIBMESH_ENABLE_AMR
 
   /**
    * Fills the vector \p di with the global degree of freedom indices
@@ -1237,10 +1246,9 @@ public:
                                         NumericVector<Number> * rhs,
                                         NumericVector<Number> const * solution,
                                         bool homogeneous = true) const;
+
   void enforce_constraints_on_jacobian (const NonlinearImplicitSystem & system,
                                         SparseMatrix<Number> * jac) const;
-
-
 
 #ifdef LIBMESH_ENABLE_PERIODIC
 
@@ -1281,6 +1289,16 @@ public:
 
   /**
    * Adds a copy of the specified Dirichlet boundary to the system.
+   *
+   * The constraints implied by DirichletBoundary objects are imposed
+   * in the same order in which DirichletBoundary objects are added to
+   * the DofMap. When multiple DirichletBoundary objects would impose
+   * competing constraints on a given DOF, the *first*
+   * DirichletBoundary to constrain the DOF "wins". This distinction
+   * is important when e.g. two surfaces (sidesets) intersect. The
+   * nodes on the intersection will be constrained according to
+   * whichever sideset's DirichletBoundary object was added to the
+   * DofMap first.
    */
   void add_dirichlet_boundary (const DirichletBoundary & dirichlet_boundary);
 
@@ -1340,6 +1358,8 @@ public:
    */
   // void augment_send_list_for_projection(const MeshBase &);
 
+#ifdef LIBMESH_ENABLE_AMR
+
   /**
    * Fills the vector di with the global degree of freedom indices
    * for the element using the \p DofMap::old_dof_object.
@@ -1349,10 +1369,13 @@ public:
   void old_dof_indices (const Elem * const elem,
                         std::vector<dof_id_type> & di,
                         const unsigned int vn = libMesh::invalid_uint) const;
+
   /**
    * \returns The total number of degrees of freedom on old_dof_objects
    */
   dof_id_type n_old_dofs() const { return _n_old_dfs; }
+
+#endif // LIBMESH_ENABLE_AMR
 
   /**
    * Constrains degrees of freedom on side \p s of element \p elem which
@@ -1713,6 +1736,12 @@ private:
   std::set<GhostingFunctor *> _coupling_functors;
 
   /**
+   * Hang on to references to any GhostingFunctor objects we were
+   * passed in shared_ptr form
+   */
+  std::map<GhostingFunctor *, std::shared_ptr<GhostingFunctor> > _shared_functors;
+
+  /**
    * Default false; set to true if any attached matrix requires a full
    * sparsity pattern.
    */
@@ -1902,6 +1931,8 @@ const FEType & DofMap::variable_group_type (const unsigned int vg) const
 }
 
 
+#ifdef LIBMESH_ENABLE_CONSTRAINTS
+
 
 inline
 bool DofMap::is_constrained_node (const Node *
@@ -1918,7 +1949,6 @@ bool DofMap::is_constrained_node (const Node *
   return false;
 }
 
-#ifdef LIBMESH_ENABLE_CONSTRAINTS
 
 inline
 bool DofMap::is_constrained_dof (const dof_id_type dof) const
@@ -1998,17 +2028,38 @@ inline void DofMap::constrain_element_matrix_and_vector (DenseMatrix<Number> &,
                                                          std::vector<dof_id_type> &,
                                                          bool) const {}
 
+inline void DofMap::heterogenously_constrain_element_matrix_and_vector
+  (DenseMatrix<Number> &, DenseVector<Number> &,
+   std::vector<dof_id_type> &, bool, int) const {}
+
+inline void DofMap::heterogenously_constrain_element_vector
+  (const DenseMatrix<Number> &, DenseVector<Number> &,
+   std::vector<dof_id_type> &, bool, int) const {}
+
 inline void DofMap::constrain_element_dyad_matrix (DenseVector<Number> &,
                                                    DenseVector<Number> &,
                                                    std::vector<dof_id_type> &,
                                                    bool) const {}
 
+inline void DofMap::constrain_nothing (std::vector<dof_id_type> &) const {}
+
 inline void DofMap::enforce_constraints_exactly (const System &,
                                                  NumericVector<Number> *,
-                                                 bool = false) const {}
+                                                 bool) const {}
 
 inline void DofMap::enforce_adjoint_constraints_exactly (NumericVector<Number> &,
                                                          unsigned int) const {}
+
+
+inline void DofMap::enforce_constraints_on_residual
+  (const NonlinearImplicitSystem &,
+   NumericVector<Number> *,
+   NumericVector<Number> const *,
+   bool) const {}
+
+inline void DofMap::enforce_constraints_on_jacobian
+  (const NonlinearImplicitSystem &,
+   SparseMatrix<Number> *) const {}
 
 #endif // LIBMESH_ENABLE_CONSTRAINTS
 

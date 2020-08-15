@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,7 +28,11 @@ namespace libMesh
 
 // Edge2 class static member initializations
 const int Edge2::num_nodes;
+const int Edge2::num_sides;
+const int Edge2::num_edges;
 const int Edge2::num_children;
+const int Edge2::nodes_per_side;
+const int Edge2::nodes_per_edge;
 
 #ifdef LIBMESH_ENABLE_AMR
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -35,7 +35,7 @@ bool FirstOrderUnsteadySolver::compute_second_order_eqns(bool compute_jacobian, 
 
   unsigned int n_qpoints = context.get_element_qrule().n_points();
 
-  for (unsigned int var = 0; var != context.n_vars(); ++var)
+  for (auto var : make_range(context.n_vars()))
     {
       if (!this->_system.is_second_order_var(var))
         continue;

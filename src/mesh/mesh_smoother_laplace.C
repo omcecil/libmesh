@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -68,8 +68,8 @@ void LaplaceMeshSmoother::smooth(unsigned int n_iterations)
 
       for (auto & node : _mesh.local_node_ptr_range())
         {
-          if (node == nullptr)
-            libmesh_error_msg("[" << _mesh.processor_id() << "]: Node iterator returned nullptr.");
+          libmesh_error_msg_if(node == nullptr,
+                               "[" << _mesh.processor_id() << "]: Node iterator returned nullptr.");
 
           // leave the boundary intact
           // Only relocate the nodes which are vertices of an element

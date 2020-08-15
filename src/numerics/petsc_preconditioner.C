@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,8 +19,6 @@
 
 #ifdef LIBMESH_HAVE_PETSC
 
-// C++ includes
-
 // Local Includes
 #include "libmesh/petsc_preconditioner.h"
 #include "libmesh/petsc_macro.h"
@@ -28,11 +26,6 @@
 #include "libmesh/petsc_vector.h"
 #include "libmesh/libmesh_common.h"
 #include "libmesh/enum_preconditioner_type.h"
-
-// PCBJacobiGetSubKSP was defined in petscksp.h in PETSc 2.3.3, 3.1.0
-#if PETSC_VERSION_LESS_THAN(3,1,0)
-# include "petscksp.h"
-#endif
 
 namespace libMesh
 {
@@ -56,8 +49,7 @@ void PetscPreconditioner<T>::apply(const NumericVector<T> & x, NumericVector<T> 
 template <typename T>
 void PetscPreconditioner<T>::init ()
 {
-  if (!this->_matrix)
-    libmesh_error_msg("ERROR: No matrix set for PetscPreconditioner, but init() called");
+  libmesh_error_msg_if(!this->_matrix, "ERROR: No matrix set for PetscPreconditioner, but init() called");
 
   // Clear the preconditioner in case it has been created in the past
   if (!this->_is_initialized)
@@ -65,7 +57,7 @@ void PetscPreconditioner<T>::init ()
       // Should probably use PCReset(), but it's not working at the moment so we'll destroy instead
       if (_pc)
         {
-          int ierr = LibMeshPCDestroy(&_pc);
+          int ierr = PCDestroy(&_pc);
           LIBMESH_CHKERR(ierr);
         }
 
@@ -77,11 +69,7 @@ void PetscPreconditioner<T>::init ()
       _mat = pmatrix->mat();
     }
 
-#if PETSC_RELEASE_LESS_THAN(3,5,0)
-  int ierr = PCSetOperators(_pc,_mat,_mat,SAME_NONZERO_PATTERN);
-#else
   int ierr = PCSetOperators(_pc,_mat,_mat);
-#endif
   LIBMESH_CHKERR(ierr);
 
   // Set the PCType.  Note: this used to be done *before* the call to
@@ -103,7 +91,7 @@ void PetscPreconditioner<T>::clear()
 {
   if (_pc)
     {
-      int ierr = LibMeshPCDestroy(&_pc);
+      int ierr = PCDestroy(&_pc);
       LIBMESH_CHKERR(ierr);
     }
 }
@@ -249,14 +237,8 @@ void PetscPreconditioner<T>::set_petsc_preconditioner_type (const Preconditioner
 }
 
 
-#if PETSC_VERSION_LESS_THAN(3,0,0)
-#define PCTYPE_CV_QUALIFIER
-#else
-#define PCTYPE_CV_QUALIFIER const
-#endif
-
 template <typename T>
-void PetscPreconditioner<T>::set_petsc_subpreconditioner_type(PCTYPE_CV_QUALIFIER PCType type, PC & pc)
+void PetscPreconditioner<T>::set_petsc_subpreconditioner_type(const PCType type, PC & pc)
 {
   // For catching PETSc error return codes
   int ierr = 0;

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -191,10 +191,8 @@ void FE<Dim,T>::reinit(const Elem * elem,
               if (this->shapes_need_reinit())
                 {
                   cached_nodes.resize(elem->n_nodes());
-                  for (unsigned int n = 0; n != elem->n_nodes(); ++n)
-                    {
-                      cached_nodes[n] = elem->point(n);
-                    }
+                  for (auto n : elem->node_index_range())
+                    cached_nodes[n] = elem->point(n);
                 }
             }
           else
@@ -205,7 +203,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
               if (cached_nodes.size() != elem->n_nodes())
                 cached_nodes_still_fit = false;
               else
-                for (unsigned int n = 1; n < elem->n_nodes(); ++n)
+                for (auto n : make_range(1u, elem->n_nodes()))
                   {
                     if (!(elem->point(n) - elem->point(0)).relative_fuzzy_equals
                         ((cached_nodes[n] - cached_nodes[0]), 1e-13))
@@ -221,7 +219,7 @@ void FE<Dim,T>::reinit(const Elem * elem,
                     (this->qrule->get_points(), elem);
                   this->init_shape_functions (this->qrule->get_points(), elem);
                   cached_nodes.resize(elem->n_nodes());
-                  for (unsigned int n = 0; n != elem->n_nodes(); ++n)
+                  for (auto n : elem->node_index_range())
                     cached_nodes[n] = elem->point(n);
                 }
             }
@@ -285,10 +283,55 @@ void FE<Dim,T>::reinit(const Elem * elem,
         this->compute_shape_functions (elem,*pts);
       else
         this->compute_shape_functions(elem,this->qrule->get_points());
+      if (this->calculate_dual)
+      {
+        if (T != LAGRANGE)
+          libmesh_warning("dual calculations have only been verified for the LAGRANGE family");
+
+        // In order for the matrices for the biorthogonality condition to be
+        // non-singular, the dual basis coefficients must be computed when the
+        // primal shape functions are evaluated with a quadrature rule. *But* a
+        // user may be reiniting with integration points from a mortar segment,
+        // which is valid, so a simple `if (!pts)` check is not
+        // appropriate. We're just gonna have to trust the user on this one. If
+        // they "screw up" we'll throw an exception from the LU decomposition,
+        // and they can choose to handle it or not
+        this->compute_dual_shape_coeffs();
+
+        this->compute_dual_shape_functions();
+      }
     }
 }
 
+template <unsigned int Dim, FEFamily T>
+void FE<Dim,T>::init_dual_shape_functions(const unsigned int n_shapes, const unsigned int n_qp)
+{
+  if (!this->calculate_dual)
+    return;
 
+  libmesh_assert_msg(this->calculate_phi,
+                     "dual shape function calculation relies on "
+                     "primal shape functions being calculated");
+
+  this->dual_phi.resize(n_shapes);
+  if (this->calculate_dphi)
+    this->dual_dphi.resize(n_shapes);
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+  if (this->calculate_d2phi)
+    this->dual_d2phi.resize(n_shapes);
+#endif
+
+  for (auto i : index_range(this->dual_phi))
+  {
+    this->dual_phi[i].resize(n_qp);
+    if (this->calculate_dphi)
+      this->dual_dphi[i].resize(n_qp);
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+  if (this->calculate_d2phi)
+    this->dual_d2phi[i].resize(n_qp);
+#endif
+  }
+}
 
 template <unsigned int Dim, FEFamily T>
 void FE<Dim,T>::init_shape_functions(const std::vector<Point> & qp,
@@ -306,122 +349,156 @@ void FE<Dim,T>::init_shape_functions(const std::vector<Point> & qp,
     this->n_shape_functions(this->get_type(),
                             this->get_order());
 
-  // resize the vectors to hold current data
-  // Phi are the shape functions used for the FE approximation
-  // Phi_map are the shape functions used for the FE mapping
-  if (this->calculate_phi)
-    this->phi.resize     (n_approx_shape_functions);
-
-  if (this->calculate_dphi)
+  // Maybe we already have correctly-sized data?  Check data sizes,
+  // and get ready to break out of a "loop" if all these resize()
+  // calls are redundant.
+  unsigned int old_n_qp = 0;
+  do
     {
-      this->dphi.resize    (n_approx_shape_functions);
-      this->dphidx.resize  (n_approx_shape_functions);
-      this->dphidy.resize  (n_approx_shape_functions);
-      this->dphidz.resize  (n_approx_shape_functions);
-    }
-
-  if (this->calculate_dphiref)
-    {
-      if (Dim > 0)
-        this->dphidxi.resize (n_approx_shape_functions);
-
-      if (Dim > 1)
-        this->dphideta.resize      (n_approx_shape_functions);
-
-      if (Dim > 2)
-        this->dphidzeta.resize     (n_approx_shape_functions);
-    }
-
-  if (this->calculate_curl_phi && (FEInterface::field_type(T) == TYPE_VECTOR))
-    this->curl_phi.resize(n_approx_shape_functions);
-
-  if (this->calculate_div_phi && (FEInterface::field_type(T) == TYPE_VECTOR))
-    this->div_phi.resize(n_approx_shape_functions);
-
-#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
-  if (this->calculate_d2phi)
-    {
-      this->d2phi.resize     (n_approx_shape_functions);
-      this->d2phidx2.resize  (n_approx_shape_functions);
-      this->d2phidxdy.resize (n_approx_shape_functions);
-      this->d2phidxdz.resize (n_approx_shape_functions);
-      this->d2phidy2.resize  (n_approx_shape_functions);
-      this->d2phidydz.resize (n_approx_shape_functions);
-      this->d2phidz2.resize  (n_approx_shape_functions);
-
-      if (Dim > 0)
-        this->d2phidxi2.resize (n_approx_shape_functions);
-
-      if (Dim > 1)
-        {
-          this->d2phidxideta.resize (n_approx_shape_functions);
-          this->d2phideta2.resize   (n_approx_shape_functions);
-        }
-      if (Dim > 2)
-        {
-          this->d2phidxidzeta.resize  (n_approx_shape_functions);
-          this->d2phidetadzeta.resize (n_approx_shape_functions);
-          this->d2phidzeta2.resize    (n_approx_shape_functions);
-        }
-    }
-#endif // ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
-
-  for (unsigned int i=0; i<n_approx_shape_functions; i++)
-    {
+      // resize the vectors to hold current data
+      // Phi are the shape functions used for the FE approximation
+      // Phi_map are the shape functions used for the FE mapping
       if (this->calculate_phi)
-        this->phi[i].resize         (n_qp);
+        {
+          if (this->phi.size() == n_approx_shape_functions)
+            {
+              old_n_qp = n_approx_shape_functions ? this->phi[0].size() : 0;
+              break;
+            }
+          this->phi.resize     (n_approx_shape_functions);
+        }
       if (this->calculate_dphi)
         {
-          this->dphi[i].resize        (n_qp);
-          this->dphidx[i].resize      (n_qp);
-          this->dphidy[i].resize      (n_qp);
-          this->dphidz[i].resize      (n_qp);
+          if (this->dphi.size() == n_approx_shape_functions)
+            {
+              old_n_qp = n_approx_shape_functions ? this->dphi[0].size() : 0;
+              break;
+            }
+          this->dphi.resize    (n_approx_shape_functions);
+          this->dphidx.resize  (n_approx_shape_functions);
+          this->dphidy.resize  (n_approx_shape_functions);
+          this->dphidz.resize  (n_approx_shape_functions);
         }
 
       if (this->calculate_dphiref)
         {
           if (Dim > 0)
-            this->dphidxi[i].resize(n_qp);
+            {
+              if (this->dphidxi.size() == n_approx_shape_functions)
+                {
+                  old_n_qp = n_approx_shape_functions ? this->dphidxi[0].size() : 0;
+                  break;
+                }
+              this->dphidxi.resize (n_approx_shape_functions);
+            }
 
           if (Dim > 1)
-            this->dphideta[i].resize(n_qp);
+            this->dphideta.resize      (n_approx_shape_functions);
 
           if (Dim > 2)
-            this->dphidzeta[i].resize(n_qp);
+            this->dphidzeta.resize     (n_approx_shape_functions);
         }
 
       if (this->calculate_curl_phi && (FEInterface::field_type(T) == TYPE_VECTOR))
-        this->curl_phi[i].resize(n_qp);
+        this->curl_phi.resize(n_approx_shape_functions);
 
       if (this->calculate_div_phi && (FEInterface::field_type(T) == TYPE_VECTOR))
-        this->div_phi[i].resize(n_qp);
+        this->div_phi.resize(n_approx_shape_functions);
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
       if (this->calculate_d2phi)
         {
-          this->d2phi[i].resize     (n_qp);
-          this->d2phidx2[i].resize  (n_qp);
-          this->d2phidxdy[i].resize (n_qp);
-          this->d2phidxdz[i].resize (n_qp);
-          this->d2phidy2[i].resize  (n_qp);
-          this->d2phidydz[i].resize (n_qp);
-          this->d2phidz2[i].resize  (n_qp);
+          if (this->d2phi.size() == n_approx_shape_functions)
+            {
+              old_n_qp = n_approx_shape_functions ? this->d2phi[0].size() : 0;
+              break;
+            }
+
+          this->d2phi.resize     (n_approx_shape_functions);
+          this->d2phidx2.resize  (n_approx_shape_functions);
+          this->d2phidxdy.resize (n_approx_shape_functions);
+          this->d2phidxdz.resize (n_approx_shape_functions);
+          this->d2phidy2.resize  (n_approx_shape_functions);
+          this->d2phidydz.resize (n_approx_shape_functions);
+          this->d2phidz2.resize  (n_approx_shape_functions);
+
           if (Dim > 0)
-            this->d2phidxi2[i].resize (n_qp);
+            this->d2phidxi2.resize (n_approx_shape_functions);
+
           if (Dim > 1)
             {
-              this->d2phidxideta[i].resize (n_qp);
-              this->d2phideta2[i].resize   (n_qp);
+              this->d2phidxideta.resize (n_approx_shape_functions);
+              this->d2phideta2.resize   (n_approx_shape_functions);
             }
           if (Dim > 2)
             {
-              this->d2phidxidzeta[i].resize  (n_qp);
-              this->d2phidetadzeta[i].resize (n_qp);
-              this->d2phidzeta2[i].resize    (n_qp);
+              this->d2phidxidzeta.resize  (n_approx_shape_functions);
+              this->d2phidetadzeta.resize (n_approx_shape_functions);
+              this->d2phidzeta2.resize    (n_approx_shape_functions);
             }
         }
 #endif // ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
     }
+  while (false);
+
+  if (old_n_qp != n_qp)
+    for (unsigned int i=0; i<n_approx_shape_functions; i++)
+      {
+        if (this->calculate_phi)
+          this->phi[i].resize         (n_qp);
+
+        if (this->calculate_dphi)
+          {
+            this->dphi[i].resize        (n_qp);
+            this->dphidx[i].resize      (n_qp);
+            this->dphidy[i].resize      (n_qp);
+            this->dphidz[i].resize      (n_qp);
+          }
+
+        if (this->calculate_dphiref)
+          {
+            if (Dim > 0)
+              this->dphidxi[i].resize(n_qp);
+
+            if (Dim > 1)
+              this->dphideta[i].resize(n_qp);
+
+            if (Dim > 2)
+              this->dphidzeta[i].resize(n_qp);
+          }
+
+        if (this->calculate_curl_phi && (FEInterface::field_type(T) == TYPE_VECTOR))
+          this->curl_phi[i].resize(n_qp);
+
+        if (this->calculate_div_phi && (FEInterface::field_type(T) == TYPE_VECTOR))
+          this->div_phi[i].resize(n_qp);
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+        if (this->calculate_d2phi)
+          {
+            this->d2phi[i].resize     (n_qp);
+            this->d2phidx2[i].resize  (n_qp);
+            this->d2phidxdy[i].resize (n_qp);
+            this->d2phidxdz[i].resize (n_qp);
+            this->d2phidy2[i].resize  (n_qp);
+            this->d2phidydz[i].resize (n_qp);
+            this->d2phidz2[i].resize  (n_qp);
+            if (Dim > 0)
+              this->d2phidxi2[i].resize (n_qp);
+            if (Dim > 1)
+              {
+                this->d2phidxideta[i].resize (n_qp);
+                this->d2phideta2[i].resize   (n_qp);
+              }
+            if (Dim > 2)
+              {
+                this->d2phidxidzeta[i].resize  (n_qp);
+                this->d2phidetadzeta[i].resize (n_qp);
+                this->d2phidzeta2[i].resize    (n_qp);
+              }
+          }
+#endif // ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+      }
 
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
@@ -463,8 +540,7 @@ void FE<Dim,T>::init_shape_functions(const std::vector<Point> & qp,
         // Compute the value of the approximation shape function i at quadrature point p
         if (this->calculate_dphiref)
           for (unsigned int i=0; i<n_approx_shape_functions; i++)
-            for (unsigned int p=0; p<n_qp; p++)
-              this->dphidxi[i][p]  = FE<Dim,T>::shape_deriv (elem, this->fe_type.order, i, 0, qp[p]);
+            FE<Dim,T>::shape_derivs(elem, this->fe_type.order, i, 0, qp, this->dphidxi[i]);
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
         if (this->calculate_d2phi)
           for (unsigned int i=0; i<n_approx_shape_functions; i++)
@@ -484,11 +560,10 @@ void FE<Dim,T>::init_shape_functions(const std::vector<Point> & qp,
         // Compute the value of the approximation shape function i at quadrature point p
         if (this->calculate_dphiref)
           for (unsigned int i=0; i<n_approx_shape_functions; i++)
-            for (unsigned int p=0; p<n_qp; p++)
-              {
-                this->dphidxi[i][p]  = FE<Dim,T>::shape_deriv (elem, this->fe_type.order, i, 0, qp[p]);
-                this->dphideta[i][p] = FE<Dim,T>::shape_deriv (elem, this->fe_type.order, i, 1, qp[p]);
-              }
+            {
+              FE<Dim,T>::shape_derivs(elem, this->fe_type.order, i, 0, qp, this->dphidxi[i]);
+              FE<Dim,T>::shape_derivs(elem, this->fe_type.order, i, 1, qp, this->dphideta[i]);
+            }
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
         if (this->calculate_d2phi)
           for (unsigned int i=0; i<n_approx_shape_functions; i++)
@@ -513,12 +588,11 @@ void FE<Dim,T>::init_shape_functions(const std::vector<Point> & qp,
         // Compute the value of the approximation shape function i at quadrature point p
         if (this->calculate_dphiref)
           for (unsigned int i=0; i<n_approx_shape_functions; i++)
-            for (unsigned int p=0; p<n_qp; p++)
-              {
-                this->dphidxi[i][p]   = FE<Dim,T>::shape_deriv (elem, this->fe_type.order, i, 0, qp[p]);
-                this->dphideta[i][p]  = FE<Dim,T>::shape_deriv (elem, this->fe_type.order, i, 1, qp[p]);
-                this->dphidzeta[i][p] = FE<Dim,T>::shape_deriv (elem, this->fe_type.order, i, 2, qp[p]);
-              }
+            {
+              FE<Dim,T>::shape_derivs(elem, this->fe_type.order, i, 0, qp, this->dphidxi[i]);
+              FE<Dim,T>::shape_derivs(elem, this->fe_type.order, i, 1, qp, this->dphideta[i]);
+              FE<Dim,T>::shape_derivs(elem, this->fe_type.order, i, 2, qp, this->dphidzeta[i]);
+            }
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
         if (this->calculate_d2phi)
           for (unsigned int i=0; i<n_approx_shape_functions; i++)
@@ -540,6 +614,9 @@ void FE<Dim,T>::init_shape_functions(const std::vector<Point> & qp,
     default:
       libmesh_error_msg("Invalid dimension Dim = " << Dim);
     }
+
+  if (this->calculate_dual)
+    this->init_dual_shape_functions(n_approx_shape_functions, n_qp);
 }
 
 

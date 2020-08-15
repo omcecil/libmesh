@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,20 +23,27 @@
 // C++ includes
 #include <vector>
 
-// Local includes
+// libMesh includes
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_vector.h"
 #include "libmesh/dof_map.h"
 #include "libmesh/elem.h"
 #include "libmesh/fe_base.h"
 #include "libmesh/fe_interface.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/mesh_tools.h"
 #include "libmesh/numeric_vector.h"
-#include "libmesh/parallel_sync.h"
 #include "libmesh/quadrature.h"
 #include "libmesh/system.h"
 #include "libmesh/threads.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
+#include "libmesh/tensor_tools.h"
+#include "libmesh/libmesh_common.h"
+
+// TIMPI includes
+#include "timpi/parallel_sync.h"
+
 
 namespace libMesh
 {
@@ -137,7 +144,7 @@ public:
   // We generally need to hang on to every value we've calculated
   // until we're all done, because later projection calculations
   // depend on boundary data from earlier calculations.
-  std::unordered_map<dof_id_type, FValue> ids_to_save;
+  std::unordered_map<dof_id_type, typename FFunctor::ValuePushType> ids_to_save;
 
   // This needs to be sorted so we can get sorted dof indices cheaply
   // later
@@ -157,11 +164,13 @@ public:
     // We keep track of which dof ids we might need to send, and what
     // values those ids should get (along with a pprocessor_id to
     // leave invalid in case *we* can't compute those values either).
-    std::unordered_map<dof_id_type, std::pair<FValue, processor_id_type>> new_ids_to_push;
+    std::unordered_map<dof_id_type,
+                       std::pair<typename FFunctor::ValuePushType,
+                                 processor_id_type>> new_ids_to_push;
 
     // We'll hang on to any new ids to save on a per-thread basis
     // because we won't need them until subsequent phases
-    std::unordered_map<dof_id_type, FValue> new_ids_to_save;
+    std::unordered_map<dof_id_type, typename FFunctor::ValuePushType> new_ids_to_save;
 
     // Helper function for filling new_ids_to_push
     void find_dofs_to_send (const Node & node,
@@ -171,12 +180,32 @@ public:
 
     // When we have new data to act on, we may also need to save it
     // and get ready to push it.
-    void insert_id(dof_id_type id,
-                   const FValue & val,
-                   processor_id_type pid);
+    template <typename InsertInput,
+              typename std::enable_if<
+                  std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+                  int>::type = 0>
+    void insert_id(dof_id_type id, const InsertInput & val, processor_id_type pid);
 
+    template <typename InsertInput,
+              typename std::enable_if<
+                  !std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+                  int>::type = 0>
+    void insert_id(dof_id_type id, const InsertInput & val, processor_id_type pid);
+
+    template <typename InsertInput,
+              typename std::enable_if<
+                  std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+                  int>::type = 0>
     void insert_ids(const std::vector<dof_id_type> & ids,
-                    const std::vector<FValue> & vals,
+                    const std::vector<InsertInput> & vals,
+                    processor_id_type pid);
+
+    template <typename InsertInput,
+              typename std::enable_if<
+                  !std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+                  int>::type = 0>
+    void insert_ids(const std::vector<dof_id_type> & ids,
+                    const std::vector<InsertInput> & vals,
                     processor_id_type pid);
 
     // Our subclasses will need to merge saved ids
@@ -194,6 +223,7 @@ public:
 
     // These get used often enough to cache them
     std::vector<FEContinuity> conts;
+    std::vector<FEFieldType> field_types;
 
     const System & system;
   };
@@ -214,6 +244,7 @@ public:
     using SubFunctor::system;
     using SubFunctor::context;
     using SubFunctor::conts;
+    using SubFunctor::field_types;
     using SubFunctor::insert_id;
     using SubFunctor::insert_ids;
 
@@ -226,7 +257,7 @@ public:
        const std::vector<unsigned int> & involved_dofs,
        unsigned int var_component,
        const Node * node,
-       const FEBase & fe);
+       const FEGenericBase<typename FFunctor::RealType> & fe);
   };
 
 
@@ -270,10 +301,10 @@ public:
     using SubProjector::system;
     using SubProjector::context;
     using SubProjector::conts;
+    using SubFunctor::field_types;
 
     using SubProjector::insert_id;
     using SubProjector::insert_ids;
-    using SubProjector::construct_projection;
 
     void operator() (const node_range & range);
   };
@@ -290,10 +321,10 @@ public:
     using SubProjector::system;
     using SubProjector::context;
     using SubProjector::conts;
+    using SubFunctor::field_types;
 
     using SubProjector::insert_id;
     using SubProjector::insert_ids;
-    using SubProjector::construct_projection;
 
     void operator() (const node_range & range);
   };
@@ -309,10 +340,10 @@ public:
     using SubProjector::system;
     using SubProjector::context;
     using SubProjector::conts;
+    using SubFunctor::field_types;
 
     using SubProjector::insert_id;
     using SubProjector::insert_ids;
-    using SubProjector::construct_projection;
 
     void operator() (const node_range & range);
   };
@@ -332,16 +363,17 @@ public:
     using SubProjector::system;
     using SubProjector::context;
     using SubProjector::conts;
+    using SubFunctor::field_types;
 
     using SubProjector::insert_id;
     using SubProjector::insert_ids;
-    using SubProjector::construct_projection;
 
     void operator() (const interior_range & range);
   };
 
+  template <typename Value>
   void send_and_insert_dof_values
-    (std::unordered_map<dof_id_type, std::pair<FValue, processor_id_type>> & ids_to_push,
+    (std::unordered_map<dof_id_type, std::pair<Value, processor_id_type>> & ids_to_push,
      ProjectionAction & action) const;
 };
 
@@ -362,6 +394,8 @@ private:
   NumericVector<Val> & target_vector;
 
 public:
+  typedef Val InsertInput;
+
   VectorSetAction(NumericVector<Val> & target_vec) :
     target_vector(target_vec) {}
 
@@ -411,7 +445,14 @@ public:
 template <typename Output>
 class FEMFunctionWrapper
 {
+protected:
+  typedef typename TensorTools::MakeBaseNumber<Output>::type DofValueType;
+
 public:
+  typedef typename TensorTools::MakeReal<Output>::type RealType;
+  typedef DofValueType ValuePushType;
+  typedef Output FunctorValue;
+
   FEMFunctionWrapper(const FEMFunctionBase<Output> & f) : _f(f.clone()) {}
 
   FEMFunctionWrapper(const FEMFunctionWrapper<Output> & fw) :
@@ -430,8 +471,16 @@ public:
   Output eval_at_point (const FEMContext & c,
                         unsigned int i,
                         const Point & n,
-                        const Real time)
+                        const Real time,
+                        bool /*skip_context_check*/)
   { return _f->component(c, i, n, time); }
+
+  void eval_mixed_derivatives (const FEMContext & /*c*/,
+                               unsigned int /*i*/,
+                               unsigned int /*dim*/,
+                               const Node & /*n*/,
+                               std::vector<Output> & /*derivs*/)
+  { libmesh_error(); } // this is only for grid projections
 
   bool is_grid_projection() { return false; }
 
@@ -473,7 +522,11 @@ template <typename Output,
                                             const Real) const>
 class OldSolutionBase
 {
+protected:
+  typedef typename TensorTools::MakeBaseNumber<Output>::type DofValueType;
 public:
+  typedef typename TensorTools::MakeReal<Output>::type RealType;
+
   OldSolutionBase(const libMesh::System & sys_in) :
     last_elem(nullptr),
     sys(sys_in),
@@ -481,7 +534,7 @@ public:
   {
     // We'll be queried for components but we'll typically be looking
     // up data by variables, and those indices don't always match
-    for (auto v : IntRange<unsigned int>(0, sys.n_vars()))
+    for (auto v : make_range(sys.n_vars()))
       {
         const unsigned int vcomp = sys.variable_scalar_number(v,0);
         if (vcomp >= component_to_var.size())
@@ -498,7 +551,7 @@ public:
   {
   }
 
-  static void get_shape_outputs(FEBase & fe);
+  static void get_shape_outputs(FEAbstract & fe);
 
   // Integrating on new mesh elements, we won't yet have an up to date
   // current_local_solution.
@@ -507,9 +560,9 @@ public:
     c.set_algebraic_type(FEMContext::DOFS_ONLY);
 
     // Loop over variables, to prerequest
-    for (unsigned int var=0; var!=sys.n_vars(); ++var)
+    for (auto var : make_range(sys.n_vars()))
       {
-        FEBase * fe = nullptr;
+        FEAbstract * fe = nullptr;
         const std::set<unsigned char> & elem_dims =
           old_context.elem_dimensions();
 
@@ -650,18 +703,23 @@ template <typename Output,
 class OldSolutionValue : public OldSolutionBase<Output, point_output>
 {
 public:
+  using typename OldSolutionBase<Output, point_output>::RealType;
+  using typename OldSolutionBase<Output, point_output>::DofValueType;
+  typedef Output FunctorValue;
+  typedef DofValueType ValuePushType;
+
   OldSolutionValue(const libMesh::System & sys_in,
                    const NumericVector<Number> & old_sol) :
-    OldSolutionBase<Output, point_output>(sys_in),
-    old_solution(old_sol)
+      OldSolutionBase<Output, point_output>(sys_in),
+      old_solution(old_sol)
   {
     this->old_context.set_algebraic_type(FEMContext::OLD);
     this->old_context.set_custom_solution(&old_solution);
   }
 
   OldSolutionValue(const OldSolutionValue & in) :
-    OldSolutionBase<Output, point_output>(in.sys),
-    old_solution(in.old_solution)
+      OldSolutionBase<Output, point_output>(in.sys),
+      old_solution(in.old_solution)
   {
     this->old_context.set_algebraic_type(FEMContext::OLD);
     this->old_context.set_custom_solution(&old_solution);
@@ -678,12 +736,14 @@ public:
   Output eval_at_point(const FEMContext & c,
                        unsigned int i,
                        const Point & p,
-                       Real /* time */ =0.)
+                       Real /* time */,
+                       bool skip_context_check)
   {
     LOG_SCOPE ("eval_at_point()", "OldSolutionValue");
 
-    if (!this->check_old_context(c, p))
-      return 0;
+    if (!skip_context_check)
+      if (!this->check_old_context(c, p))
+        return Output(0);
 
     // Handle offset from non-scalar components in previous variables
     libmesh_assert_less(i, this->component_to_var.size());
@@ -694,11 +754,60 @@ public:
     return n;
   }
 
+  template <typename T = Output,
+            typename std::enable_if<std::is_same<T, Number>::value, int>::type = 0>
+  void eval_mixed_derivatives(const FEMContext & libmesh_dbg_var(c),
+                              unsigned int i,
+                              unsigned int dim,
+                              const Node & n,
+                              std::vector<Output> & derivs)
+  {
+    LOG_SCOPE ("eval_mixed_derivatives", "OldSolutionValue");
+
+    // This should only be called on vertices
+    libmesh_assert_less(c.get_elem().get_node_index(&n),
+                        c.get_elem().n_vertices());
+
+    // Handle offset from non-scalar components in previous variables
+    libmesh_assert_less(i, this->component_to_var.size());
+    unsigned int var = this->component_to_var[i];
+
+    // We have 1 mixed derivative in 2D, 4 in 3D
+    const unsigned int n_mixed = (dim-1) * (dim-1);
+    derivs.resize(n_mixed);
+
+    // Be sure to handle cases where the variable wasn't defined on
+    // this node (e.g. due to changing subdomain support)
+    if (n.old_dof_object &&
+        n.old_dof_object->n_vars(this->sys.number()) &&
+        n.old_dof_object->n_comp(this->sys.number(), var))
+      {
+        const dof_id_type first_old_id =
+          n.old_dof_object->dof_number(this->sys.number(), var, dim);
+        std::vector<dof_id_type> old_ids(n_mixed);
+        std::iota(old_ids.begin(), old_ids.end(), first_old_id);
+        old_solution.get(old_ids, derivs);
+      }
+    else
+      {
+        std::fill(derivs.begin(), derivs.end(), 0);
+      }
+  }
+
+  template <typename T = Output,
+            typename std::enable_if<!std::is_same<T, Number>::value, int>::type = 0>
+  void eval_mixed_derivatives(
+      const FEMContext &, unsigned int, unsigned int, const Node &, std::vector<Output> &)
+  {
+    libmesh_error_msg("eval_mixed_derivatives should only be applicable for Hermite finite element "
+                      "types. I don't know how you got here");
+  }
+
   void eval_old_dofs (const Elem & elem,
                       unsigned int node_num,
                       unsigned int var_num,
                       std::vector<dof_id_type> & indices,
-                      std::vector<Output> & values)
+                      std::vector<DofValueType> & values)
   {
     LOG_SCOPE ("eval_old_dofs(node)", "OldSolutionValue");
 
@@ -721,7 +830,7 @@ public:
                       unsigned int sys_num,
                       unsigned int var_num,
                       std::vector<dof_id_type> & indices,
-                      std::vector<Output> & values)
+                      std::vector<DofValueType> & values)
   {
     LOG_SCOPE ("eval_old_dofs(elem)", "OldSolutionValue");
 
@@ -732,9 +841,7 @@ public:
       *elem.parent() : elem;
 
     // If there are any element-based DOF numbers, get them
-    const unsigned int nc = FEInterface::n_dofs_per_elem(elem.dim(),
-                                                         fe_type,
-                                                         elem.type());
+    const unsigned int nc = FEInterface::n_dofs_per_elem(fe_type, &elem);
 
     std::vector<dof_id_type> old_dof_indices(nc);
     indices.resize(nc);
@@ -778,37 +885,66 @@ private:
   const NumericVector<Number> & old_solution;
 };
 
-
 template<>
 inline void
-OldSolutionBase<Number, &FEMContext::point_value>::get_shape_outputs(FEBase & fe)
+OldSolutionBase<Number, &FEMContext::point_value>::get_shape_outputs(FEAbstract & fe)
 {
-  fe.get_phi();
+  fe.request_phi();
 }
 
 
 template<>
 inline void
-OldSolutionBase<Gradient, &FEMContext::point_gradient>::get_shape_outputs(FEBase & fe)
+OldSolutionBase<Gradient, &FEMContext::point_gradient>::get_shape_outputs(FEAbstract & fe)
 {
-  fe.get_dphi();
+  fe.request_dphi();
+}
+
+template<>
+inline void
+OldSolutionBase<Gradient, &FEMContext::point_value>::get_shape_outputs(FEAbstract & fe)
+{
+  fe.request_phi();
+}
+
+
+template<>
+inline void
+OldSolutionBase<Tensor, &FEMContext::point_gradient>::get_shape_outputs(FEAbstract & fe)
+{
+  fe.request_dphi();
 }
 
 
 #ifdef LIBMESH_USE_COMPLEX_NUMBERS
 template<>
 inline void
-OldSolutionBase<Real, &FEMContext::point_value>::get_shape_outputs(FEBase & fe)
+OldSolutionBase<Real, &FEMContext::point_value>::get_shape_outputs(FEAbstract & fe)
 {
-  fe.get_phi();
+  fe.request_phi();
 }
 
 
 template<>
 inline void
-OldSolutionBase<RealGradient, &FEMContext::point_gradient>::get_shape_outputs(FEBase & fe)
+OldSolutionBase<RealGradient, &FEMContext::point_gradient>::get_shape_outputs(FEAbstract & fe)
 {
-  fe.get_dphi();
+  fe.request_dphi();
+}
+
+template<>
+inline void
+OldSolutionBase<RealGradient, &FEMContext::point_value>::get_shape_outputs(FEAbstract & fe)
+{
+  fe.request_phi();
+}
+
+
+template<>
+inline void
+OldSolutionBase<RealTensor, &FEMContext::point_gradient>::get_shape_outputs(FEAbstract & fe)
+{
+  fe.request_dphi();
 }
 #endif // LIBMESH_USE_COMPLEX_NUMBERS
 
@@ -858,7 +994,64 @@ eval_at_node(const FEMContext & c,
       return old_solution(old_id);
     }
 
-  return this->eval_at_point(c, i, n, 0);
+  return this->eval_at_point(c, i, n, 0, false);
+}
+
+template <>
+inline
+Gradient
+OldSolutionValue<Gradient, &FEMContext::point_value>::
+eval_at_node(const FEMContext & c,
+             unsigned int i,
+             unsigned int /* elem_dim */,
+             const Node & n,
+             bool extra_hanging_dofs,
+             Real /* time */)
+{
+  LOG_SCOPE ("Number eval_at_node()", "OldSolutionValue");
+
+  // This should only be called on vertices
+  libmesh_assert_less(c.get_elem().get_node_index(&n),
+                      c.get_elem().n_vertices());
+
+  // Handle offset from non-scalar components in previous variables
+  libmesh_assert_less(i, this->component_to_var.size());
+  unsigned int var = this->component_to_var[i];
+
+  // Optimize for the common case, where this node was part of the
+  // old solution.
+  //
+  // Be sure to handle cases where the variable wasn't defined on
+  // this node (due to changing subdomain support) or where the
+  // variable has no components on this node (due to Elem order
+  // exceeding FE order) or where the old_dof_object dofs might
+  // correspond to non-vertex dofs (due to extra_hanging_dofs and
+  // refinement)
+
+  const auto & elem = c.get_elem();
+
+  const Elem::RefinementState flag = elem.refinement_flag();
+
+  if (n.old_dof_object &&
+      (!extra_hanging_dofs ||
+       flag == Elem::JUST_COARSENED ||
+       flag == Elem::DO_NOTHING) &&
+      n.old_dof_object->n_vars(sys.number()) &&
+      n.old_dof_object->n_comp(sys.number(), var))
+    {
+      Gradient return_val;
+
+      for (unsigned int dim = 0; dim < elem.dim(); ++dim)
+      {
+        const dof_id_type old_id =
+          n.old_dof_object->dof_number(sys.number(), var, dim);
+        return_val(dim) = old_solution(old_id);
+      }
+
+      return return_val;
+    }
+
+  return this->eval_at_point(c, i, n, 0, false);
 }
 
 
@@ -913,26 +1106,31 @@ eval_at_node(const FEMContext & c,
       return g;
     }
 
-  return this->eval_at_point(c, i, n, 0);
+  return this->eval_at_point(c, i, n, 0, false);
 }
 
+template<>
+inline
+Tensor
+OldSolutionValue<Tensor, &FEMContext::point_gradient>::
+eval_at_node(const FEMContext &,
+             unsigned int,
+             unsigned int,
+             const Node &,
+             bool,
+             Real)
+{
+  libmesh_error_msg("You shouldn't need to call eval_at_node for the gradient "
+                    "functor for a vector-valued finite element type");
+  return Tensor();
+}
 
-
-
-
-template <>
-const Real OldSolutionBase <Number, &FEMContext::point_value>::out_of_elem_tol = 10*TOLERANCE;
-
-template <>
-const Real OldSolutionBase <Gradient, &FEMContext::point_gradient>::out_of_elem_tol = 10*TOLERANCE;
-
-#ifdef LIBMESH_USE_COMPLEX_NUMBERS
-template <>
-const Real OldSolutionBase <Real, &FEMContext::point_value>::out_of_elem_tol = 10*TOLERANCE;
-
-template <>
-const Real OldSolutionBase <RealGradient, &FEMContext::point_gradient>::out_of_elem_tol = 10*TOLERANCE;
-#endif // LIBMESH_USE_COMPLEX_NUMBERS
+template <typename Output,
+          void (FEMContext::*point_output) (unsigned int,
+                                            const Point &,
+                                            Output &,
+                                            const Real) const>
+const Real OldSolutionBase<Output, point_output>::out_of_elem_tol = 10 * TOLERANCE;
 
 #endif // LIBMESH_ENABLE_AMR
 
@@ -956,7 +1154,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::project
   ProjectionAction action(master_action);
 
   // Keep track of dof ids and values to send to other ranks
-  std::unordered_map<dof_id_type, std::pair<FValue, processor_id_type>> ids_to_push;
+  std::unordered_map<dof_id_type, std::pair<typename FFunctor::ValuePushType, processor_id_type>>
+      ids_to_push;
 
   ids_to_push.insert(sort_work.new_ids_to_push.begin(),
                      sort_work.new_ids_to_push.end());
@@ -1025,16 +1224,16 @@ template <typename FFunctor, typename GFunctor,
 GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::SubFunctor
   (GenericProjector & p) :
   projector(p), action(p.master_action), f(p.master_f),
-  context(p.system), conts(p.system.n_vars()), system(p.system)
+  context(p.system), conts(p.system.n_vars()), field_types(p.system.n_vars()), system(p.system)
 {
   // Loop over all the variables we've been requested to project, to
   // pre-request
   for (const auto & var : this->projector.variables)
     {
       // FIXME: Need to generalize this to vector-valued elements. [PB]
-      FEBase * fe = nullptr;
-      FEBase * side_fe = nullptr;
-      FEBase * edge_fe = nullptr;
+      FEAbstract * fe = nullptr;
+      FEAbstract * side_fe = nullptr;
+      FEAbstract * edge_fe = nullptr;
 
       const std::set<unsigned char> & elem_dims =
         context.elem_dimensions();
@@ -1053,30 +1252,32 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::SubF
           fe->get_xyz();
           fe->get_JxW();
 
-          fe->get_phi();
+          fe->request_phi();
           if (dim > 1)
             {
               side_fe->get_JxW();
               side_fe->get_xyz();
-              side_fe->get_phi();
+              side_fe->request_phi();
             }
           if (dim > 2)
             {
               edge_fe->get_JxW();
               edge_fe->get_xyz();
-              edge_fe->get_phi();
+              edge_fe->request_phi();
             }
 
           const FEContinuity cont = fe->get_continuity();
           this->conts[var] = cont;
           if (cont == C_ONE)
             {
-              fe->get_dphi();
+              fe->request_dphi();
               if (dim > 1)
-                side_fe->get_dphi();
+                side_fe->request_dphi();
               if (dim > 2)
-                edge_fe->get_dphi();
+                edge_fe->request_dphi();
             }
+
+          this->field_types[var] = FEInterface::field_type(fe->get_fe_type());
         }
     }
 
@@ -1092,7 +1293,7 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::Su
   SubFunctor(p)
 {
   if (p.master_g)
-    g.reset(new GFunctor(*p.master_g));
+    g = libmesh_make_unique<GFunctor>(*p.master_g);
 
 #ifndef NDEBUG
   // Our C1 elements need gradient information
@@ -1105,11 +1306,27 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::Su
     g->init_context(context);
 }
 
+template <typename FFunctor, typename GFunctor, typename FValue, typename ProjectionAction>
+template <typename InsertInput,
+          typename std::enable_if<
+              !std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+              int>::type>
+void
+GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::insert_id(
+    dof_id_type, const InsertInput & , processor_id_type)
+{
+  libmesh_error_msg("ID insertion should only occur when the provided input matches that "
+                    "expected by the ProjectionAction");
+}
 
-template <typename FFunctor, typename GFunctor,
-          typename FValue, typename ProjectionAction>
-void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::insert_id
-  (dof_id_type id, const FValue & val, processor_id_type pid)
+template <typename FFunctor, typename GFunctor, typename FValue, typename ProjectionAction>
+template <typename InsertInput,
+          typename std::enable_if<
+              std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+              int>::type>
+void
+GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::insert_id(
+    dof_id_type id, const InsertInput & val, processor_id_type pid)
 {
   auto iter = new_ids_to_push.find(id);
   if (iter == new_ids_to_push.end())
@@ -1126,17 +1343,37 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor:
     }
 }
 
+template <typename FFunctor, typename GFunctor, typename FValue, typename ProjectionAction>
+template <typename InsertInput,
+          typename std::enable_if<
+              !std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+              int>::type>
+void
+GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::insert_ids(
+    const std::vector<dof_id_type> &,
+    const std::vector<InsertInput> &,
+    processor_id_type)
+{
+  libmesh_error_msg("ID insertion should only occur when the provided input matches that "
+                    "expected by the ProjectionAction");
+}
 
-template <typename FFunctor, typename GFunctor,
-          typename FValue, typename ProjectionAction>
-void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::insert_ids
-  (const std::vector<dof_id_type> & ids, const std::vector<FValue> & vals, processor_id_type pid)
+template <typename FFunctor, typename GFunctor, typename FValue, typename ProjectionAction>
+template <typename InsertInput,
+          typename std::enable_if<
+              std::is_same<typename ProjectionAction::InsertInput, InsertInput>::value,
+              int>::type>
+void
+GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor::insert_ids(
+    const std::vector<dof_id_type> & ids,
+    const std::vector<InsertInput> & vals,
+    processor_id_type pid)
 {
   libmesh_assert_equal_to(ids.size(), vals.size());
   for (auto i : index_range(ids))
     {
       const dof_id_type id = ids[i];
-      const FValue & val = vals[i];
+      const InsertInput & val = vals[i];
 
       auto iter = new_ids_to_push.find(id);
       if (iter == new_ids_to_push.end())
@@ -1153,7 +1390,6 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubFunctor:
         }
     }
 }
-
 
 template <typename FFunctor, typename GFunctor,
           typename FValue, typename ProjectionAction>
@@ -1264,7 +1500,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
                           context.pre_fe_reinit(system, elem);
                         }
 
-                      std::vector<FValue> Ue(1);
+                      std::vector<typename FFunctor::ValuePushType> Ue(1);
                       std::vector<dof_id_type> elem_dof_ids(1);
 
                       f.eval_old_dofs(*elem, fe_type, sys_num, v_num,
@@ -1308,24 +1544,21 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
           if (!var.active_on_subdomain(elem->subdomain_id()))
             continue;
           FEType fe_type = var.type();
-          fe_type.order =
-            libMesh::Order (fe_type.order + elem->p_level());
-          const ElemType elem_type = elem->type();
 
-          if (FEInterface::n_dofs_at_node(dim, fe_type, elem_type, 0))
+          if (FEInterface::n_dofs_at_node(fe_type, elem, 0))
             vertex_vars.insert(vertex_vars.end(), v_num);
 
           // The first non-vertex node is always an edge node if those
           // exist.  All edge nodes have the same number of DoFs
           if (has_edge_nodes)
-            if (FEInterface::n_dofs_at_node(dim, fe_type, elem_type, n_vertices))
+            if (FEInterface::n_dofs_at_node(fe_type, elem, n_vertices))
               edge_vars.insert(edge_vars.end(), v_num);
 
           if (has_side_nodes)
             {
               if (dim != 3)
                 {
-                  if (FEInterface::n_dofs_at_node(dim, fe_type, elem_type, n_vertices))
+                  if (FEInterface::n_dofs_at_node(fe_type, elem, n_vertices))
                     side_vars.insert(side_vars.end(), v_num);
                 }
               else
@@ -1333,18 +1566,18 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
                 // DoFs!  We'll loop over all sides to be safe.
                 for (unsigned int n = 0; n != n_nodes; ++n)
                   if (elem->is_face(n))
-                    if (FEInterface::n_dofs_at_node(dim, fe_type,
-                                                    elem_type, n))
+                    if (FEInterface::n_dofs_at_node(fe_type, elem, n))
                       {
                         side_vars.insert(side_vars.end(), v_num);
                         break;
                       }
             }
 
-          if (FEInterface::n_dofs_per_elem(dim, fe_type, elem_type) ||
+          if (FEInterface::n_dofs_per_elem(fe_type, elem) ||
               (has_interior_nodes &&
-               FEInterface::n_dofs_at_node(dim, fe_type, elem_type, n_nodes-1)))
+               FEInterface::n_dofs_at_node(fe_type, elem, n_nodes-1)))
             {
+#ifdef LIBMESH_ENABLE_AMR
               // We may have already just copied constant monomials,
               // or we may be about to copy the whole element
               if ((f.is_grid_projection() &&
@@ -1356,6 +1589,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
                   || copy_this_elem
                   )
                 continue;
+#endif // LIBMESH_ENABLE_AMR
 
               // We need to project any other variables
               if (interiors.empty() || interiors.back() != elem)
@@ -1436,7 +1670,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
               for (auto var : remaining_vars)
                 {
                   std::vector<dof_id_type> node_dof_ids;
-                  std::vector<FValue> values;
+                  std::vector<typename FFunctor::ValuePushType> values;
 
                   f.eval_old_dofs(*elem, v, var, node_dof_ids, values);
 
@@ -1483,7 +1717,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
                   for (auto var : remaining_vars)
                     {
                       std::vector<dof_id_type> edge_dof_ids;
-                      std::vector<FValue> values;
+                      std::vector<typename FFunctor::ValuePushType> values;
 
                       f.eval_old_dofs(*elem, n_vertices+e, var, edge_dof_ids, values);
 
@@ -1553,7 +1787,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
                   for (auto var : remaining_vars)
                     {
                       std::vector<dof_id_type> side_dof_ids;
-                      std::vector<FValue> values;
+                      std::vector<typename FFunctor::ValuePushType> values;
 
                       f.eval_old_dofs(*elem, node_num, var, side_dof_ids, values);
 
@@ -1579,7 +1813,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
                 continue;
               FEType fe_type = var.type();
 
-              std::vector<FValue> Ue;
+              std::vector<typename FFunctor::ValuePushType> Ue;
               std::vector<dof_id_type> elem_dof_ids;
               f.eval_old_dofs(*elem, fe_type, sys_num, v_num,
                               elem_dof_ids, Ue);
@@ -1587,7 +1821,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
 
               if (has_interior_nodes)
                 {
-                  std::vector<FValue> Un;
+                  std::vector<typename FFunctor::ValuePushType> Un;
                   std::vector<dof_id_type> node_dof_ids;
 
                   f.eval_old_dofs(*elem, n_nodes-1, v_num, node_dof_ids, Un);
@@ -1628,8 +1862,59 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SortAndCopy
   merge_multimaps(vertices, other.vertices);
   merge_multimaps(edges, other.edges);
   merge_multimaps(sides, other.sides);
+
+  std::sort(interiors.begin(), interiors.end());
+  std::vector<const Elem *> other_interiors = other.interiors;
+  std::sort(other_interiors.begin(), other_interiors.end());
+  std::vector<const Elem *> merged_interiors;
+  std::set_union(interiors.begin(), interiors.end(),
+                 other_interiors.begin(), other_interiors.end(),
+                 std::back_inserter(merged_interiors));
+  interiors.swap(merged_interiors);
+
+  SubFunctor::join(other);
 }
 
+namespace
+{
+template <typename Output, typename Input>
+typename std::enable_if<ScalarTraits<Input>::value, Output>::type
+raw_value(const Input & input, unsigned int /*index*/)
+{
+  return input;
+}
+
+template <typename Output, template <typename> class WrapperClass, typename T>
+typename std::enable_if<ScalarTraits<T>::value &&
+                            TensorTools::MathWrapperTraits<WrapperClass<T>>::value,
+                        Output>::type
+raw_value(const WrapperClass<T> & input, unsigned int index)
+{
+  return input.slice(index);
+}
+
+template <typename T>
+typename T::value_type
+grad_component(const T &, unsigned int);
+
+template <typename T>
+typename VectorValue<T>::value_type
+grad_component(const VectorValue<T> & grad, unsigned int component)
+{
+  return grad(component);
+}
+
+template <typename T>
+typename TensorValue<T>::value_type
+grad_component(const TensorValue<T> & grad, unsigned int component)
+{
+  libmesh_error_msg("This function should only be called for Hermites. "
+                    "I don't know how you got here");
+  return grad(component, component);
+}
+
+
+}
 
 template <typename FFunctor, typename GFunctor,
           typename FValue, typename ProjectionAction>
@@ -1674,7 +1959,9 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
           if (base_fe_type.family == SCALAR)
             continue;
 
-          const FEContinuity & cont = this->conts[var];
+          const FEContinuity cont = this->conts[var];
+          const FEFieldType field_type = this->field_types[var];
+
           if (cont == DISCONTINUOUS)
             {
               libmesh_assert_equal_to(vertex.n_comp(sys_num, var), 0);
@@ -1682,12 +1969,31 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
           else if (cont == C_ZERO)
             {
               libmesh_assert(vertex.n_comp(sys_num, var));
-              const dof_id_type id = vertex.dof_number(sys_num, var, 0);
-              // C_ZERO elements have a single nodal value DoF at vertices
               const FValue val = f.eval_at_node
                 (context, var_component, /*dim=*/ 0, // Don't care w/C0
                  vertex, extra_hanging_dofs[var], system.time);
-              insert_id(id, val, vertex.processor_id());
+
+              if (field_type == TYPE_VECTOR)
+              {
+                // We will have a number of nodal value DoFs equal to the elem dim
+                for (unsigned int i = 0; i < elem.dim(); ++i)
+                {
+                  const dof_id_type id = vertex.dof_number(sys_num, var, i);
+
+                  // Need this conversion so that this method
+                  // will compile for TYPE_SCALAR instantiations
+                  const auto insert_val =
+                    raw_value<typename ProjectionAction::InsertInput>(val, i);
+
+                  insert_id(id, insert_val, vertex.processor_id());
+                }
+              }
+              else
+              {
+                // C_ZERO elements have a single nodal value DoF at vertices
+                const dof_id_type id = vertex.dof_number(sys_num, var, 0);
+                insert_id(id, val, vertex.processor_id());
+              }
             }
           else if (cont == C_ONE)
             {
@@ -1713,16 +2019,16 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                 }
 #endif
 #ifdef LIBMESH_ENABLE_AMR
-              bool is_parent_vertex = false;
-              if (elem.parent())
+              bool is_old_vertex = true;
+              if (elem.refinement_flag() == Elem::JUST_REFINED)
                 {
                   const int i_am_child =
                     elem.parent()->which_child_am_i(&elem);
-                  is_parent_vertex =
+                  is_old_vertex =
                     elem.parent()->is_vertex_on_parent(i_am_child, n);
                 }
 #else
-              const bool is_parent_vertex = false;
+              const bool is_old_vertex = false;
 #endif
 
               // The hermite element vertex shape functions are weird
@@ -1737,8 +2043,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                                    system.time);
                   insert_id(first_id, val, vertex.processor_id());
 
-                  VectorValue<FValue> grad =
-                    is_parent_vertex ?
+                  typename GFunctor::FunctorValue grad =
+                    is_old_vertex ?
                     g->eval_at_node(context,
                                     var_component,
                                     dim,
@@ -1748,45 +2054,67 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                     g->eval_at_point(context,
                                      var_component,
                                      vertex,
-                                     system.time);
-                  // x derivative
-                  insert_id(first_id+1, grad(0),
+                                     system.time,
+                                     false);
+                  // x derivative. Use slice because grad may be a tensor type
+                  insert_id(first_id+1, grad.slice(0),
                             vertex.processor_id());
-                  if (dim > 1)
+#if LIBMESH_DIM > 1
+                  if (dim > 1 && is_old_vertex && f.is_grid_projection())
                     {
-                      // We'll finite difference mixed derivatives
-                      Real delta_x = TOLERANCE * elem.hmin();
+                      for (int i = 1; i < dim; ++i)
+                        insert_id(first_id+i+1, grad.slice(i),
+                                  vertex.processor_id());
+
+                      // We can directly copy everything else too
+                      std::vector<FValue> derivs;
+                      f.eval_mixed_derivatives
+                        (context, var_component, dim, vertex, derivs);
+                      for (auto i : index_range(derivs))
+                        insert_id(first_id+dim+1+i, derivs[i],
+                                  vertex.processor_id());
+                    }
+                  else if (dim > 1)
+                    {
+                      // We'll finite difference mixed derivatives.
+                      // This delta_x used to be TOLERANCE*hmin, but
+                      // the factor of 10 improved the accuracy in
+                      // some unit test projections
+                      Real delta_x = TOLERANCE * 10 * elem.hmin();
 
                       Point nxminus = elem.point(n),
                             nxplus = elem.point(n);
                       nxminus(0) -= delta_x;
                       nxplus(0) += delta_x;
-                      VectorValue<FValue> gxminus =
+                      typename GFunctor::FunctorValue gxminus =
                         g->eval_at_point(context,
                                          var_component,
                                          nxminus,
-                                         system.time);
-                      VectorValue<FValue> gxplus =
+                                         system.time,
+                                         true);
+                      typename GFunctor::FunctorValue gxplus =
                         g->eval_at_point(context,
                                          var_component,
                                          nxplus,
-                                         system.time);
+                                         system.time,
+                                         true);
                       // y derivative
-                      insert_id(first_id+2, grad(1),
+                      insert_id(first_id+2, grad.slice(1),
                                 vertex.processor_id());
                       // xy derivative
                       insert_id(first_id+3,
-                        (gxplus(1) - gxminus(1)) / 2. / delta_x,
+                        (grad_component(gxplus, 1) - grad_component(gxminus, 1)) / 2. / delta_x,
                         vertex.processor_id());
 
+#if LIBMESH_DIM > 2
                       if (dim > 2)
                         {
                           // z derivative
-                          insert_id(first_id+4, grad(2),
+                          insert_id(first_id+4, grad.slice(2),
                                     vertex.processor_id());
                           // xz derivative
                           insert_id(first_id+5,
-                            (gxplus(2) - gxminus(2)) / 2. / delta_x,
+                            (grad_component(gxplus, 2) - grad_component(gxminus, 2)) / 2. / delta_x,
                             vertex.processor_id());
 
                           // We need new points for yz
@@ -1794,19 +2122,21 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                             nyplus = elem.point(n);
                           nyminus(1) -= delta_x;
                           nyplus(1) += delta_x;
-                          VectorValue<FValue> gyminus =
+                          typename GFunctor::FunctorValue gyminus =
                             g->eval_at_point(context,
                                              var_component,
                                              nyminus,
-                                             system.time);
-                          VectorValue<FValue> gyplus =
+                                             system.time,
+                                             true);
+                          typename GFunctor::FunctorValue gyplus =
                             g->eval_at_point(context,
                                              var_component,
                                              nyplus,
-                                             system.time);
+                                             system.time,
+                                             true);
                           // yz derivative
                           insert_id(first_id+6,
-                            (gyplus(2) - gyminus(2)) / 2. / delta_x,
+                            (grad_component(gyplus, 2) - grad_component(gyminus, 2)) / 2. / delta_x,
                             vertex.processor_id());
                           // Getting a 2nd order xyz is more tedious
                           Point nxmym = elem.point(n),
@@ -1821,36 +2151,42 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                           nxpym(1) -= delta_x;
                           nxpyp(0) += delta_x;
                           nxpyp(1) += delta_x;
-                          VectorValue<FValue> gxmym =
+                          typename GFunctor::FunctorValue gxmym =
                             g->eval_at_point(context,
                                              var_component,
                                              nxmym,
-                                             system.time);
-                          VectorValue<FValue> gxmyp =
+                                             system.time,
+                                             true);
+                          typename GFunctor::FunctorValue gxmyp =
                             g->eval_at_point(context,
                                              var_component,
                                              nxmyp,
-                                             system.time);
-                          VectorValue<FValue> gxpym =
+                                             system.time,
+                                             true);
+                          typename GFunctor::FunctorValue gxpym =
                             g->eval_at_point(context,
                                              var_component,
                                              nxpym,
-                                             system.time);
-                          VectorValue<FValue> gxpyp =
+                                             system.time,
+                                             true);
+                          typename GFunctor::FunctorValue gxpyp =
                             g->eval_at_point(context,
                                              var_component,
                                              nxpyp,
-                                             system.time);
-                          FValue gxzplus = (gxpyp(2) - gxmyp(2))
+                                             system.time,
+                                             true);
+                          FValue gxzplus = (grad_component(gxpyp, 2) - grad_component(gxmyp, 2))
                             / 2. / delta_x;
-                          FValue gxzminus = (gxpym(2) - gxmym(2))
+                          FValue gxzminus = (grad_component(gxpym, 2) - grad_component(gxmym, 2))
                             / 2. / delta_x;
                           // xyz derivative
                           insert_id(first_id+7,
                             (gxzplus - gxzminus) / 2. / delta_x,
                             vertex.processor_id());
                         }
+#endif // LIBMESH_DIM > 2
                     }
+#endif // LIBMESH_DIM > 1
                 }
               else
                 {
@@ -1859,7 +2195,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                   // shape functions
                   libmesh_assert_equal_to
                     (FEInterface::n_dofs_at_node
-                      (dim, base_fe_type, elem.type(),
+                      (base_fe_type, &elem,
                        elem.get_node_index(&vertex)),
                     (unsigned int)(1 + dim));
                   const FValue val =
@@ -1867,15 +2203,15 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectVert
                                    vertex, extra_hanging_dofs[var],
                                    system.time);
                   insert_id(first_id, val, vertex.processor_id());
-                  VectorValue<FValue> grad =
-                    is_parent_vertex ?
+                  typename GFunctor::FunctorValue grad =
+                    is_old_vertex ?
                     g->eval_at_node(context, var_component, dim,
                                     vertex, extra_hanging_dofs[var],
                                     system.time) :
                     g->eval_at_point(context, var_component, vertex,
-                                     system.time);
+                                     system.time, false);
                   for (int i=0; i!= dim; ++i)
-                    insert_id(first_id + i + 1, grad(i),
+                    insert_id(first_id + i + 1, grad.slice(i),
                               vertex.processor_id());
                 }
             }
@@ -1942,21 +2278,42 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectEdge
           // If this is a Lagrange element with DoFs on edges then by
           // convention we interpolate at the node rather than project
           // along the edge.
-          if (fe_type.family == LAGRANGE)
+          if (fe_type.family == LAGRANGE || fe_type.family == LAGRANGE_VEC)
             {
               if (fe_type.order > 1)
                 {
-                  const dof_id_type dof_id =
-                    edge_node.dof_number(sys_num, var, 0);
                   const processor_id_type pid =
                     edge_node.processor_id();
                   FValue fval = f.eval_at_point
-                    (context, var_component, edge_node, system.time);
-                  insert_id(dof_id, fval, pid);
+                    (context, var_component, edge_node, system.time,
+                     false);
+                  if (fe_type.family == LAGRANGE_VEC)
+                  {
+                    // We will have a number of nodal value DoFs equal to the elem dim
+                    for (unsigned int i = 0; i < elem.dim(); ++i)
+                    {
+                      const dof_id_type dof_id =
+                        edge_node.dof_number(sys_num, var, i);
+
+                      // Need this conversion so that this method
+                      // will compile for TYPE_SCALAR instantiations
+                      const auto insert_val =
+                        raw_value<typename ProjectionAction::InsertInput>(fval, i);
+
+                      insert_id(dof_id, insert_val, pid);
+                    }
+                  }
+                  else // We are LAGRANGE
+                  {
+                    const dof_id_type dof_id =
+                      edge_node.dof_number(sys_num, var, 0);
+                    insert_id(dof_id, fval, pid);
+                  }
                 }
               continue;
             }
 
+#ifdef LIBMESH_ENABLE_AMR
           // If this is a low order monomial element which has merely
           // been h refined then we already copied all its dofs
           if (fe_type.family == MONOMIAL &&
@@ -1964,16 +2321,17 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectEdge
               elem.refinement_flag() != Elem::JUST_COARSENED &&
               elem.p_refinement_flag() != Elem::JUST_COARSENED)
             continue;
+#endif // LIBMESH_ENABLE_AMR
 
           // FIXME: Need to generalize this to vector-valued elements. [PB]
-          FEBase * fe = nullptr;
+          FEGenericBase<typename FFunctor::RealType> * fe = nullptr;
           context.get_element_fe( var, fe, dim );
-          FEBase * edge_fe = nullptr;
+          FEGenericBase<typename FFunctor::RealType> * edge_fe = nullptr;
           context.get_edge_fe( var, edge_fe );
 
           // If we're JUST_COARSENED we'll need a custom
           // evaluation, not just the standard edge FE
-          const FEBase & proj_fe =
+          const FEGenericBase<typename FFunctor::RealType> & proj_fe =
 #ifdef LIBMESH_ENABLE_AMR
             (elem.refinement_flag() == Elem::JUST_COARSENED) ?
             *fe :
@@ -1985,8 +2343,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectEdge
             {
               std::vector<Point> fine_points;
 
-              std::unique_ptr<FEBase> fine_fe
-                (FEBase::build (dim, base_fe_type));
+              std::unique_ptr<FEGenericBase<typename FFunctor::RealType>> fine_fe
+                (FEGenericBase<typename FFunctor::RealType>::build (dim, base_fe_type));
 
               std::unique_ptr<QBase> qrule
                 (base_fe_type.default_quadrature_rule(1));
@@ -2008,8 +2366,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectEdge
                 }
 
               std::vector<Point> fine_qp;
-              FEInterface::inverse_map (dim, base_fe_type, &elem,
-                                        fine_points, fine_qp);
+              FEMap::inverse_map (dim, &elem, fine_points, fine_qp);
 
               context.elem_fe_reinit(&fine_qp);
             }
@@ -2064,7 +2421,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectSide
       unsigned short node_num = elem.n_vertices()+side_num;
       // In 3D only some sides may have nodes
       if (dim == 3)
-        for (auto n : IntRange<unsigned int>(0, elem.n_nodes()))
+        for (auto n : make_range(elem.n_nodes()))
           {
             if (!elem.is_face(n))
               continue;
@@ -2102,21 +2459,42 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectSide
           // If this is a Lagrange element with DoFs on sides then by
           // convention we interpolate at the node rather than project
           // along the side.
-          if (fe_type.family == LAGRANGE)
+          if (fe_type.family == LAGRANGE || fe_type.family == LAGRANGE_VEC)
             {
               if (fe_type.order > 1)
                 {
-                  const dof_id_type dof_id =
-                    side_node.dof_number(sys_num, var, 0);
                   const processor_id_type pid =
                     side_node.processor_id();
                   FValue fval = f.eval_at_point
-                    (context, var_component, side_node, system.time);
-                  insert_id(dof_id, fval, pid);
+                    (context, var_component, side_node, system.time,
+                     false);
+
+                  if (fe_type.family == LAGRANGE_VEC)
+                  {
+                    // We will have a number of nodal value DoFs equal to the elem dim
+                    for (unsigned int i = 0; i < elem.dim(); ++i)
+                    {
+                      const dof_id_type dof_id = side_node.dof_number(sys_num, var, i);
+
+                      // Need this conversion so that this method
+                      // will compile for TYPE_SCALAR instantiations
+                      const auto insert_val =
+                        raw_value<typename ProjectionAction::InsertInput>(fval, i);
+
+                      insert_id(dof_id, insert_val, pid);
+                    }
+                  }
+                  else // We are LAGRANGE
+                  {
+                    const dof_id_type dof_id =
+                      side_node.dof_number(sys_num, var, 0);
+                    insert_id(dof_id, fval, pid);
+                  }
                 }
               continue;
             }
 
+#ifdef LIBMESH_ENABLE_AMR
           // If this is a low order monomial element which has merely
           // been h refined then we already copied all its dofs
           if (fe_type.family == MONOMIAL &&
@@ -2124,16 +2502,17 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectSide
               elem.refinement_flag() != Elem::JUST_COARSENED &&
               elem.p_refinement_flag() != Elem::JUST_COARSENED)
             continue;
+#endif // LIBMESH_ENABLE_AMR
 
           // FIXME: Need to generalize this to vector-valued elements. [PB]
-          FEBase * fe = nullptr;
+          FEGenericBase<typename FFunctor::RealType> * fe = nullptr;
           context.get_element_fe( var, fe, dim );
-          FEBase * side_fe = nullptr;
+          FEGenericBase<typename FFunctor::RealType> * side_fe = nullptr;
           context.get_side_fe( var, side_fe );
 
           // If we're JUST_COARSENED we'll need a custom
           // evaluation, not just the standard side FE
-          const FEBase & proj_fe =
+          const FEGenericBase<typename FFunctor::RealType> & proj_fe =
 #ifdef LIBMESH_ENABLE_AMR
             (elem.refinement_flag() == Elem::JUST_COARSENED) ?
             *fe :
@@ -2145,8 +2524,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectSide
             {
               std::vector<Point> fine_points;
 
-              std::unique_ptr<FEBase> fine_fe
-                (FEBase::build (dim, base_fe_type));
+              std::unique_ptr<FEGenericBase<typename FFunctor::RealType>> fine_fe
+                (FEGenericBase<typename FFunctor::RealType>::build (dim, base_fe_type));
 
               std::unique_ptr<QBase> qrule
                 (base_fe_type.default_quadrature_rule(1));
@@ -2168,8 +2547,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectSide
                 }
 
               std::vector<Point> fine_qp;
-              FEInterface::inverse_map (dim, base_fe_type, &elem,
-                                        fine_points, fine_qp);
+              FEMap::inverse_map (dim, &elem, fine_points, fine_qp);
 
               context.elem_fe_reinit(&fine_qp);
             }
@@ -2222,7 +2600,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectInte
           if (base_fe_type.family == SCALAR)
             continue;
 
-          FEBase * fe = nullptr;
+          FEGenericBase<typename FFunctor::RealType> * fe = nullptr;
           context.get_element_fe( var, fe, dim );
 
           FEType fe_type = base_fe_type;
@@ -2237,7 +2615,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectInte
           // If this is a Lagrange element with interior DoFs then by
           // convention we interpolate at the interior node rather
           // than project along the interior.
-          if (fe_type.family == LAGRANGE)
+          if (fe_type.family == LAGRANGE || fe_type.family == LAGRANGE_VEC)
             {
               if (fe_type.order > 1)
                 {
@@ -2251,13 +2629,34 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectInte
                   for (unsigned int n = first_interior_node; n < n_nodes; ++n)
                     {
                       const Node & interior_node = elem->node_ref(n);
-                      const dof_id_type dof_id =
-                        interior_node.dof_number(sys_num, var, 0);
+
+                      FValue fval = f.eval_at_point
+                        (context, var_component, interior_node,
+                         system.time, false);
                       const processor_id_type pid =
                         interior_node.processor_id();
-                      FValue fval = f.eval_at_point
-                        (context, var_component, interior_node, system.time);
-                      insert_id(dof_id, fval, pid);
+
+                      if (fe_type.family == LAGRANGE_VEC)
+                      {
+                        // We will have a number of nodal value DoFs equal to the elem dim
+                        for (unsigned int i = 0; i < elem->dim(); ++i)
+                        {
+                          const dof_id_type dof_id = interior_node.dof_number(sys_num, var, i);
+
+                          // Need this conversion so that this method
+                          // will compile for TYPE_SCALAR instantiations
+                          const auto insert_val =
+                            raw_value<typename ProjectionAction::InsertInput>(fval, i);
+
+                          insert_id(dof_id, insert_val, pid);
+                        }
+                      }
+                      else // We are LAGRANGE
+                      {
+                        const dof_id_type dof_id =
+                          interior_node.dof_number(sys_num, var, 0);
+                        insert_id(dof_id, fval, pid);
+                      }
                     }
                 }
               continue;
@@ -2268,8 +2667,8 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectInte
             {
               std::vector<Point> fine_points;
 
-              std::unique_ptr<FEBase> fine_fe
-                (FEBase::build (dim, base_fe_type));
+              std::unique_ptr<FEGenericBase<typename FFunctor::RealType>> fine_fe
+                (FEGenericBase<typename FFunctor::RealType>::build (dim, base_fe_type));
 
               std::unique_ptr<QBase> qrule
                 (base_fe_type.default_quadrature_rule(dim));
@@ -2287,8 +2686,7 @@ void GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::ProjectInte
                 }
 
               std::vector<Point> fine_qp;
-              FEInterface::inverse_map (dim, base_fe_type, elem,
-                                        fine_points, fine_qp);
+              FEMap::inverse_map (dim, elem, fine_points, fine_qp);
 
               context.elem_fe_reinit(&fine_qp);
             }
@@ -2376,17 +2774,18 @@ GenericProjector<FFunctor, GFunctor, FValue,
 
 template <typename FFunctor, typename GFunctor,
           typename FValue, typename ProjectionAction>
+template <typename Value>
 void
 GenericProjector<FFunctor, GFunctor, FValue,
                  ProjectionAction>::send_and_insert_dof_values
-  (std::unordered_map<dof_id_type, std::pair<FValue, processor_id_type>> & ids_to_push,
+  (std::unordered_map<dof_id_type, std::pair<Value, processor_id_type>> & ids_to_push,
    ProjectionAction & action) const
 {
   // See if we calculated any ids that need to be pushed; get them
   // ready to push.
   std::unordered_map<processor_id_type, std::vector<dof_id_type>>
     pushed_dof_ids, received_dof_ids;
-  std::unordered_map<processor_id_type, std::vector<typename TypeToSend<FValue>::type>>
+  std::unordered_map<processor_id_type, std::vector<typename TypeToSend<Value>::type>>
     pushed_dof_values, received_dof_values;
   for (auto & id_val_pid : ids_to_push)
     {
@@ -2419,7 +2818,7 @@ GenericProjector<FFunctor, GFunctor, FValue,
           libmesh_assert_equal_to(vals_size, data.size());
           for (std::size_t i=0; i != vals_size; ++i)
             {
-              FValue val;
+              Value val;
               convert_from_receive(vals[i], val);
               action.insert(data[i], val);
             }
@@ -2432,7 +2831,7 @@ GenericProjector<FFunctor, GFunctor, FValue,
   auto values_action_functor =
     [&action, &received_dof_ids, &received_dof_values]
     (processor_id_type pid,
-     const std::vector<typename TypeToSend<FValue>::type> & data)
+     const std::vector<typename TypeToSend<Value>::type> & data)
     {
       auto iter = received_dof_ids.find(pid);
       if (iter == received_dof_ids.end())
@@ -2449,7 +2848,7 @@ GenericProjector<FFunctor, GFunctor, FValue,
           libmesh_assert_equal_to(ids_size, data.size());
           for (std::size_t i=0; i != ids_size; ++i)
             {
-              FValue val;
+              Value val;
               convert_from_receive(data[i], val);
               action.insert(ids[i], val);
             }
@@ -2479,14 +2878,14 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::co
    const std::vector<unsigned int> & involved_dofs,
    unsigned int var_component,
    const Node * node,
-   const FEBase & fe)
+   const FEGenericBase<typename FFunctor::RealType> & fe)
 {
-  const std::vector<Real> & JxW = fe.get_JxW();
-  const std::vector<std::vector<Real>> & phi = fe.get_phi();
-  const std::vector<std::vector<RealGradient>> * dphi = nullptr;
+  const auto & JxW = fe.get_JxW();
+  const auto & phi = fe.get_phi();
+  const std::vector<std::vector<typename FEGenericBase<typename FFunctor::RealType>::OutputGradient>> * dphi = nullptr;
   const std::vector<Point> & xyz_values = fe.get_xyz();
   const FEContinuity cont = fe.get_continuity();
-  const std::unordered_map<dof_id_type, FValue> & ids_to_save =
+  const std::unordered_map<dof_id_type, typename FFunctor::ValuePushType> & ids_to_save =
     this->projector.ids_to_save;
 
   if (cont == C_ONE)
@@ -2496,10 +2895,10 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::co
     cast_int<unsigned int>(involved_dofs.size());
 
   std::vector<dof_id_type> free_dof_ids;
-  DenseVector<FValue> Uinvolved(n_involved_dofs);
+  DenseVector<typename FFunctor::ValuePushType> Uinvolved(n_involved_dofs);
   std::vector<char> dof_is_fixed(n_involved_dofs, false); // bools
 
-  for (auto i : IntRange<unsigned int>(0, n_involved_dofs))
+  for (auto i : make_range(n_involved_dofs))
     {
       const dof_id_type id = dof_indices_var[involved_dofs[i]];
       auto iter = ids_to_save.find(id);
@@ -2523,9 +2922,9 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::co
   // Fe may be complex valued if complex number
   // support is enabled
   DenseMatrix<Real> Ke(free_dofs, free_dofs);
-  DenseVector<FValue> Fe(free_dofs);
+  DenseVector<typename FFunctor::ValuePushType> Fe(free_dofs);
   // The new degree of freedom coefficients to solve for
-  DenseVector<FValue> Ufree(free_dofs);
+  DenseVector<typename FFunctor::ValuePushType> Ufree(free_dofs);
 
   const unsigned int n_qp =
     cast_int<unsigned int>(xyz_values.size());
@@ -2537,14 +2936,16 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::co
       FValue fineval = f.eval_at_point(context,
                                        var_component,
                                        xyz_values[qp],
-                                       system.time);
+                                       system.time,
+                                       false);
       // solution grad at the quadrature point
-      VectorValue<FValue> finegrad;
+      typename GFunctor::FunctorValue finegrad;
       if (cont == C_ONE)
         finegrad = g->eval_at_point(context,
                                     var_component,
                                     xyz_values[qp],
-                                    system.time);
+                                    system.time,
+                                    false);
 
       // Form edge projection matrix
       for (unsigned int sidei=0, freei=0;
@@ -2567,12 +2968,12 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::co
               if (cont == C_ONE)
                 {
                   if (dof_is_fixed[sidej])
-                    Fe(freei) -= ( (*dphi)[i][qp] *
-                                   (*dphi)[j][qp] ) *
+                    Fe(freei) -= ( TensorTools::inner_product((*dphi)[i][qp],
+                                                              (*dphi)[j][qp]) ) *
                       JxW[qp] * Uinvolved(sidej);
                   else
-                    Ke(freei,freej) += ( (*dphi)[i][qp] *
-                                         (*dphi)[j][qp] )
+                    Ke(freei,freej) += ( TensorTools::inner_product((*dphi)[i][qp],
+                                                                    (*dphi)[j][qp]) )
                       * JxW[qp];
                 }
               if (!dof_is_fixed[sidej])
@@ -2580,7 +2981,8 @@ GenericProjector<FFunctor, GFunctor, FValue, ProjectionAction>::SubProjector::co
             }
           Fe(freei) += phi[i][qp] * fineval * JxW[qp];
           if (cont == C_ONE)
-            Fe(freei) += (finegrad * (*dphi)[i][qp] ) *
+            Fe(freei) += (TensorTools::inner_product(finegrad,
+                                                     (*dphi)[i][qp]) ) *
               JxW[qp];
           freei++;
         }

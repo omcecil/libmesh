@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,7 +25,6 @@
 #include "libmesh/point.h"
 #include "libmesh/vector_value.h"
 #include "libmesh/fe_type.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/fe_map.h"
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 #include "libmesh/tensor_value.h"
@@ -232,32 +231,43 @@ public:
   { return dim; }
 
   /**
+   * \returns nothing, but lets the FE know you're explicitly
+   * prerequesting calculations.  This is useful when you only want
+   * the FE for n_quadrature_points, n_dofs_on_side, or other methods
+   * that don't require shape function calculations, but you don't
+   * want libMesh "backwards compatibility" mode to assume you've made
+   * no prerequests and need to calculate everything.
+   */
+  void get_nothing() const
+  { calculate_nothing = true; }
+
+  /**
    * \returns The \p xyz spatial locations of the quadrature
    * points on the element.
    */
   const std::vector<Point> & get_xyz() const
-  { return this->_fe_map->get_xyz(); }
+  { calculate_map = true; return this->_fe_map->get_xyz(); }
 
   /**
    * \returns The element Jacobian times the quadrature weight for
    * each quadrature point.
    */
   const std::vector<Real> & get_JxW() const
-  { return this->_fe_map->get_JxW(); }
+  { calculate_map = true; return this->_fe_map->get_JxW(); }
 
   /**
    * \returns The element tangents in xi-direction at the quadrature
    * points.
    */
   const std::vector<RealGradient> & get_dxyzdxi() const
-  { return this->_fe_map->get_dxyzdxi(); }
+  { calculate_map = true; return this->_fe_map->get_dxyzdxi(); }
 
   /**
    * \returns The element tangents in eta-direction at the quadrature
    * points.
    */
   const std::vector<RealGradient> & get_dxyzdeta() const
-  { return this->_fe_map->get_dxyzdeta(); }
+  { calculate_map = true; return this->_fe_map->get_dxyzdeta(); }
 
   /**
    * \returns The element tangents in zeta-direction at the quadrature
@@ -272,37 +282,37 @@ public:
    * \returns The second partial derivatives in xi.
    */
   const std::vector<RealGradient> & get_d2xyzdxi2() const
-  { return this->_fe_map->get_d2xyzdxi2(); }
+  { calculate_map = true; return this->_fe_map->get_d2xyzdxi2(); }
 
   /**
    * \returns The second partial derivatives in eta.
    */
   const std::vector<RealGradient> & get_d2xyzdeta2() const
-  { return this->_fe_map->get_d2xyzdeta2(); }
+  { calculate_map = true; return this->_fe_map->get_d2xyzdeta2(); }
 
   /**
    * \returns The second partial derivatives in zeta.
    */
   const std::vector<RealGradient> & get_d2xyzdzeta2() const
-  { return this->_fe_map->get_d2xyzdzeta2(); }
+  { calculate_map = true; return this->_fe_map->get_d2xyzdzeta2(); }
 
   /**
    * \returns The second partial derivatives in xi-eta.
    */
   const std::vector<RealGradient> & get_d2xyzdxideta() const
-  { return this->_fe_map->get_d2xyzdxideta(); }
+  { calculate_map = true; return this->_fe_map->get_d2xyzdxideta(); }
 
   /**
    * \returns The second partial derivatives in xi-zeta.
    */
   const std::vector<RealGradient> & get_d2xyzdxidzeta() const
-  { return this->_fe_map->get_d2xyzdxidzeta(); }
+  { calculate_map = true; return this->_fe_map->get_d2xyzdxidzeta(); }
 
   /**
    * \returns The second partial derivatives in eta-zeta.
    */
   const std::vector<RealGradient> & get_d2xyzdetadzeta() const
-  { return this->_fe_map->get_d2xyzdetadzeta(); }
+  { calculate_map = true; return this->_fe_map->get_d2xyzdetadzeta(); }
 
 #endif
 
@@ -311,82 +321,82 @@ public:
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_dxidx() const
-  { return this->_fe_map->get_dxidx(); }
+  { calculate_map = true; return this->_fe_map->get_dxidx(); }
 
   /**
    * \returns The dxi/dy entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_dxidy() const
-  { return this->_fe_map->get_dxidy(); }
+  { calculate_map = true; return this->_fe_map->get_dxidy(); }
 
   /**
    * \returns The dxi/dz entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_dxidz() const
-  { return this->_fe_map->get_dxidz(); }
+  { calculate_map = true; return this->_fe_map->get_dxidz(); }
 
   /**
    * \returns The deta/dx entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_detadx() const
-  { return this->_fe_map->get_detadx(); }
+  { calculate_map = true; return this->_fe_map->get_detadx(); }
 
   /**
    * \returns The deta/dy entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_detady() const
-  { return this->_fe_map->get_detady(); }
+  { calculate_map = true; return this->_fe_map->get_detady(); }
 
   /**
    * \returns The deta/dz entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_detadz() const
-  { return this->_fe_map->get_detadz(); }
+  { calculate_map = true; return this->_fe_map->get_detadz(); }
 
   /**
    * \returns The dzeta/dx entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_dzetadx() const
-  { return this->_fe_map->get_dzetadx(); }
+  { calculate_map = true; return this->_fe_map->get_dzetadx(); }
 
   /**
    * \returns The dzeta/dy entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_dzetady() const
-  { return this->_fe_map->get_dzetady(); }
+  { calculate_map = true; return this->_fe_map->get_dzetady(); }
 
   /**
    * \returns The dzeta/dz entry in the transformation
    * matrix from physical to local coordinates.
    */
   const std::vector<Real> & get_dzetadz() const
-  { return this->_fe_map->get_dzetadz(); }
+  { calculate_map = true; return this->_fe_map->get_dzetadz(); }
 
   /**
    * \returns The tangent vectors for face integration.
    */
   const std::vector<std::vector<Point>> & get_tangents() const
-  { return this->_fe_map->get_tangents(); }
+  { calculate_map = true; return this->_fe_map->get_tangents(); }
 
   /**
    * \returns The outward pointing normal vectors for face integration.
    */
   const std::vector<Point> & get_normals() const
-  { return this->_fe_map->get_normals(); }
+  { calculate_map = true; return this->_fe_map->get_normals(); }
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
   /**
    * \returns The curvatures for use in face integration.
    */
   const std::vector<Real> & get_curvatures() const
-  { return this->_fe_map->get_curvatures();}
+  { calculate_map = true; return this->_fe_map->get_curvatures();}
 
 #endif
 
@@ -457,6 +467,7 @@ public:
    * \returns The mapping object
    */
   const FEMap & get_fe_map() const { return *_fe_map.get(); }
+  FEMap & get_fe_map() { return *_fe_map.get(); }
 
   /**
    * Prints the Jacobian times the weight for each quadrature point.
@@ -469,6 +480,7 @@ public:
    * is vector-valued or not.
    */
   virtual void print_phi(std::ostream & os) const =0;
+  virtual void print_dual_phi(std::ostream & os) const =0;
 
   /**
    * Prints the value of each shape function's derivative
@@ -476,6 +488,7 @@ public:
    * depends on whether the element is vector-valued or not.
    */
   virtual void print_dphi(std::ostream & os) const =0;
+  virtual void print_dual_dphi(std::ostream & os) const =0;
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -485,6 +498,7 @@ public:
    * depends on whether the element is vector-valued or not.
    */
   virtual void print_d2phi(std::ostream & os) const =0;
+  virtual void print_dual_d2phi(std::ostream & os) const =0;
 
 #endif
 
@@ -504,6 +518,22 @@ public:
    */
   friend std::ostream & operator << (std::ostream & os, const FEAbstract & fe);
 
+  /**
+   * request phi calculations
+   */
+  virtual void request_phi() const = 0;
+  virtual void request_dual_phi() const = 0;
+
+  /**
+   * request dphi calculations
+   */
+  virtual void request_dphi() const = 0;
+  virtual void request_dual_dphi() const = 0;
+
+  /**
+   * set calculate_dual as needed
+   */
+  void set_calculate_dual(const bool val){calculate_dual = val; }
 
 protected:
 
@@ -534,6 +564,21 @@ protected:
    * Then all get_* functions should already have been called.
    */
   mutable bool calculations_started;
+
+  /**
+   * Are we calculating dual basis?
+   */
+  mutable bool calculate_dual;
+
+  /**
+   * Are we potentially deliberately calculating nothing?
+   */
+  mutable bool calculate_nothing;
+
+  /**
+   * Are we calculating mapping functions?
+   */
+  mutable bool calculate_map;
 
   /**
    * Should we calculate shape functions?

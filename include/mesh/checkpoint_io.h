@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -158,6 +158,15 @@ public:
   std::string &       version ()       { return _version; }
 
   /**
+   * \returns \p true if the current file has an XDR/XDA version that
+   * matches or exceeds 1.5
+   *
+   * As of this version we encode any extra integer data that has been
+   * attached to a mesh.
+   */
+  bool version_at_least_1_5() const;
+
+  /**
    * Get/Set the processor id or processor ids to use.
    *
    * The default processor_id to use is the processor_id() of the
@@ -292,6 +301,15 @@ private:
    */
   template <typename file_id_type>
   void read_bc_names(Xdr & io, BoundaryInfo & info, bool is_sideset);
+
+  /**
+   * Read extra integers names information
+   */
+  template <typename file_id_type>
+  void read_integers_names
+    (Xdr & io,
+     std::vector<std::string> & node_integer_names,
+     std::vector<std::string> & elem_integer_names);
 
   /**
    * \returns The number of levels of refinement in the active mesh on

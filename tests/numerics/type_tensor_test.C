@@ -1,22 +1,9 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 // libmesh includes
 #include <libmesh/tensor_value.h>
 #include <libmesh/vector_value.h>
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
+#include "libmesh_cppunit.h"
+
 
 using namespace libMesh;
 
@@ -60,7 +47,7 @@ private:
 
     for (unsigned i=0; i<3; ++i)
       for (unsigned j=0; j<3; ++j)
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(inverse(i,j), true_inverse(i,j), TOLERANCE * TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL(inverse(i,j), true_inverse(i,j), 1e-12);
   }
 
   void testLeftMultiply()
@@ -69,10 +56,10 @@ private:
     VectorValue<Real> vector(5, 6, 0);
     auto left_mult = vector * tensor;
     auto right_mult = tensor * vector;
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(left_mult(0), 23, 1e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(left_mult(1), 34, 1e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(right_mult(0), 17, 1e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(right_mult(1), 39, 1e-12);
+    LIBMESH_ASSERT_FP_EQUAL(23, left_mult(0), 1e-12);
+    LIBMESH_ASSERT_FP_EQUAL(34, left_mult(1), 1e-12);
+    LIBMESH_ASSERT_FP_EQUAL(17, right_mult(0), 1e-12);
+    LIBMESH_ASSERT_FP_EQUAL(39, right_mult(1), 1e-12);
   }
 
   void testOuterProduct()
@@ -81,15 +68,15 @@ private:
     VectorValue<Real> a(2, 3, 4);
     VectorValue<Real> b(5, 6, 7);
     auto product = outer_product(a, b);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(0, 0), 10, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(0, 1), 12, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(0, 2), 14, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(1, 0), 15, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(1, 1), 18, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(1, 2), 21, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(2, 0), 20, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(2, 1), 24, tol);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(product(2, 2), 28, tol);
+    LIBMESH_ASSERT_FP_EQUAL(10, product(0, 0), tol);
+    LIBMESH_ASSERT_FP_EQUAL(12, product(0, 1), tol);
+    LIBMESH_ASSERT_FP_EQUAL(14, product(0, 2), tol);
+    LIBMESH_ASSERT_FP_EQUAL(15, product(1, 0), tol);
+    LIBMESH_ASSERT_FP_EQUAL(18, product(1, 1), tol);
+    LIBMESH_ASSERT_FP_EQUAL(21, product(1, 2), tol);
+    LIBMESH_ASSERT_FP_EQUAL(20, product(2, 0), tol);
+    LIBMESH_ASSERT_FP_EQUAL(24, product(2, 1), tol);
+    LIBMESH_ASSERT_FP_EQUAL(28, product(2, 2), tol);
   }
 
   void testIsZero()

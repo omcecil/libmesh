@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -39,6 +39,7 @@
 #include "libmesh/mesh_generation.h"
 #include "libmesh/enum_solver_package.h"
 #include "libmesh/enum_solver_type.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // The systems and solvers we may use
 #include "elasticity_system.h"
@@ -65,6 +66,14 @@ int main (int argc, char ** argv)
   // This example requires a linear solver package.
   libmesh_example_requires(libMesh::default_solver_package() != INVALID_SOLVER_PACKAGE,
                            "--enable-petsc, --enable-trilinos, or --enable-eigen");
+
+  // This example requires 3D calculations
+  libmesh_example_requires(LIBMESH_DIM > 2, "3D support");
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // Parse the input file
   GetPot infile("fem_system_ex3.in");
@@ -114,25 +123,25 @@ int main (int argc, char ** argv)
         found_side_min_y = false, found_side_max_z = false;
       for (auto side : elem->side_index_range())
         {
-          if (mesh.get_boundary_info().has_boundary_id(elem, side, BOUNDARY_ID_MAX_X))
+          if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_max_x))
             {
               side_max_x = side;
               found_side_max_x = true;
             }
 
-          if (mesh.get_boundary_info().has_boundary_id(elem, side, BOUNDARY_ID_MIN_Y))
+          if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_min_y))
             {
               side_min_y = side;
               found_side_min_y = true;
             }
 
-          if (mesh.get_boundary_info().has_boundary_id(elem, side, BOUNDARY_ID_MAX_Y))
+          if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_max_y))
             {
               side_max_y = side;
               found_side_max_y = true;
             }
 
-          if (mesh.get_boundary_info().has_boundary_id(elem, side, BOUNDARY_ID_MAX_Z))
+          if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_max_z))
             {
               side_max_z = side;
               found_side_max_z = true;
@@ -147,7 +156,7 @@ int main (int argc, char ** argv)
           if (elem->is_node_on_side(n, side_max_x) &&
               elem->is_node_on_side(n, side_max_y) &&
               elem->is_node_on_side(n, side_max_z))
-            mesh.get_boundary_info().add_node(elem->node_ptr(n), NODE_BOUNDARY_ID);
+            mesh.get_boundary_info().add_node(elem->node_ptr(n), node_boundary_id);
 
       // If elem has sides on boundaries
       // BOUNDARY_ID_MAX_X and BOUNDARY_ID_MIN_Y
@@ -156,7 +165,7 @@ int main (int argc, char ** argv)
         for (auto e : elem->edge_index_range())
           if (elem->is_edge_on_side(e, side_max_x) &&
               elem->is_edge_on_side(e, side_min_y))
-            mesh.get_boundary_info().add_edge(elem, e, EDGE_BOUNDARY_ID);
+            mesh.get_boundary_info().add_edge(elem, e, edge_boundary_id);
     }
 
   // Create an equation systems object.
@@ -187,26 +196,26 @@ int main (int argc, char ** argv)
       a_system->add_variable("w_accel", FIRST, LAGRANGE);
     }
 
-  if( time_solver == std::string("newmark"))
-    system.time_solver.reset(new NewmarkSolver(system));
+  if (time_solver == std::string("newmark"))
+    system.time_solver = libmesh_make_unique<NewmarkSolver>(system);
 
   else if( time_solver == std::string("euler") )
     {
-      system.time_solver.reset(new EulerSolver(system));
+      system.time_solver = libmesh_make_unique<EulerSolver>(system);
       EulerSolver & euler_solver = cast_ref<EulerSolver &>(*(system.time_solver.get()));
       euler_solver.theta = infile("theta", 1.0);
     }
 
   else if( time_solver == std::string("euler2") )
     {
-      system.time_solver.reset(new Euler2Solver(system));
+      system.time_solver = libmesh_make_unique<Euler2Solver>(system);
       Euler2Solver & euler_solver = cast_ref<Euler2Solver &>(*(system.time_solver.get()));
       euler_solver.theta = infile("theta", 1.0);
     }
 
   else if( time_solver == std::string("steady"))
     {
-      system.time_solver.reset(new SteadySolver(system));
+      system.time_solver = libmesh_make_unique<SteadySolver>(system);
       libmesh_assert_equal_to (n_timesteps, 1);
     }
   else
@@ -241,8 +250,8 @@ int main (int argc, char ** argv)
   if( newton_solver &&
       (time_solver == std::string("euler") || time_solver == std::string("euler2") ) )
     {
-      LinearSolver<Number> & linear_solver = newton_solver->get_linear_solver();
 #ifdef LIBMESH_HAVE_EIGEN_SPARSE
+      LinearSolver<Number> & linear_solver = newton_solver->get_linear_solver();
       EigenSparseLinearSolver<Number> * eigen_linear_solver =
         dynamic_cast<EigenSparseLinearSolver<Number> *>(&linear_solver);
 

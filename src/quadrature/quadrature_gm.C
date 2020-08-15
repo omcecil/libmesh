@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -36,10 +36,9 @@ QuadratureType QGrundmann_Moller::type() const
 
 
 
-void QGrundmann_Moller::init_1D(const ElemType /*type_in*/,
-                                unsigned int p)
+void QGrundmann_Moller::init_1D(const ElemType, unsigned int)
 {
-  QGauss gauss1D(1, static_cast<Order>(_order+2*p));
+  QGauss gauss1D(1, get_order());
 
   // Swap points and weights with the about-to-be destroyed rule.
   _points.swap(gauss1D.get_points());

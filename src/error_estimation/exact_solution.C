@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -32,6 +32,8 @@
 #include "libmesh/raw_accessor.h"
 #include "libmesh/tensor_tools.h"
 #include "libmesh/enum_norm_type.h"
+#include "libmesh/utility.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 namespace libMesh
 {
@@ -43,7 +45,7 @@ ExactSolution::ExactSolution(const EquationSystems & es) :
 {
   // Initialize the _errors data structure which holds all
   // the eventual values of the error.
-  for (unsigned int sys=0; sys<_equation_systems.n_systems(); ++sys)
+  for (auto sys : make_range(_equation_systems.n_systems()))
     {
       // Reference to the system
       const System & system = _equation_systems.get_system(sys);
@@ -54,7 +56,7 @@ ExactSolution::ExactSolution(const EquationSystems & es) :
       // The SystemErrorMap to be inserted
       ExactSolution::SystemErrorMap sem;
 
-      for (unsigned int var=0; var<system.n_vars(); ++var)
+      for (auto var : make_range(system.n_vars()))
         {
           // The name of this variable
           const std::string & var_name = system.variable_name(var);
@@ -69,6 +71,12 @@ ExactSolution::ExactSolution(const EquationSystems & es) :
 ExactSolution::ExactSolution(ExactSolution &&) = default;
 ExactSolution::~ExactSolution() = default;
 
+
+void ExactSolution::
+set_excluded_subdomains(const std::set<subdomain_id_type> & excluded)
+{
+  _excluded_subdomains = excluded;
+}
 
 void ExactSolution::attach_reference_solution (const EquationSystems * es_fine)
 {
@@ -90,7 +98,7 @@ void ExactSolution::attach_exact_value (ValueFunctionPointer fptr)
   // entry for each system.
   _exact_values.clear();
 
-  for (unsigned int sys=0; sys<_equation_systems.n_systems(); ++sys)
+  for (auto sys : make_range(_equation_systems.n_systems()))
     {
       const System & system = _equation_systems.get_system(sys);
       _exact_values.emplace_back(libmesh_make_unique<WrappedFunction<Number>>(system, fptr, &_equation_systems.parameters));
@@ -131,7 +139,7 @@ void ExactSolution::attach_exact_deriv (GradientFunctionPointer gptr)
   // entry for each system.
   _exact_derivs.clear();
 
-  for (unsigned int sys=0; sys<_equation_systems.n_systems(); ++sys)
+  for (auto sys : make_range(_equation_systems.n_systems()))
     {
       const System & system = _equation_systems.get_system(sys);
       _exact_derivs.emplace_back(libmesh_make_unique<WrappedFunction<Gradient>>(system, gptr, &_equation_systems.parameters));
@@ -172,7 +180,7 @@ void ExactSolution::attach_exact_hessian (HessianFunctionPointer hptr)
   // entry for each system.
   _exact_hessians.clear();
 
-  for (unsigned int sys=0; sys<_equation_systems.n_systems(); ++sys)
+  for (auto sys : make_range(_equation_systems.n_systems()))
     {
       const System & system = _equation_systems.get_system(sys);
       _exact_hessians.emplace_back(libmesh_make_unique<WrappedFunction<Tensor>>(system, hptr, &_equation_systems.parameters));
@@ -208,25 +216,10 @@ void ExactSolution::attach_exact_hessian (unsigned int sys_num,
 std::vector<Real> & ExactSolution::_check_inputs(const std::string & sys_name,
                                                  const std::string & unknown_name)
 {
-  // If no exact solution function or fine grid solution has been
-  // attached, we now just compute the solution norm (i.e. the
-  // difference from an "exact solution" of zero
-
-  // Make sure the requested sys_name exists.
-  std::map<std::string, SystemErrorMap>::iterator sys_iter =
-    _errors.find(sys_name);
-
-  if (sys_iter == _errors.end())
-    libmesh_error_msg("Sorry, couldn't find the requested system '" << sys_name << "'.");
-
-  // Make sure the requested unknown_name exists.
-  SystemErrorMap::iterator var_iter = (*sys_iter).second.find(unknown_name);
-
-  if (var_iter == (*sys_iter).second.end())
-    libmesh_error_msg("Sorry, couldn't find the requested variable '" << unknown_name << "'.");
-
-  // Return a reference to the proper error entry
-  return (*var_iter).second;
+  // Return a reference to the proper error entry, or throw an error
+  // if it doesn't exist.
+  auto & system_error_map = libmesh_map_find(_errors, sys_name);
+  return libmesh_map_find(system_error_map, unknown_name);
 }
 
 
@@ -291,17 +284,17 @@ Real ExactSolution::error_norm(const std::string & sys_name,
       return std::sqrt(error_vals[0] + error_vals[1] + error_vals[2]);
     case HCURL:
       {
-        if (FEInterface::field_type(fe_type) == TYPE_SCALAR)
-          libmesh_error_msg("Cannot compute HCurl error norm of scalar-valued variables!");
-        else
-          return std::sqrt(error_vals[0] + error_vals[5]);
+        libmesh_error_msg_if(FEInterface::field_type(fe_type) == TYPE_SCALAR,
+                             "Cannot compute HCurl error norm of scalar-valued variables!");
+
+        return std::sqrt(error_vals[0] + error_vals[5]);
       }
     case HDIV:
       {
-        if (FEInterface::field_type(fe_type) == TYPE_SCALAR)
-          libmesh_error_msg("Cannot compute HDiv error norm of scalar-valued variables!");
-        else
-          return std::sqrt(error_vals[0] + error_vals[6]);
+        libmesh_error_msg_if(FEInterface::field_type(fe_type) == TYPE_SCALAR,
+                             "Cannot compute HDiv error norm of scalar-valued variables!");
+
+        return std::sqrt(error_vals[0] + error_vals[6]);
       }
     case H1_SEMINORM:
       return std::sqrt(error_vals[1]);
@@ -309,17 +302,17 @@ Real ExactSolution::error_norm(const std::string & sys_name,
       return std::sqrt(error_vals[2]);
     case HCURL_SEMINORM:
       {
-        if (FEInterface::field_type(fe_type) == TYPE_SCALAR)
-          libmesh_error_msg("Cannot compute HCurl error seminorm of scalar-valued variables!");
-        else
-          return std::sqrt(error_vals[5]);
+        libmesh_error_msg_if(FEInterface::field_type(fe_type) == TYPE_SCALAR,
+                             "Cannot compute HCurl error seminorm of scalar-valued variables!");
+
+        return std::sqrt(error_vals[5]);
       }
     case HDIV_SEMINORM:
       {
-        if (FEInterface::field_type(fe_type) == TYPE_SCALAR)
-          libmesh_error_msg("Cannot compute HDiv error seminorm of scalar-valued variables!");
-        else
-          return std::sqrt(error_vals[6]);
+        libmesh_error_msg_if(FEInterface::field_type(fe_type) == TYPE_SCALAR,
+                             "Cannot compute HDiv error seminorm of scalar-valued variables!");
+
+        return std::sqrt(error_vals[6]);
       }
     case L1:
       return error_vals[3];
@@ -492,11 +485,11 @@ void ExactSolution::_compute_error(const std::string & sys_name,
       comparison_soln->init(comparison_system.solution->size(), true, SERIAL);
       (*comparison_soln) = global_soln;
 
-      coarse_values = std::unique_ptr<MeshFunction>
-        (new MeshFunction(_equation_systems,
-                          *comparison_soln,
-                          comparison_system.get_dof_map(),
-                          comparison_system.variable_number(unknown_name)));
+      coarse_values = libmesh_make_unique<MeshFunction>
+        (_equation_systems,
+         *comparison_soln,
+         comparison_system.get_dof_map(),
+         comparison_system.variable_number(unknown_name));
       coarse_values->init();
     }
 
@@ -516,10 +509,10 @@ void ExactSolution::_compute_error(const std::string & sys_name,
   // Get a reference to the dofmap and mesh for that system
   const DofMap & computed_dof_map = computed_system.get_dof_map();
 
-  const MeshBase & _mesh = computed_system.get_mesh();
+  const MeshBase & mesh = computed_system.get_mesh();
 
   // Grab which element dimensions are present in the mesh
-  const std::set<unsigned char> & elem_dims = _mesh.elem_dimensions();
+  const std::set<unsigned char> & elem_dims = mesh.elem_dimensions();
 
   // Zero the error before summation
   // 0 - sum of square of function error (L2)
@@ -534,7 +527,7 @@ void ExactSolution::_compute_error(const std::string & sys_name,
   // Construct Quadrature rule based on default quadrature order
   const FEType & fe_type  = computed_dof_map.variable_type(var);
 
-  unsigned int n_vec_dim = FEInterface::n_vec_dim( _mesh, fe_type );
+  unsigned int n_vec_dim = FEInterface::n_vec_dim( mesh, fe_type );
 
   // FIXME: MeshFunction needs to be updated to support vector-valued
   //        elements before we can use a reference solution.
@@ -575,13 +568,16 @@ void ExactSolution::_compute_error(const std::string & sys_name,
   // TODO: this ought to be threaded (and using subordinate
   // MeshFunction objects in each thread rather than a single
   // master)
-  for (const auto & elem : _mesh.active_local_element_ptr_range())
+  for (const auto & elem : mesh.active_local_element_ptr_range())
     {
-      // Store a pointer to the element we are currently
-      // working on.  This allows for nicer syntax later.
-      const unsigned int dim = elem->dim();
-
+      // Skip this element if it is in a subdomain excluded by the user.
       const subdomain_id_type elem_subid = elem->subdomain_id();
+      if (_excluded_subdomains.count(elem_subid))
+        continue;
+
+      // The spatial dimension of the current Elem. FEs and other data
+      // are indexed on dim.
+      const unsigned int dim = elem->dim();
 
       // If the variable is not active on this subdomain, don't bother
       if (!computed_system.variable(var).active_on_subdomain(elem_subid))

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -61,7 +61,17 @@ const unsigned int Pyramid13::edge_nodes_map[Pyramid13::num_edges][Pyramid13::no
     {3, 4, 12}  // Edge 7
   };
 
-
+const unsigned int Pyramid13::edge_sides_map[Pyramid13::num_edges][2] =
+  {
+    {0, 4}, // Edge 0
+    {1, 4}, // Edge 1
+    {2, 4}, // Edge 2
+    {3, 4}, // Edge 3
+    {0, 3}, // Edge 4
+    {0, 1}, // Edge 5
+    {1, 2}, // Edge 6
+    {2, 3}  // Edge 7
+  };
 
 // ------------------------------------------------------------
 // Pyramid13 class member functions
@@ -108,6 +118,13 @@ Pyramid13::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s]) - trim};
 }
 
+std::vector<unsigned>
+Pyramid13::nodes_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_nodes_map[e]), std::end(edge_nodes_map[e])};
+}
+
 bool Pyramid13::is_node_on_edge(const unsigned int n,
                                 const unsigned int e) const
 {
@@ -135,7 +152,7 @@ Order Pyramid13::default_order() const
 
 
 
-unsigned int Pyramid13::which_node_am_i(unsigned int side,
+unsigned int Pyramid13::local_side_node(unsigned int side,
                                         unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
@@ -151,10 +168,22 @@ unsigned int Pyramid13::which_node_am_i(unsigned int side,
 
 
 
+unsigned int Pyramid13::local_edge_node(unsigned int edge,
+                                        unsigned int edge_node) const
+{
+  libmesh_assert_less(edge, this->n_edges());
+  libmesh_assert_less(edge_node, Pyramid13::nodes_per_edge);
+
+  return Pyramid13::edge_nodes_map[edge][edge_node];
+}
+
+
+
 std::unique_ptr<Elem> Pyramid13::build_side_ptr (const unsigned int i, bool proxy)
 {
   libmesh_assert_less (i, this->n_sides());
 
+  std::unique_ptr<Elem> face;
   if (proxy)
     {
       switch (i)
@@ -163,10 +192,16 @@ std::unique_ptr<Elem> Pyramid13::build_side_ptr (const unsigned int i, bool prox
         case 1:
         case 2:
         case 3:
-          return libmesh_make_unique<Side<Tri6,Pyramid13>>(this,i);
+          {
+            face = libmesh_make_unique<Side<Tri6,Pyramid13>>(this,i);
+            break;
+          }
 
         case 4:
-          return libmesh_make_unique<Side<Quad8,Pyramid13>>(this,i);
+          {
+            face = libmesh_make_unique<Side<Quad8,Pyramid13>>(this,i);
+            break;
+          }
 
         default:
           libmesh_error_msg("Invalid side i = " << i);
@@ -175,9 +210,6 @@ std::unique_ptr<Elem> Pyramid13::build_side_ptr (const unsigned int i, bool prox
 
   else
     {
-      // Return value
-      std::unique_ptr<Elem> face;
-
       switch (i)
         {
         case 0: // triangular face 1
@@ -197,14 +229,18 @@ std::unique_ptr<Elem> Pyramid13::build_side_ptr (const unsigned int i, bool prox
           libmesh_error_msg("Invalid side i = " << i);
         }
 
-      face->subdomain_id() = this->subdomain_id();
-
       // Set the nodes
-      for (unsigned n=0; n<face->n_nodes(); ++n)
+      for (auto n : face->node_index_range())
         face->set_node(n) = this->node_ptr(Pyramid13::side_nodes_map[i][n]);
-
-      return face;
     }
+
+#ifdef LIBMESH_ENABLE_DEPRECATED
+  if (!proxy) // proxy sides used to leave parent() set
+#endif
+    face->set_parent(nullptr);
+  face->set_interior_parent(this);
+
+  return face;
 }
 
 
@@ -355,6 +391,10 @@ unsigned short int Pyramid13::second_order_adjacent_vertex (const unsigned int n
 
 Real Pyramid13::volume () const
 {
+  // This specialization is good for Lagrange mappings only
+  if (this->mapping_type() != LAGRANGE_MAP)
+    return this->Elem::volume();
+
   // Make copies of our points.  It makes the subsequent calculations a bit
   // shorter and avoids dereferencing the same pointer multiple times.
   Point

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,8 @@
 #include "libmesh/face_quad4.h"
 #include "libmesh/enum_elem_quality.h"
 #include "libmesh/tensor_value.h"
+
+#include <array>
 
 namespace libMesh
 {
@@ -83,13 +85,24 @@ dof_id_type Hex::key (const unsigned int s) const
 
 
 
-unsigned int Hex::which_node_am_i(unsigned int side,
+unsigned int Hex::local_side_node(unsigned int side,
                                   unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
-  libmesh_assert_less (side_node, 4);
+  libmesh_assert_less (side_node, Hex8::nodes_per_side);
 
   return Hex8::side_nodes_map[side][side_node];
+}
+
+
+
+unsigned int Hex::local_edge_node(unsigned int edge,
+                                  unsigned int edge_node) const
+{
+  libmesh_assert_less (edge, this->n_edges());
+  libmesh_assert_less (edge_node, Hex8::nodes_per_edge);
+
+  return Hex8::edge_nodes_map[edge][edge_node];
 }
 
 
@@ -100,7 +113,7 @@ std::unique_ptr<Elem> Hex::side_ptr (const unsigned int i)
 
   std::unique_ptr<Elem> face = libmesh_make_unique<Quad4>();
 
-  for (unsigned n=0; n<face->n_nodes(); ++n)
+  for (auto n : face->node_index_range())
     face->set_node(n) = this->node_ptr(Hex8::side_nodes_map[i][n]);
 
   return face;
@@ -143,8 +156,15 @@ bool Hex::is_edge_on_side(const unsigned int e,
   libmesh_assert_less (e, this->n_edges());
   libmesh_assert_less (s, this->n_sides());
 
-  return (is_node_on_side(Hex8::edge_nodes_map[e][0],s) &&
-          is_node_on_side(Hex8::edge_nodes_map[e][1],s));
+  return (Hex8::edge_sides_map[e][0] == s ||
+          Hex8::edge_sides_map[e][1] == s);
+}
+
+
+
+std::vector<unsigned int> Hex::sides_on_edge(const unsigned int e) const
+{
+  return {Hex8::edge_sides_map[e][0], Hex8::edge_sides_map[e][1]};
 }
 
 
@@ -196,6 +216,7 @@ Real Hex::quality (const ElemQuality q) const
   switch (q)
     {
 
+#if LIBMESH_DIM >= 3
       /**
        * Compute the min/max diagonal ratio.
        * Source: CUBIT User's Manual.
@@ -404,6 +425,7 @@ Real Hex::quality (const ElemQuality q) const
             return (den == 0.) ? 0 : (8. / den);
           }
       }
+#endif // LIBMESH_DIM >= 3
 
       /**
        * I don't know what to do for this metric.

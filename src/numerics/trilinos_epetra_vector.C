@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -128,6 +128,21 @@ EpetraVector<T>::operator -= (const NumericVector<T> & v)
 
 template <typename T>
 NumericVector<T> &
+EpetraVector<T>::operator *= (const NumericVector<T> & v)
+{
+  libmesh_assert(this->closed());
+  libmesh_assert_equal_to(size(), v.size());
+
+  const EpetraVector<T> & v_vec = cast_ref<const EpetraVector<T> &>(v);
+
+  _vec->Multiply(1.0, *v_vec._vec, *_vec, 0.0);
+
+  return *this;
+}
+
+
+template <typename T>
+NumericVector<T> &
 EpetraVector<T>::operator /= (const NumericVector<T> & v)
 {
   libmesh_assert(this->closed());
@@ -174,8 +189,8 @@ void EpetraVector<T>::reciprocal()
   for (unsigned int i=0; i<nl; i++)
     {
       // Don't divide by zero (maybe only check this in debug mode?)
-      if (std::abs(values[i]) < std::numeric_limits<T>::min())
-        libmesh_error_msg("Error, divide by zero in DistributedVector<T>::reciprocal()!");
+      libmesh_error_msg_if(std::abs(values[i]) < std::numeric_limits<T>::min(),
+                           "Error, divide by zero in DistributedVector<T>::reciprocal()!");
 
       values[i] = 1. / values[i];
     }
@@ -446,7 +461,7 @@ void EpetraVector<T>::localize (std::vector<T> & v_local,
   // Get a pointer to the list of global elements for the map, and set
   // all the values from indices.
   int * import_map_global_elements = import_map.MyGlobalElements();
-  for (int i=0; i<import_map.NumMyElements(); ++i)
+  for (auto i : index_range(indices))
     import_map_global_elements[i] = indices[i];
 
   // Create a new EpetraVector to import values into.
@@ -860,6 +875,7 @@ int EpetraVector<T>::GlobalAssemble(Epetra_CombineMode mode)
   return(0);
 }
 
+#include <libmesh/ignore_warnings.h> // deprecated-copy in Epetra_Vector
 
 //----------------------------------------------------------------------------
 template <typename T>
@@ -887,6 +903,7 @@ void EpetraVector<T>::FEoperatorequals(const EpetraVector & source)
   }
 }
 
+#include <libmesh/restore_warnings.h>
 
 //----------------------------------------------------------------------------
 template <typename T>

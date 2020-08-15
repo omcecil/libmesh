@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -378,6 +378,13 @@ int main (int argc, char ** argv)
               // This value is used for deciding which elements to refine
               // and which to coarsen.
               KellyErrorEstimator error_estimator;
+
+              // This is a subclass of JumpErrorEstimator, based on
+              // measuring discontinuities across sides between
+              // elements, and we can tell it to use a cheaper
+              // "unweighted" quadrature rule when numerically
+              // integrating those discontinuities.
+              error_estimator.use_unweighted_quadrature_rules = true;
 
               // Compute the error for each active element using the provided
               // flux_jump indicator.  Note in general you will need to

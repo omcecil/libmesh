@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -61,13 +61,21 @@ dof_id_type InfQuad::key (const unsigned int s) const
 
 
 
-unsigned int InfQuad::which_node_am_i(unsigned int side,
+unsigned int InfQuad::local_side_node(unsigned int side,
                                       unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
   libmesh_assert_less (side_node, 2);
 
   return InfQuad4::side_nodes_map[side][side_node];
+}
+
+
+
+unsigned int InfQuad::local_edge_node(unsigned int edge,
+                                      unsigned int edge_node) const
+{
+  return local_side_node(edge, edge_node);
 }
 
 
@@ -99,7 +107,7 @@ std::unique_ptr<Elem> InfQuad::side_ptr (const unsigned int i)
     }
 
   // Set the nodes
-  for (unsigned n=0; n<edge->n_nodes(); ++n)
+  for (auto n : edge->node_index_range())
     edge->set_node(n) = this->node_ptr(InfQuad4::side_nodes_map[i][n]);
 
   return edge;

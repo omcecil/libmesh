@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,6 @@
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/numeric_vector.h"
-#include "libmesh/parallel.h"
 #include "libmesh/quadrature.h"
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/time_solver.h"
@@ -79,7 +78,7 @@ bool FEMPhysics::eulerian_residual (bool request_jacobian,
   const std::vector<std::vector<Real>>     & psi =
     context.element_fe_var[mesh_xyz_var]->get_phi();
 
-  for (unsigned int var = 0; var != context.n_vars(); ++var)
+  for (auto var : make_range(context.n_vars()))
     {
       // Mesh motion only affects time-evolving variables
       if (this->is_time_evolving(var))
@@ -205,7 +204,7 @@ bool FEMPhysics::mass_residual (bool request_jacobian,
 
   unsigned int n_qpoints = context.get_element_qrule().n_points();
 
-  for (unsigned int var = 0; var != context.n_vars(); ++var)
+  for (auto var : make_range(context.n_vars()))
     {
       if (!this->is_time_evolving(var))
         continue;

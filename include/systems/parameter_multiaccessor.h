@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -67,18 +67,6 @@ public:
   }
 
   /**
-   * A simple reseater won't work with a multi-accessor
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual ParameterAccessor<T> &
-  operator= (T * /* new_ptr */) override
-  {
-    libmesh_error();
-    return *this;
-  }
-#endif
-
-  /**
    * Setter: change the value of the parameter we access.
    */
   virtual void set (const T & new_value) override
@@ -107,8 +95,8 @@ public:
 #ifndef NDEBUG
     // If you're already using inconsistent parameters we can't help
     // you.
-    for (std::size_t i=1; i < _accessors.size(); ++i)
-      libmesh_assert_equal_to(_accessors[i]->get(), val);
+    for (const auto & accessor : _accessors)
+      libmesh_assert_equal_to(accessor->get(), val);
 #endif
     return val;
   }

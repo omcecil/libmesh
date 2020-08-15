@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -167,7 +167,10 @@ void DenseMatrix<T>::_multiply_blas(const DenseMatrixBase<T> & other,
   std::vector<T> result (result_size);
 
   // Finally ready to call the BLAS
-  BLASgemm_(transa, transb, &M, &N, &K, &alpha, A->get_values().data(), &LDA, B->get_values().data(), &LDB, &beta, result.data(), &LDC);
+  BLASgemm_(transa, transb, &M, &N, &K, pPS(&alpha),
+            pPS(A->get_values().data()), &LDA,
+            pPS(B->get_values().data()), &LDB, pPS(&beta),
+            pPS(result.data()), &LDC);
 
   // Update the relevant dimension for this matrix.
   switch (flag)
@@ -248,11 +251,11 @@ void DenseMatrix<T>::_lu_decompose_lapack ()
   PetscBLASInt INFO = 0;
 
   // Ready to call the actual factorization routine through PETSc's interface
-  LAPACKgetrf_(&M, &N, this->_val.data(), &LDA, _pivots.data(), &INFO);
+  LAPACKgetrf_(&M, &N, pPS(this->_val.data()), &LDA, _pivots.data(),
+               &INFO);
 
   // Check return value for errors
-  if (INFO != 0)
-    libmesh_error_msg("INFO=" << INFO << ", Error during Lapack LU factorization!");
+  libmesh_error_msg_if(INFO != 0, "INFO=" << INFO << ", Error during Lapack LU factorization!");
 
   // Set the flag for LU decomposition
   this->_decomposition_type = LU_BLAS_LAPACK;
@@ -307,7 +310,7 @@ void DenseMatrix<T>::_svd_lapack (DenseVector<Real> & sigma)
 
   // Copy the singular values into sigma, ignore U_val and VT_val
   sigma.resize(cast_int<unsigned int>(sigma_val.size()));
-  for (auto i : IntRange<int>(0, sigma.size()))
+  for (auto i : make_range(sigma.size()))
     sigma(i) = sigma_val[i];
 }
 
@@ -371,7 +374,7 @@ void DenseMatrix<T>::_svd_lapack (DenseVector<Real> & sigma,
 
   // Copy the singular values into sigma.
   sigma.resize(cast_int<unsigned int>(sigma_val.size()));
-  for (auto i : IntRange<int>(0, sigma.size()))
+  for (auto i : make_range(sigma.size()))
     sigma(i) = sigma_val[i];
 }
 
@@ -482,14 +485,16 @@ void DenseMatrix<T>::_svd_helper (char JOBU,
   // Ready to call the actual factorization routine through PETSc's interface.
 #ifdef LIBMESH_USE_REAL_NUMBERS
   // Note that the call to LAPACKgesvd_ may modify _val
-  LAPACKgesvd_(&JOBU, &JOBVT, &M, &N, _val.data(), &LDA, sigma_val.data(), U_val.data(),
-               &LDU, VT_val.data(), &LDVT, WORK.data(), &LWORK, &INFO);
+  LAPACKgesvd_(&JOBU, &JOBVT, &M, &N, pPS(_val.data()), &LDA,
+               pPS(sigma_val.data()), pPS(U_val.data()), &LDU,
+               pPS(VT_val.data()), &LDVT, pPS(WORK.data()), &LWORK,
+               &INFO);
 #else
   // When we have LIBMESH_USE_COMPLEX_NUMBERS then we must pass an array of Complex
   // numbers to LAPACKgesvd_, but _val may contain Reals so we copy to Number below to
   // handle both the real-valued and complex-valued cases.
   std::vector<Number> val_copy(_val.size());
-  for (auto i : IntRange<int>(0, _val.size()))
+  for (auto i : make_range(_val.size()))
     val_copy[i] = _val[i];
 
   std::vector<Real> RWORK(5 * min_MN);
@@ -498,8 +503,7 @@ void DenseMatrix<T>::_svd_helper (char JOBU,
 #endif
 
   // Check return value for errors
-  if (INFO != 0)
-    libmesh_error_msg("INFO=" << INFO << ", Error during Lapack SVD calculation!");
+  libmesh_error_msg_if(INFO != 0, "INFO=" << INFO << ", Error during Lapack SVD calculation!");
 }
 
 
@@ -520,7 +524,6 @@ void DenseMatrix<T>::_svd_helper (char,
 
 
 #if (LIBMESH_HAVE_PETSC && LIBMESH_USE_REAL_NUMBERS)
-#if !PETSC_VERSION_LESS_THAN(3,1,0)
 
 template<typename T>
 void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T> & rhs,
@@ -583,7 +586,7 @@ void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T> & rhs,
   // now.  x needs to be long enough to hold both the (Nx1) solution
   // vector or the (Mx1) rhs, so size it to the max of those.
   x.resize(max_MN);
-  for (auto i : IntRange<int>(0, rhs.size()))
+  for (auto i : make_range(rhs.size()))
     x(i) = rhs(i);
 
   // Make the syntax below simpler by grabbing a reference to this array.
@@ -602,7 +605,7 @@ void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T> & rhs,
   // Used to determine the effective rank of A.  Singular values
   // S(i) <= RCOND*S(1) are treated as zero.  If RCOND < 0, machine
   // precision is used instead.
-  Real RCOND = rcond;
+  PetscScalar RCOND = rcond;
 
   // RANK
   // The effective rank of A, i.e., the number of singular values
@@ -648,13 +651,13 @@ void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T> & rhs,
   //              PetscScalar *,        // WORK
   //              const PetscBLASInt *, // LWORK
   //              PetscBLASInt *);      // INFO
-  LAPACKgelss_(&M, &N, &NRHS, A_trans_vals.data(), &LDA, B.data(), &LDB, S.data(), &RCOND, &RANK, WORK.data(), &LWORK, &INFO);
+  LAPACKgelss_(&M, &N, &NRHS, pPS(A_trans_vals.data()), &LDA,
+               pPS(B.data()), &LDB, pPS(S.data()), &RCOND, &RANK,
+               pPS(WORK.data()), &LWORK, &INFO);
 
   // Check for errors in the Lapack call
-  if (INFO < 0)
-    libmesh_error_msg("Error, argument " << -INFO << " to LAPACKgelss_ had an illegal value.");
-  if (INFO > 0)
-    libmesh_error_msg("The algorithm for computing the SVD failed to converge!");
+  libmesh_error_msg_if(INFO < 0, "Error, argument " << -INFO << " to LAPACKgelss_ had an illegal value.");
+  libmesh_error_msg_if(INFO > 0, "The algorithm for computing the SVD failed to converge!");
 
   // Debugging: print singular values and information about condition number:
   // libMesh::err << "RCOND=" << RCOND << std::endl;
@@ -676,17 +679,6 @@ void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T> & rhs,
 #else
 
 template<typename T>
-void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T> & /*rhs*/,
-                                       DenseVector<T> & /*x*/,
-                                       Real /*rcond*/) const
-{
-  libmesh_error_msg("svd_solve() requires PETSc >= 3.1!");
-}
-
-#endif // !PETSC_VERSION_LESS_THAN(3,1,0)
-
-#else
-template<typename T>
 void DenseMatrix<T>::_svd_solve_lapack(const DenseVector<T>& /*rhs*/,
                                        DenseVector<T> & /*x*/,
                                        Real /*rcond*/) const
@@ -706,8 +698,7 @@ void DenseMatrix<T>::_evd_lapack (DenseVector<T> & lambda_real,
                                   DenseMatrix<T> * VR)
 {
   // This algorithm only works for square matrices, so verify this up front.
-  if (this->m() != this->n())
-    libmesh_error_msg("Can only compute eigen-decompositions for square matrices.");
+  libmesh_error_msg_if(this->m() != this->n(), "Can only compute eigen-decompositions for square matrices.");
 
   // If the user requests left or right eigenvectors, we have to make
   // sure and pass the transpose of this matrix to Lapack, otherwise
@@ -718,8 +709,8 @@ void DenseMatrix<T>::_evd_lapack (DenseVector<T> & lambda_real,
   // the same.
   if (VL || VR)
     {
-      for (auto i : IntRange<int>(0, this->_m))
-        for (auto j : IntRange<int>(0, i))
+      for (auto i : make_range(this->_m))
+        for (auto j : make_range(i))
           std::swap((*this)(i,j), (*this)(j,i));
     }
 
@@ -852,21 +843,20 @@ void DenseMatrix<T>::_evd_lapack (DenseVector<T> & lambda_real,
   LAPACKgeev_(&JOBVL,
               &JOBVR,
               &N,
-              _val.data(),
+              pPS(_val.data()),
               &LDA,
-              lambda_real_val.data(),
-              lambda_imag_val.data(),
-              VL_ptr,
+              pPS(lambda_real_val.data()),
+              pPS(lambda_imag_val.data()),
+              pPS(VL_ptr),
               &LDVL,
-              VR_ptr,
+              pPS(VR_ptr),
               &LDVR,
-              WORK.data(),
+              pPS(WORK.data()),
               &LWORK,
               &INFO);
 
   // Check return value for errors
-  if (INFO != 0)
-    libmesh_error_msg("INFO=" << INFO << ", Error during Lapack eigenvalue calculation!");
+  libmesh_error_msg_if(INFO != 0, "INFO=" << INFO << ", Error during Lapack eigenvalue calculation!");
 
   // If the user requested either right or left eigenvectors, LAPACK
   // has now computed the transpose of the desired matrix, i.e. V^T
@@ -875,15 +865,15 @@ void DenseMatrix<T>::_evd_lapack (DenseVector<T> & lambda_real,
   // transpose it in place before handing it back.
   if (VR)
     {
-      for (auto i : IntRange<int>(0, N))
-        for (auto j : IntRange<int>(0, i))
+      for (auto i : make_range(N))
+        for (auto j : make_range(i))
           std::swap((*VR)(i,j), (*VR)(j,i));
     }
 
   if (VL)
     {
-      for (auto i : IntRange<int>(0, N))
-        for (auto j : IntRange<int>(0, i))
+      for (auto i : make_range(N))
+        for (auto j : make_range(i))
           std::swap((*VL)(i,j), (*VL)(j,i));
     }
 }
@@ -964,11 +954,11 @@ void DenseMatrix<T>::_lu_back_substitute_lapack (const DenseVector<T> & b,
   PetscBLASInt INFO = 0;
 
   // Finally, ready to call the Lapack getrs function
-  LAPACKgetrs_(TRANS, &N, &NRHS, _val.data(), &LDA, _pivots.data(), x_vec.data(), &LDB, &INFO);
+  LAPACKgetrs_(TRANS, &N, &NRHS, pPS(_val.data()), &LDA,
+               _pivots.data(), pPS(x_vec.data()), &LDB, &INFO);
 
   // Check return value for errors
-  if (INFO != 0)
-    libmesh_error_msg("INFO=" << INFO << ", Error during Lapack LU solve!");
+  libmesh_error_msg_if(INFO != 0, "INFO=" << INFO << ", Error during Lapack LU solve!");
 
   // Don't do this if you already made a copy of b above
   // Swap b and x.  The solution will then be in x, and whatever was originally
@@ -1008,8 +998,8 @@ void DenseMatrix<T>::_matvec_blas(T alpha,
     {
       // dest  ~ A     * arg
       // (mx1)   (mxn) * (nx1)
-      if ((dest.size() != this->m()) || (arg.size() != this->n()))
-        libmesh_error_msg("Improper input argument sizes!");
+      libmesh_error_msg_if((dest.size() != this->m()) || (arg.size() != this->n()),
+                           "Improper input argument sizes!");
     }
 
   else // trans == true
@@ -1017,8 +1007,8 @@ void DenseMatrix<T>::_matvec_blas(T alpha,
       // Ensure that dest and arg are proper size
       // dest  ~ A^T   * arg
       // (nx1)   (nxm) * (mx1)
-      if ((dest.size() != this->n()) || (arg.size() != this->m()))
-        libmesh_error_msg("Improper input argument sizes!");
+      libmesh_error_msg_if((dest.size() != this->n()) || (arg.size() != this->m()),
+                           "Improper input argument sizes!");
     }
 
   // Calling sequence for dgemv:
@@ -1099,7 +1089,8 @@ void DenseMatrix<T>::_matvec_blas(T alpha,
   PetscBLASInt INCY = 1;
 
   // Finally, ready to call the BLAS function
-  BLASgemv_(TRANS, &M, &N, &alpha, a.data(), &LDA, x.data(), &INCX, &beta, y.data(), &INCY);
+  BLASgemv_(TRANS, &M, &N, pPS(&alpha), pPS(a.data()), &LDA,
+            pPS(x.data()), &INCX, pPS(&beta), pPS(y.data()), &INCY);
 }
 
 

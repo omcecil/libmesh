@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,14 +20,15 @@
 
 #include "libmesh/libmesh_config.h"
 #include "libmesh/function_base.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 #ifdef LIBMESH_HAVE_FPARSER
 
 // Local includes
 #include "libmesh/dense_vector.h"
+#include "libmesh/int_range.h"
 #include "libmesh/vector_value.h"
 #include "libmesh/point.h"
-#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // FParser includes
 #include "libmesh/fparser_ad.hh"
@@ -241,7 +242,7 @@ ParsedFunction<Output,OutputGradient>::reparse (const std::string & expression)
   // If additional vars were passed, append them to the string
   // that we send to the function parser. Also add them to the
   // end of our spacetime vector
-  for (std::size_t i=0; i < _additional_vars.size(); ++i)
+  for (auto i : index_range(_additional_vars))
     {
       variables += "," + _additional_vars[i];
       // Initialize extra variables to the vector passed in or zero
@@ -343,8 +344,8 @@ ParsedFunction<Output,OutputGradient>::getVarAddress (const std::string & variab
   const std::vector<std::string>::iterator it =
     std::find(_additional_vars.begin(), _additional_vars.end(), variable_name);
 
-  if (it == _additional_vars.end())
-    libmesh_error_msg("ERROR: Requested variable not found in parsed function");
+  libmesh_error_msg_if(it == _additional_vars.end(),
+                       "ERROR: Requested variable not found in parsed function");
 
   // Iterator Arithmetic (How far from the end of the array is our target address?)
   return _spacetime[_spacetime.size() - (_additional_vars.end() - it)];
@@ -405,10 +406,10 @@ ParsedFunction<Output,OutputGradient>::get_inline_value (const std::string & inl
       fp.AddConstant("NaN", std::numeric_limits<Real>::quiet_NaN());
       fp.AddConstant("pi", std::acos(Real(-1)));
       fp.AddConstant("e", std::exp(Real(1)));
-      if (fp.Parse(new_subexpression, variables) != -1) // -1 for success
-        libmesh_error_msg
-          ("ERROR: FunctionParser is unable to parse modified expression: "
-           << new_subexpression << '\n' << fp.ErrorMsg());
+      libmesh_error_msg_if
+        (fp.Parse(new_subexpression, variables) != -1, // -1 for success
+         "ERROR: FunctionParser is unable to parse modified expression: "
+         << new_subexpression << '\n' << fp.ErrorMsg());
 
       Output new_var_value = this->eval(fp, new_subexpression, 0);
 #ifdef NDEBUG
@@ -535,8 +536,8 @@ ParsedFunction<Output,OutputGradient>::partial_reparse (const std::string & expr
                            std::string::npos : end - nextstart));
 
       // fparser can crash on empty expressions
-      if (_subexpressions.back().empty())
-        libmesh_error_msg("ERROR: FunctionParser is unable to parse empty expression.\n");
+      libmesh_error_msg_if(_subexpressions.back().empty(),
+                           "ERROR: FunctionParser is unable to parse empty expression.\n");
 
       // Parse (and optimize if possible) the subexpression.
       // Add some basic constants, to Real precision.
@@ -544,10 +545,10 @@ ParsedFunction<Output,OutputGradient>::partial_reparse (const std::string & expr
       fp.AddConstant("NaN", std::numeric_limits<Real>::quiet_NaN());
       fp.AddConstant("pi", std::acos(Real(-1)));
       fp.AddConstant("e", std::exp(Real(1)));
-      if (fp.Parse(_subexpressions.back(), variables) != -1) // -1 for success
-        libmesh_error_msg
-          ("ERROR: FunctionParser is unable to parse expression: "
-           << _subexpressions.back() << '\n' << fp.ErrorMsg());
+      libmesh_error_msg_if
+        (fp.Parse(_subexpressions.back(), variables) != -1, // -1 for success
+         "ERROR: FunctionParser is unable to parse expression: "
+         << _subexpressions.back() << '\n' << fp.ErrorMsg());
 
       // use of derivatives is optional. suppress error output on the console
       // use the has_derivatives() method to check if AutoDiff was successful.

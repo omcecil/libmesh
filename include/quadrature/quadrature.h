@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,6 @@
 #include "libmesh/point.h"
 #include "libmesh/enum_elem_type.h" // INVALID_ELEM
 #include "libmesh/enum_order.h" // INVALID_ORDER
-#include "libmesh/auto_ptr.h" // deprecated
 
 #ifdef LIBMESH_FORWARD_DECLARE_ENUMS
 namespace libMesh
@@ -198,9 +197,18 @@ public:
                      unsigned int p_level=0);
 
   /**
-   * \returns The order of the quadrature rule.
+   * \returns The current "total" order of the quadrature rule which
+   * can vary element by element, depending on the Elem::p_level(),
+   * which gets passed to us during init().
+   *
+   * Each additional power of p increases the quadrature order
+   * required to integrate the mass matrix by 2, hence the formula
+   * below.
+   *
+   * \todo This function should also be used in all of the Order
+   * switch statements in the rules themselves.
    */
-  Order get_order() const { return static_cast<Order>(_order + _p_level); }
+  Order get_order() const { return static_cast<Order>(_order + 2 * _p_level); }
 
   /**
    * Prints information relevant to the quadrature rule, by default to
@@ -252,6 +260,10 @@ protected:
    * Initializes the 0D quadrature rule by filling the points and
    * weights vectors with the appropriate values.  Generally this
    * is just one point with weight 1.
+   *
+   * \note The arguments should no longer be used for anything in
+   * derived classes, they are only maintained for backwards
+   * compatibility and will eventually be removed.
    */
   virtual void init_0D (const ElemType type=INVALID_ELEM,
                         unsigned int p_level=0);
@@ -262,6 +274,10 @@ protected:
    * the rule will be defined by the implementing class.
    * It is assumed that derived quadrature rules will at least
    * define the init_1D function, therefore it is pure virtual.
+   *
+   * \note The arguments should no longer be used for anything in
+   * derived classes, they are only maintained for backwards
+   * compatibility and will eventually be removed.
    */
   virtual void init_1D (const ElemType type=INVALID_ELEM,
                         unsigned int p_level=0) = 0;
@@ -271,32 +287,30 @@ protected:
    * weights vectors with the appropriate values.  The order of
    * the rule will be defined by the implementing class.
    * Should not be pure virtual since a derived quadrature rule
-   * may only be defined in 1D.  If not redefined, gives an
-   * error (when \p DEBUG is defined) when called.
+   * may only be defined in 1D.  If not overridden, throws an
+   * error.
+   *
+   * \note The arguments should no longer be used for anything in
+   * derived classes, they are only maintained for backwards
+   * compatibility and will eventually be removed.
    */
-  virtual void init_2D (const ElemType,
-                        unsigned int = 0)
-  {
-#ifdef DEBUG
-    libmesh_error_msg("ERROR: Seems as if this quadrature rule \nis not implemented for 2D.");
-#endif
-  }
+  virtual void init_2D (const ElemType type=INVALID_ELEM,
+                        unsigned int p_level=0);
 
   /**
    * Initializes the 3D quadrature rule by filling the points and
    * weights vectors with the appropriate values.  The order of
    * the rule will be defined by the implementing class.
    * Should not be pure virtual since a derived quadrature rule
-   * may only be defined in 1D.  If not redefined, gives an
-   * error (when \p DEBUG is defined) when called.
+   * may only be defined in 1D.  If not overridden, throws an
+   * error.
+   *
+   * \note The arguments should no longer be used for anything in
+   * derived classes, they are only maintained for backwards
+   * compatibility and will eventually be removed.
    */
-  virtual void init_3D (const ElemType,
-                        unsigned int = 0)
-  {
-#ifdef DEBUG
-    libmesh_error_msg("ERROR: Seems as if this quadrature rule \nis not implemented for 3D.");
-#endif
-  }
+  virtual void init_3D (const ElemType type=INVALID_ELEM,
+                        unsigned int p_level=0);
 
   /**
    * Constructs a 2D rule from the tensor product of \p q1D with
@@ -354,46 +368,6 @@ protected:
    */
   std::vector<Real> _weights;
 };
-
-
-
-// ------------------------------------------------------------
-// QBase class members
-
-inline
-QBase::QBase(unsigned int d,
-             Order o) :
-  allow_rules_with_negative_weights(true),
-  _dim(d),
-  _order(o),
-  _type(INVALID_ELEM),
-  _p_level(0)
-{
-}
-
-
-
-
-inline
-void QBase::print_info(std::ostream & os) const
-{
-  libmesh_assert(!_points.empty());
-  libmesh_assert(!_weights.empty());
-
-  Real summed_weights=0;
-  os << "N_Q_Points=" << this->n_points() << std::endl << std::endl;
-  for (unsigned int qpoint=0; qpoint<this->n_points(); qpoint++)
-    {
-      os << " Point " << qpoint << ":\n"
-         << "  "
-         << _points[qpoint]
-         << "\n Weight:\n "
-         << "  w=" << _weights[qpoint] << "\n" << std::endl;
-
-      summed_weights += _weights[qpoint];
-    }
-  os << "Summed Weights: " << summed_weights << std::endl;
-}
 
 } // namespace libMesh
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -167,7 +167,9 @@ std::pair<unsigned int, Real> DifferentiableSystem::adjoint_solve (const QoISet 
   // we are solving the adjoint problem
   this->get_time_solver().set_is_adjoint(true);
 
-  return this->ImplicitSystem::adjoint_solve(qoi_indices);
+  return time_solver->adjoint_solve(qoi_indices);
+
+  //return this->ImplicitSystem::adjoint_solve(qoi_indices);
 }
 
 
@@ -217,13 +219,16 @@ void DifferentiableSystem::add_second_order_dot_vars()
           // The new velocities are time evolving variables of first order
           this->time_evolving( v_var_idx, 1 );
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
           // And if there are any boundary conditions set on the second order
           // variable, we also need to set it on its velocity variable.
           this->add_dot_var_dirichlet_bcs(var_id, v_var_idx);
+#endif
         }
     }
 }
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
 void DifferentiableSystem::add_dot_var_dirichlet_bcs( unsigned int var_idx,
                                                       unsigned int dot_var_idx )
 {
@@ -274,8 +279,7 @@ void DifferentiableSystem::add_dot_var_dirichlet_bcs( unsigned int var_idx,
               else
                 libmesh_error_msg("Could not find valid boundary function!");
 
-              if (is_time_evolving_bc)
-                libmesh_error_msg("Cannot currently support time-dependent Dirichlet BC for dot variables!");
+              libmesh_error_msg_if(is_time_evolving_bc, "Cannot currently support time-dependent Dirichlet BC for dot variables!");
 
 
               DirichletBoundary * new_dbc;
@@ -302,6 +306,7 @@ void DifferentiableSystem::add_dot_var_dirichlet_bcs( unsigned int var_idx,
 
     } // if (all_dbcs)
 }
+#endif // LIBMESH_ENABLE_DIRICHLET
 
 unsigned int DifferentiableSystem::get_second_order_dot_var( unsigned int var ) const
 {

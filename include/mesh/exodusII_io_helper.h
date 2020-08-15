@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,15 +25,9 @@
 // Local includes
 #include "libmesh/parallel_object.h"
 #include "libmesh/point.h"
-
-#ifdef LIBMESH_FORWARD_DECLARE_ENUMS
-namespace libMesh
-{
-enum ElemType : int;
-}
-#else
-#include "libmesh/enum_elem_type.h"
-#endif
+#include "libmesh/boundary_info.h" // BoundaryInfo::BCTuple
+#include "libmesh/enum_elem_type.h" // INVALID_ELEM
+#include "libmesh/exodus_header_info.h"
 
 // C++ includes
 #include <iostream>
@@ -55,21 +49,12 @@ enum ElemType : int;
       libmesh_exceptionless_error();            \
     } } while (0)
 
-
-
-// Through several subsequent levels of includes, the exodusII.h
-// header includes <errno.h>.  On very specific system/compiler combinations
-// (currently GCC 5.2.0+ OSX Yosemite, El Capitan, possibly others) errno.h
-// cannot be included while wrapped in a namespace (as we do with the exII
-// namespace below).  A workaround for this is to simply include errno.h
-// not in any namespace prior to including exodusII.h.
-//
-// The same is also true for string.h.
-#ifdef LIBMESH_COMPILER_HAS_BROKEN_ERRNO_T
+// Before we include a header wrapped in a namespace, we'd better make
+// sure none of its dependencies end up in that namespace
 #include <errno.h>
-#include <string.h>
-#endif
-
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdint.h>
 
 #include <libmesh/ignore_warnings.h>
 namespace exII {
@@ -108,9 +93,21 @@ public:
                      bool run_only_on_proc0=true,
                      bool single_precision=false);
   /**
-   * Destructor.
+   * Special functions. This class does not manage any dynamically
+   * allocated resources (file pointers, etc.) so it _should_ be
+   * default copy/move constructable, but I don't know
+   * if any existing code actually uses these operations.
    */
+  ExodusII_IO_Helper (const ExodusII_IO_Helper &) = default;
+  ExodusII_IO_Helper (ExodusII_IO_Helper &&) = default;
   virtual ~ExodusII_IO_Helper();
+
+  /**
+   * This class contains references so it can't be default
+   * copy/move-assigned.
+   */
+  ExodusII_IO_Helper & operator= (const ExodusII_IO_Helper &) = delete;
+  ExodusII_IO_Helper & operator= (ExodusII_IO_Helper &&) = delete;
 
   /**
    * \returns The current element type.
@@ -128,9 +125,16 @@ public:
   void open(const char * filename, bool read_only);
 
   /**
-   * Reads an \p ExodusII mesh file header.
+   * Reads an \p ExodusII mesh file header, leaving this object's
+   * internal data structures unchanged.
    */
-  void read_header();
+  ExodusHeaderInfo read_header() const;
+
+  /**
+   * Reads an \p ExodusII mesh file header, and stores required
+   * information on this object.
+   */
+  void read_and_store_header_info();
 
   /**
    * Reads the QA records from an ExodusII file.  We can use this to
@@ -209,6 +213,11 @@ public:
   void read_elem_in_block(int block);
 
   /**
+   * Read in edge blocks, storing information in the BoundaryInfo object.
+   */
+  void read_edge_blocks(MeshBase & mesh);
+
+  /**
    * Reads the optional \p node_num_map from the \p ExodusII mesh
    * file.
    */
@@ -237,6 +246,13 @@ public:
    * global nodeset array at the position \p offset.
    */
   void read_nodeset(int id);
+
+  /**
+   * New API that reads all nodesets simultaneously. This may be slightly
+   * faster than reading them one at a time. Calls ex_get_concat_node_sets()
+   * under the hood.
+   */
+  void read_all_nodesets();
 
   /**
    * Closes the \p ExodusII mesh file.
@@ -324,6 +340,26 @@ public:
    * Writes the time for the timestep
    */
   void write_timestep(int timestep, Real time);
+
+  /**
+   * Write sideset data for the requested timestep.
+   */
+  void
+  write_sideset_data (const MeshBase & mesh,
+                      int timestep,
+                      const std::vector<std::string> & var_names,
+                      const std::vector<std::set<boundary_id_type>> & side_ids,
+                      const std::vector<std::map<BoundaryInfo::BCTuple, Real>> & bc_vals);
+
+  /**
+   * Read sideset variables, if any, into the provided data structures.
+   */
+  void
+  read_sideset_data (const MeshBase & mesh,
+                     int timestep,
+                     std::vector<std::string> & var_names,
+                     std::vector<std::set<boundary_id_type>> & side_ids,
+                     std::vector<std::map<BoundaryInfo::BCTuple, Real>> & bc_vals);
 
   /**
    * Writes the vector of values to the element variables.
@@ -416,16 +452,34 @@ public:
 
   /**
    * \returns A vector with three copies of each element in the provided name vector,
-   * starting with r_, i_ and a_ respectively.
+   * starting with r_, i_ and a_ respectively. If the "write_complex_abs" parameter
+   * is true (default), the complex modulus is written, otherwise only the real and
+   * imaginary parts are written.
    */
-  std::vector<std::string> get_complex_names(const std::vector<std::string> & names) const;
+  std::vector<std::string>
+  get_complex_names(const std::vector<std::string> & names,
+                    bool write_complex_abs) const;
 
   /**
    * returns a "tripled" copy of \p vars_active_subdomains, which is necessary in the
    * complex-valued case.
    */
-  std::vector<std::set<subdomain_id_type>> get_complex_vars_active_subdomains(
-    const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains) const;
+  std::vector<std::set<subdomain_id_type>>
+  get_complex_vars_active_subdomains
+  (const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains,
+   bool write_complex_abs) const;
+
+  /**
+   * Takes a map from subdomain id -> vector of active variable names
+   * as input and returns a corresponding map where the original
+   * variable names have been replaced by their complex counterparts.
+   * Used by the ExodusII_IO::write_element_data_from_discontinuous_nodal_data()
+   * function.
+   */
+  std::map<subdomain_id_type, std::vector<std::string>>
+  get_complex_subdomain_to_var_names
+  (const std::map<subdomain_id_type, std::vector<std::string>> & subdomain_to_var_names,
+   bool write_complex_abs) const;
 
   /**
    * This is the \p ExodusII_IO_Helper Conversion class.  It provides
@@ -433,14 +487,6 @@ public:
    * name conversions.  It's defined below.
    */
   class Conversion;
-
-  /**
-   * This is the \p ExodusII_IO_Helper ElementMap class.
-   * It contains constant maps between the \p ExodusII naming/numbering
-   * schemes and the canonical schemes used in this code.  It's defined
-   * below.
-   */
-  class ElementMaps;
 
   /**
    * This is the \p ExodusII_IO_Helper NamesData class.
@@ -468,26 +514,42 @@ public:
   // General error flag
   int ex_err;
 
+  // struct which contains data fields from the Exodus file header
+  ExodusHeaderInfo header_info;
+
+  // Problem title (Use vector<char> to emulate a char *)
+  std::vector<char> & title;
+
   // Number of dimensions in the mesh
-  int num_dim;
+  int & num_dim;
+
+  // Total number of nodes in the mesh
+  int & num_nodes;
+
+  // Total number of elements in the mesh
+  int & num_elem;
+
+  // Total number of element blocks
+  int & num_elem_blk;
+
+  // Total number of edges
+  int & num_edge;
+
+  // Total number of edge blocks. The sum of the number of edges in
+  // each block must equal num_edge.
+  int & num_edge_blk;
+
+  // Total number of node sets
+  int & num_node_sets;
+
+  // Total number of element sets
+  int & num_side_sets;
 
   // Number of global variables
   int num_global_vars;
 
-  // Total number of nodes in the mesh
-  int num_nodes;
-
-  // Total number of elements in the mesh
-  int num_elem;
-
-  // Total number of element blocks
-  int num_elem_blk;
-
-  // Total number of node sets
-  int num_node_sets;
-
-  // Total number of element sets
-  int num_side_sets;
+  // Number of sideset variables
+  int num_sideset_vars;
 
   // Number of elements in this block
   int num_elem_this_blk;
@@ -501,8 +563,11 @@ public:
   // Total number of elements in all side sets
   int num_elem_all_sidesets;
 
-  // Vector of the block identification numbers
+  // Vector of element block identification numbers
   std::vector<int> block_ids;
+
+  // Vector of edge block identification numbers
+  std::vector<int> edge_block_ids;
 
   // Vector of nodes in an element
   std::vector<int> connect;
@@ -524,6 +589,22 @@ public:
 
   // Number of distribution factors per set
   std::vector<int> num_node_df_per_set;
+
+  // Starting indices for each nodeset in the node_sets_node_list vector.
+  // Used in the calls to ex_{put,get}_concat_node_sets().
+  std::vector<int> node_sets_node_index;
+
+  // Starting indices for each nodeset in the node_sets_dist_fact vector.
+  // Used in the calls to ex_{put,get}_concat_node_sets().
+  std::vector<int> node_sets_dist_index;
+
+  // Node ids for all nodes in nodesets, concatenated together.
+  // Used in the calls to ex_{put,get}_concat_node_sets().
+  std::vector<int> node_sets_node_list;
+
+  // Distribution factors for all nodes in all nodesets, concatenated together.
+  // Used in the calls to ex_{put,get}_concat_node_sets().
+  std::vector<Real> node_sets_dist_fact;
 
   // List of element numbers in all sidesets
   std::vector<int> elem_list;
@@ -551,9 +632,6 @@ public:
 
   // z locations of node points
   std::vector<Real> z;
-
-  //  Problem title (Use vector<char> to emulate a char *)
-  std::vector<char> title;
 
   // Type of element in a given block
   std::vector<char> elem_type;
@@ -595,8 +673,12 @@ public:
   // The names of the global variables stored in the Exodus file
   std::vector<std::string> global_var_names;
 
+  // The names of the sideset variables stored in the Exodus file
+  std::vector<std::string> sideset_var_names;
+
   // Maps of Ids to named entities
   std::map<int, std::string> id_to_block_names;
+  std::map<int, std::string> id_to_edge_block_names;
   std::map<int, std::string> id_to_ss_names;
   std::map<int, std::string> id_to_ns_names;
 
@@ -625,12 +707,19 @@ public:
    * Wraps calls to exII::ex_get_var_names() and exII::ex_get_var_param().
    * The enumeration controls whether nodal, elemental, or global
    * variable names are read and which class members are filled in.
-   * NODAL:     num_nodal_vars  nodal_var_names
-   * ELEMENTAL: num_elem_vars   elem_var_names
-   * GLOBAL:    num_global_vars global_var_names
+   * NODAL:     num_nodal_vars   nodal_var_names
+   * ELEMENTAL: num_elem_vars    elem_var_names
+   * GLOBAL:    num_global_vars  global_var_names
+   * SIDESET:   num_sideset_vars sideset_var_names
    */
-  enum ExodusVarType {NODAL=0, ELEMENTAL=1, GLOBAL=2};
+  enum ExodusVarType {NODAL=0, ELEMENTAL=1, GLOBAL=2, SIDESET=3};
   void read_var_names(ExodusVarType type);
+
+  const ExodusII_IO_Helper::Conversion &
+  get_conversion(const ElemType type) const;
+
+  const ExodusII_IO_Helper::Conversion &
+  get_conversion(std::string type_str) const;
 
 protected:
   /**
@@ -644,7 +733,7 @@ protected:
    * The enumeration controls whether nodal, elemental, or global
    * variable names are read and which class members are filled in.
    */
-  void write_var_names(ExodusVarType type, std::vector<std::string> & names);
+  void write_var_names(ExodusVarType type, const std::vector<std::string> & names);
 
   // If true, whenever there is an I/O operation, only perform if if we are on processor 0.
   bool _run_only_on_proc0;
@@ -673,6 +762,60 @@ protected:
   // If true, forces single precision I/O
   bool _single_precision;
 
+  /**
+   * This class facilitates inline conversion of an input data vector
+   * to a different precision level, depending on the underlying type
+   * of Real and whether or not the single_precision flag is set. This
+   * should be used whenever floating point data is being written to
+   * the Exodus file. Note that if no precision conversion has to take
+   * place, there should be very little overhead involved in using
+   * this object.
+   */
+  struct MappedOutputVector
+  {
+    // If necessary, allocates space to store a version of vec_in in a
+    // different precision than it was input with.
+    MappedOutputVector(const std::vector<Real> & vec_in,
+                       bool single_precision_in);
+
+    ~MappedOutputVector() = default;
+
+    // Returns void * pointer to either the mapped data or the
+    // original data, as necessary.
+    void * data();
+
+  private:
+    const std::vector<Real> & our_data;
+    bool single_precision;
+    std::vector<double> double_vec;
+    std::vector<float> float_vec;
+  };
+
+  /**
+   * This class facilitates reading in vectors from Exodus file that
+   * may be of a different floating point type than Real. It employs
+   * basically the same approach as the MappedOuputVector, just going
+   * in the opposite direction. For more information, see the
+   * MappedOutputVector class docs.
+   */
+  struct MappedInputVector
+  {
+    MappedInputVector(std::vector<Real> & vec_in,
+                      bool single_precision_in);
+    ~MappedInputVector();
+
+    // Returns void * pointer to either the mapped data or the
+    // original data, as necessary.
+    void * data();
+
+  private:
+    std::vector<Real> & our_data;
+    bool single_precision;
+    std::vector<double> double_vec;
+    std::vector<float> float_vec;
+  };
+
+
 private:
 
   /**
@@ -687,13 +830,22 @@ private:
    */
   void write_var_names_impl(const char * var_type,
                             int & count,
-                            std::vector<std::string> & names);
+                            const std::vector<std::string> & names);
+
+  /**
+   * Defines equivalence classes of Exodus element types that map to
+   * libmesh ElemTypes.
+   */
+  std::map<std::string, ElemType> element_equivalence_map;
+  void init_element_equivalence_map();
+
+  /**
+   * Associates libMesh ElemTypes with node/face/edge/etc. mappings
+   * of the corresponding Exodus element types.
+   */
+  std::map<ElemType, ExodusII_IO_Helper::Conversion> conversion_map;
+  void init_conversion_map();
 };
-
-
-
-
-
 
 
 
@@ -702,79 +854,19 @@ class ExodusII_IO_Helper::Conversion
 public:
 
   /**
-   * Constructor.  Initializes the const private member
-   * variables.
+   * Constructor. Zero initializes all variables.
    */
-  Conversion(const int * nm,       // node_map
-             size_t nm_size,
-             const int * inm,      // inverse_node_map
-             size_t inm_size,
-             const int * sm,       // side_map
-             size_t sm_size,
-             const int * ism,      // inverse_side_map
-             size_t ism_size,
-             const ElemType ct,   // "canonical" aka libmesh element type
-             std::string ex_type) // string representing the Exodus element type
-    : node_map(nm),
-      node_map_size(nm_size),
-      inverse_node_map(inm),
-      inverse_node_map_size(inm_size),
-      side_map(sm),
-      side_map_size(sm_size),
-      inverse_side_map(ism),
-      inverse_side_map_size(ism_size),
+  Conversion()
+    : node_map(nullptr),
+      inverse_node_map(nullptr),
+      side_map(nullptr),
+      inverse_side_map(nullptr),
       shellface_map(nullptr),
-      shellface_map_size(0),
       inverse_shellface_map(nullptr),
-      inverse_shellface_map_size(0),
       shellface_index_offset(0),
-      canonical_type(ct),
-      exodus_type(ex_type)
+      libmesh_type(INVALID_ELEM),
+      exodus_type("")
   {}
-
-  /**
-   * Constructor.  Initializes the const private member
-   * variables.  In this case we also initialize shellface data.
-   */
-  Conversion(const int * nm,       // node_map
-             size_t nm_size,
-             const int * inm,      // inverse_node_map
-             size_t inm_size,
-             const int * sm,       // side_map
-             size_t sm_size,
-             const int * ism,      // inverse_side_map
-             size_t ism_size,
-             const int * sfm,      // shellface_map
-             size_t sfm_size,
-             const int * isfm,     // inverse_shellface_map
-             size_t isfm_size,
-             size_t sfi_offset,
-             const ElemType ct,   // "canonical" aka libmesh element type
-             std::string ex_type) // string representing the Exodus element type
-    : node_map(nm),
-      node_map_size(nm_size),
-      inverse_node_map(inm),
-      inverse_node_map_size(inm_size),
-      side_map(sm),
-      side_map_size(sm_size),
-      inverse_side_map(ism),
-      inverse_side_map_size(ism_size),
-      shellface_map(sfm),
-      shellface_map_size(sfm_size),
-      inverse_shellface_map(isfm),
-      inverse_shellface_map_size(isfm_size),
-      shellface_index_offset(sfi_offset),
-      canonical_type(ct),
-      exodus_type(ex_type)
-  {
-    // libmesh_ignore variables that are only used in asserts to avoid
-    // compiler warnings.
-    libmesh_ignore(node_map_size,
-                   inverse_node_map_size,
-                   inverse_side_map_size,
-                   shellface_map_size,
-                   inverse_shellface_map_size);
-  }
 
   /**
    * \returns The ith component of the node map for this element.
@@ -782,11 +874,7 @@ public:
    * The node map maps the exodusII node numbering format to this
    * library's format.
    */
-  int get_node_map(int i) const
-  {
-    libmesh_assert_less (static_cast<size_t>(i), node_map_size);
-    return node_map[i];
-  }
+  int get_node_map(int i) const;
 
   /**
    * \returns The ith component of the inverse node map for this
@@ -798,11 +886,7 @@ public:
    * \note All elements except Hex27 currently have the same node
    * numbering as libmesh elements.
    */
-  int get_inverse_node_map(int i) const
-  {
-    libmesh_assert_less (static_cast<size_t>(i), inverse_node_map_size);
-    return inverse_node_map[i];
-  }
+  int get_inverse_node_map(int i) const;
 
   /**
    * \returns The ith component of the side map for this element.
@@ -818,30 +902,18 @@ public:
    * The side map maps the libMesh side numbering format to this
    * exodus's format.
    */
-  int get_inverse_side_map(int i) const
-  {
-    libmesh_assert_less (static_cast<size_t>(i), inverse_side_map_size);
-    return inverse_side_map[i];
-  }
+  int get_inverse_side_map(int i) const;
 
   /**
    * \returns The ith component of the shellface map for this element.
    * \note Nothing is currently using this.
    */
-  int get_shellface_map(int i) const
-  {
-    libmesh_assert_less (static_cast<size_t>(i), shellface_map_size);
-    return shellface_map[i];
-  }
+  int get_shellface_map(int i) const;
 
   /**
    * \returns The ith component of the inverse shellface map for this element.
    */
-  int get_inverse_shellface_map(int i) const
-  {
-    libmesh_assert_less (static_cast<size_t>(i), inverse_shellface_map_size);
-    return inverse_shellface_map[i];
-  }
+  int get_inverse_shellface_map(int i) const;
 
   /**
    * \returns The canonical element type for this element.
@@ -849,17 +921,17 @@ public:
    * The canonical element type is the standard element type
    * understood by this library.
    */
-  ElemType get_canonical_type()    const { return canonical_type; }
+  ElemType libmesh_elem_type() const;
 
   /**
    * \returns The string corresponding to the Exodus type for this element.
    */
-  std::string exodus_elem_type() const { return exodus_type; }
+  std::string exodus_elem_type() const;
 
   /**
    * \returns The shellface index offset.
    */
-  std::size_t get_shellface_index_offset() const { return shellface_index_offset; }
+  std::size_t get_shellface_index_offset() const;
 
   /**
    * An invalid_id that can be returned to signal failure in case
@@ -867,75 +939,39 @@ public:
    */
   static const int invalid_id;
 
-private:
   /**
    * Pointer to the node map for this element.
    */
-  const int * node_map;
-
-  /**
-   * The size of the node map array, this helps with bounds checking
-   * and is only used in asserts.
-   */
-  size_t node_map_size;
+  const std::vector<int> * node_map;
 
   /**
    * Pointer to the inverse node map for this element.
    * For all elements except for the Hex27, this is the same
    * as the node map.
    */
-  const int * inverse_node_map;
-
-  /**
-   * The size of the inverse node map array, this helps with bounds
-   * checking and is only used in asserts.
-   */
-  size_t inverse_node_map_size;
+  const std::vector<int> * inverse_node_map;
 
   /**
    * Pointer to the side map for this element.
    */
-  const int * side_map;
-
-  /**
-   * The size of the side map array, this helps with bounds checking...
-   */
-  size_t side_map_size;
+  const std::vector<int> * side_map;
 
   /**
    * Pointer to the inverse side map for this element.
    */
-  const int * inverse_side_map;
-
-  /**
-   * The size of the inverse side map array, this helps with bounds
-   * checking and is only used in asserts.
-   */
-  size_t inverse_side_map_size;
+  const std::vector<int> * inverse_side_map;
 
   /**
    * Pointer to the shellface map for this element. Only the inverse
    * is actually used currently, this one is provided for completeness
    * and libmesh_ingore()d to avoid warnings.
    */
-  const int * shellface_map;
-
-  /**
-   * The size of the shellface map array, this helps with bounds
-   * checking and is only used in asserts.
-   */
-  size_t shellface_map_size;
+  const std::vector<int> * shellface_map;
 
   /**
    * Pointer to the inverse shellface map for this element.
    */
-  const int * inverse_shellface_map;
-
-  /**
-   * The size of the inverse shellface map array, this helps with
-   * bounds checking and is only used in asserts.
-   */
-  size_t inverse_shellface_map_size;
+  const std::vector<int> * inverse_shellface_map;
 
   /**
    * The shellface index offset defines the offset due to a difference between libMesh
@@ -948,322 +984,12 @@ private:
    * The canonical (i.e. standard for this library)
    * element type.
    */
-  const ElemType canonical_type;
+  ElemType libmesh_type;
 
   /**
    * The string corresponding to the Exodus type for this element
    */
-  const std::string exodus_type;
-};
-
-
-
-
-
-
-class ExodusII_IO_Helper::ElementMaps
-{
-public:
-
-  /**
-   * Constructor.  Takes a const reference to an ExodusII_IO_Helper
-   * helper object.  The functionality of ElementMaps should probably
-   * just be moved into the Helper, I have no idea why it's separate
-   * currently.
-   */
-  ElementMaps() {}
-
-public:
-
-  /**
-   * 0D node maps.  These define mappings from ExodusII-formatted
-   * element numberings.
-   */
-
-  /**
-   * The NodeElem node map.
-   */
-  static const int nodeelem_node_map[1];
-
-  /**
-   * 1D node maps.  These define mappings from ExodusII-formatted
-   * element numberings.
-   */
-
-  /**
-   * The Edge2 node map.  Use this map for linear elements in 1D.
-   */
-  static const int edge2_node_map[2];
-
-  /**
-   * The Edge3 node map.  Use this map for quadratic elements in 1D.
-   */
-  static const int edge3_node_map[3];
-
-  /**
-   * 1D edge maps
-   */
-  // FIXME: This notion may or may not be defined in ExodusII
-
-  /**
-   * Maps the Exodus edge numbering for line elements.  Useful for
-   * reading sideset information.
-   */
-  static const int edge_edge_map[2];
-
-  /**
-   * Maps the Exodus edge numbering for line elements.
-   * Useful for writing sideset information.
-   */
-  static const int edge_inverse_edge_map[2];
-
-  /**
-   * 2D node maps.  These define mappings from ExodusII-formatted
-   * element numberings.
-   */
-
-  /**
-   * The Quad4 node map.  Use this map for bi-linear quadrilateral
-   * elements in 2D.
-   */
-  static const int quad4_node_map[4];
-
-  /**
-   * The Quad8 node map.  Use this map for serendipity quadrilateral
-   * elements in 2D.
-   */
-  static const int quad8_node_map[8];
-
-  /**
-   * The Quad9 node map.  Use this map for bi-quadratic quadrilateral
-   * elements in 2D.
-   */
-  static const int quad9_node_map[9];
-
-  /**
-   * The Tri3 node map.  Use this map for linear triangles in 2D.
-   */
-  static const int tri3_node_map[3];
-
-  /**
-   * The Tri6 node map.  Use this map for quadratic triangular
-   * elements in 2D.
-   */
-  static const int tri6_node_map[6];
-
-  /**
-   * 2D edge maps
-   */
-
-  /**
-   * Maps the Exodus edge numbering for triangles.  Useful for reading
-   * sideset information.
-   */
-  static const int tri_edge_map[3];
-
-  /**
-   * Maps the Exodus edge numbering for "shell triangles". In this case
-   * we have "5 sides", where the the first two sides correspond to
-   * the triangle faces and are mapped to "shell face" boundary conditions.
-   * The remaining three sides are mapped to edge boundary conditions.
-   */
-  static const int trishell3_edge_map[3];
-  static const int trishell3_inverse_edge_map[3];
-
-  /**
-   * Maps the Exodus edge numbering for quadrilaterals.  Useful for
-   * reading sideset information.
-   */
-  static const int quad_edge_map[4];
-
-  /**
-   * Maps the Exodus edge numbering for "shell quads". In this case
-   * we have "6 sides", where the the first two sides correspond to
-   * the quad faces and are mapped to "shell face" boundary conditions.
-   * The remaining four sides are mapped to edge boundary conditions.
-   */
-  static const int quadshell4_edge_map[4];
-  static const int quadshell4_inverse_edge_map[4];
-
-  /**
-   * Maps the Exodus edge numbering for triangles.  Useful for writing
-   * sideset information.
-   */
-  static const int tri_inverse_edge_map[3];
-
-  /**
-   * Maps the Exodus edge numbering for quadrilaterals.  Useful for
-   * writing sideset information.
-   */
-  static const int quad_inverse_edge_map[4];
-
-  /**
-   * 3D maps.  These define mappings from ExodusII-formatted element
-   * numberings.
-   */
-
-  /**
-   * The Hex8 node map.  Use this map for bi-linear hexahedral
-   * elements in 3D.
-   */
-  static const int hex8_node_map[8];
-
-  /**
-   * The Hex20 node map.  Use this map for serendipity hexahedral
-   * elements in 3D.
-   */
-  static const int hex20_node_map[20];
-
-  /**
-   * The Hex27 node map.  Use this map for reading tri-quadratic
-   * hexahedral elements in 3D.
-   */
-  static const int hex27_node_map[27];
-
-  /**
-   * The Hex27 inverse node map.  Use this map for writing
-   * tri-quadratic hexahedral elements in 3D.
-   */
-  static const int hex27_inverse_node_map[27];
-
-  /**
-   * The Tet4 node map.  Use this map for linear tetrahedral elements
-   * in 3D.
-   */
-  static const int tet4_node_map[4];
-
-  /**
-   * The Tet10 node map.  Use this map for quadratic tetrahedral
-   * elements in 3D.
-   */
-  static const int tet10_node_map[10];
-
-  /**
-   * The Prism6 node map.
-   */
-  static const int prism6_node_map[6];
-
-  /**
-   * The Prism15 node map.  Use this map for "serendipity" prisms in
-   * 3D.
-   */
-  static const int prism15_node_map[15];
-
-  /**
-   * The Prism18 node map.
-   */
-  static const int prism18_node_map[18];
-
-  /**
-   * The Pyramid5 node map.  Use this map for linear pyramid elements
-   * in 3D.
-   */
-  static const int pyramid5_node_map[5];
-
-  /**
-   * The Pyramid13 node map.  Use this map for "serendipity" pyramid elements
-   * in 3D.
-   */
-  static const int pyramid13_node_map[13];
-
-  /**
-   * The Pyramid14 node map.  Use this map for biquadratic pyramid elements
-   * in 3D.
-   */
-  static const int pyramid14_node_map[14];
-
-
-  /**
-   * Shell element face maps
-   */
-
-  /**
-   * Maps the Exodus shell face numbering for triangles.  Useful for reading
-   * sideset information.
-   */
-  static const int trishell3_shellface_map[2];
-  static const int trishell3_inverse_shellface_map[2];
-
-  /**
-   * Maps the Exodus shell face numbering for quads.  Useful for reading
-   * sideset information.
-   */
-  static const int quadshell4_shellface_map[2];
-  static const int quadshell4_inverse_shellface_map[2];
-
-  /**
-   * 3D face maps.
-   */
-
-  /**
-   * Maps the Exodus face numbering for general hexahedra.
-   * Useful for reading sideset information.
-   */
-  static const int hex_face_map[6];
-
-  /**
-   * Maps the Exodus face numbering for 27-noded hexahedra.
-   * Useful for reading sideset information.
-   */
-  static const int hex27_face_map[6];
-
-  /**
-   * Maps the Exodus face numbering for general tetrahedra.
-   * Useful for reading sideset information.
-   */
-  static const int tet_face_map[4];
-
-  /**
-   * Maps the Exodus face numbering for general prisms.
-   * Useful for reading sideset information.
-   */
-  static const int prism_face_map[5];
-
-  /**
-   * Maps the Exodus face numbering for general pyramids.
-   * Useful for reading sideset information.
-   */
-  static const int pyramid_face_map[5];
-
-  /**
-   * Maps the Exodus face numbering for general hexahedra.
-   * Useful for writing sideset information.
-   */
-  static const int hex_inverse_face_map[6];
-
-  /**
-   * Maps the Exodus face numbering for 27-noded hexahedra.
-   * Useful for writing sideset information.
-   */
-  static const int hex27_inverse_face_map[6];
-
-  /**
-   * Maps the Exodus face numbering for general tetrahedra.
-   * Useful for writing sideset information.
-   */
-  static const int tet_inverse_face_map[4];
-
-  /**
-   * Maps the Exodus face numbering for general prisms.
-   * Useful for writing sideset information.
-   */
-  static const int prism_inverse_face_map[5];
-
-  /**
-   * Maps the Exodus face numbering for general pyramids.
-   * Useful for writing sideset information.
-   */
-  static const int pyramid_inverse_face_map[5];
-
-  /**
-   * \returns A conversion object given an element type name.
-   */
-  ExodusII_IO_Helper::Conversion assign_conversion(std::string type_str);
-
-  /**
-   * \returns A conversion object given an element type.
-   */
-  ExodusII_IO_Helper::Conversion assign_conversion(const ElemType type);
+  std::string exodus_type;
 };
 
 

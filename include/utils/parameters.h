@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,11 +20,6 @@
 #ifndef LIBMESH_PARAMETERS_H
 #define LIBMESH_PARAMETERS_H
 
-// C++ includes
-#include <typeinfo>
-#include <string>
-#include <map>
-
 // Local includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/reference_counted_object.h"
@@ -33,9 +28,10 @@
 // C++ includes
 #include <cstddef>
 #include <map>
+#include <sstream>
 #include <string>
 #include <typeinfo>
-#include <sstream>
+#include <vector>
 
 namespace libMesh
 {
@@ -50,6 +46,9 @@ void print_helper(std::ostream & os, const std::vector<P> * param);
 
 template<typename P>
 void print_helper(std::ostream & os, const std::vector<std::vector<P>> * param);
+
+template<typename P1, typename P2, typename C, typename A>
+void print_helper(std::ostream & os, const std::map<P1, P2, C, A> * param);
 
 /**
  * This class provides the ability to map between
@@ -556,18 +555,34 @@ void print_helper(std::ostream & os, const unsigned char * param)
 template<typename P>
 void print_helper(std::ostream & os, const std::vector<P> * param)
 {
-  for (std::size_t i=0; i<param->size(); ++i)
-    os << (*param)[i] << " ";
+  for (const auto & p : *param)
+    os << p << " ";
 }
 
 //non-member vector<vector> print function
 template<typename P>
 void print_helper(std::ostream & os, const std::vector<std::vector<P>> * param)
 {
-  for (std::size_t i=0; i<param->size(); ++i)
-    for (std::size_t j=0; j<(*param)[i].size(); ++j)
-      os << (*param)[i][j] << " ";
+  for (const auto & pv : *param)
+    for (const auto & p : pv)
+      os << p << " ";
 }
+
+//non-member map print function
+template<typename P1, typename P2, typename C, typename A>
+void print_helper(std::ostream & os, const std::map<P1, P2, C, A> * param)
+{
+  os << '{';
+  std::size_t sz = param->size();
+  for (auto KV : *param)
+    {
+      os << '\'' << KV.first << "\' => \'" << KV.second << '\'';
+      if (--sz)
+        os << ", ";
+    }
+  os << '}';
+}
+
 
 } // namespace libMesh
 

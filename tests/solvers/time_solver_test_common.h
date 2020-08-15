@@ -1,8 +1,15 @@
+#include <libmesh/auto_ptr.h> // libmesh_make_unique
 #include <libmesh/dof_map.h>
-#include <libmesh/fem_system.h>
-#include <libmesh/newton_solver.h>
 #include <libmesh/enum_solver_type.h>
 #include <libmesh/enum_preconditioner_type.h>
+#include <libmesh/fem_system.h>
+#include <libmesh/newton_solver.h>
+#include <libmesh/numeric_vector.h>
+#include <libmesh/parallel.h>
+
+#include "test_comm.h"
+#include "libmesh_cppunit.h"
+
 
 using namespace libMesh;
 
@@ -25,7 +32,7 @@ protected:
     EquationSystems es(mesh);
     SystemType & system = es.add_system<SystemType>("ScalarSystem");
 
-    system.time_solver.reset(new TimeSolverType(system));
+    system.time_solver = libmesh_make_unique<TimeSolverType>(system);
 
     es.init();
 
@@ -48,7 +55,7 @@ protected:
 
     // We're going to want to check our solution, and when we run
     // "make check" with LIBMESH_RUN='mpirun -np N" for N>1 then we'll
-    // need to avoid checking on the processors that are just
+    // need to keep that check in sync with the processors that are just
     // twiddling their thumbs, not owning our mesh point.
     std::vector<dof_id_type> solution_index;
     solution_index.push_back(0);
@@ -59,16 +66,19 @@ protected:
         system.solve();
         system.time_solver->advance_timestep();
 
+        Real rel_error = 0;
+
         if (has_solution)
           {
-            // Use relative error for comparison, so "exact" is 0
             Number exact_soln = system.u(system.time);
-            Real rel_error =  std::abs((exact_soln - (*system.solution)(0))/exact_soln);
-
-            CPPUNIT_ASSERT_DOUBLES_EQUAL( 0.0,
-                                          rel_error,
-                                          std::numeric_limits<Real>::epsilon()*10 );
+            rel_error =  std::abs((exact_soln - (*system.solution)(0))/exact_soln);
           }
+        system.comm().max(rel_error);
+
+        // Using relative error for comparison, so "exact" is 0
+        LIBMESH_ASSERT_FP_EQUAL( rel_error,
+                                 0.0,
+                                 std::numeric_limits<Real>::epsilon()*10 );
       }
   }
 

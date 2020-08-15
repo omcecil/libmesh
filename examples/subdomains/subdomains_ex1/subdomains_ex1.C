@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -115,25 +115,16 @@ int main (int argc, char ** argv)
   GetPot command_line (argc, argv);
 
   // Check for proper calling arguments.
-  if (argc < 3)
-    {
-      // This handy function will print the file name, line number,
-      // specified message, and then throw an exception.
-      libmesh_error_msg("Usage:\n" << "\t " << argv[0] << " -d 2(3)" << " -n 15");
-    }
+  libmesh_error_msg_if(argc < 3, "Usage:\n" << "\t " << argv[0] << " -d 2(3)" << " -n 15");
 
   // Brief message to the user regarding the program name
   // and command line arguments.
-  else
-    {
-      libMesh::out << "Running " << argv[0];
+  libMesh::out << "Running " << argv[0];
 
-      for (int i=1; i<argc; i++)
-        libMesh::out << " " << argv[i];
+  for (int i=1; i<argc; i++)
+    libMesh::out << " " << argv[i];
 
-      libMesh::out << std::endl << std::endl;
-    }
-
+  libMesh::out << std::endl << std::endl;
 
   // Read problem dimension from command line.  Use int
   // instead of unsigned since the GetPot overload is ambiguous
@@ -162,8 +153,8 @@ int main (int argc, char ** argv)
     family = command_line.next(family);
 
   // Cannot use discontinuous basis.
-  if ((family == "MONOMIAL") || (family == "XYZ"))
-    libmesh_error_msg("This example requires a C^0 (or higher) FE basis.");
+  libmesh_error_msg_if((family == "MONOMIAL") || (family == "XYZ"),
+                       "This example requires a C^0 (or higher) FE basis.");
 
   // Create a mesh, with dimension to be overridden later, on the
   // default MPI communicator.
@@ -226,7 +217,7 @@ int main (int argc, char ** argv)
           bool node_out = false;
           for (auto & n : elem->node_ref_range())
             {
-              double d = n.norm();
+              Real d = n.norm();
               if (d<0.8)
                 node_in = true;
               else
@@ -251,7 +242,7 @@ int main (int argc, char ** argv)
   // the circle to 1.
   for (auto elem : mesh.element_ptr_range())
     {
-      double d = elem->centroid().norm();
+      Real d = elem->centroid().norm();
       if (d < 0.8)
         elem->subdomain_id() = 1;
     }
@@ -553,9 +544,9 @@ void assemble_poisson(EquationSystems & es,
           // via the penalty method. This is discussed at length in
           // example 3.
           {
-
-            // Start logging the boundary condition computation
-            perf_log.push ("BCs");
+            // Start logging the boundary condition computation.  We use a
+            // macro to log everything in this scope.
+            LOG_SCOPE_WITH("BCs", "", perf_log);
 
             // The following loops over the sides of the element.  If
             // the element has no neighbor on a side then that side
@@ -621,10 +612,6 @@ void assemble_poisson(EquationSystems & es,
                         Fe(i) += JxW_face[qp]*penalty*value*phi_face[i][qp];
                     }
                 }
-
-
-            // Stop logging the boundary condition computation
-            perf_log.pop ("BCs");
           }
 
           // If this assembly program were to be used on an adaptive mesh,
@@ -637,14 +624,10 @@ void assemble_poisson(EquationSystems & es,
           // and NumericVector::add_vector() members do this for us.
           // Start logging the insertion of the local (element)
           // matrix and vector into the global matrix and vector
-          perf_log.push ("matrix insertion");
+          LOG_SCOPE_WITH("matrix insertion", "", perf_log);
 
           system.matrix->add_matrix (Ke, dof_indices);
           system.rhs->add_vector    (Fe, dof_indices);
-
-          // Start logging the insertion of the local (element)
-          // matrix and vector into the global matrix and vector
-          perf_log.pop ("matrix insertion");
         }
     }
 

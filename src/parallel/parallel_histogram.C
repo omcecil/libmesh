@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -93,7 +93,7 @@ void Histogram<KeyType,IdxType>::build_histogram ()
   // Build a local histogram
   std::vector<IdxType> local_hist (this->n_bins());
 
-  for (IdxType b=0; b<this->n_bins(); b++)
+  for (auto b : index_range(local_hist))
     local_hist[b] = this->local_bin_size(b);
 
   // Add all the local histograms to get the global histogram

@@ -1,21 +1,9 @@
-#include "test_comm.h"
-
 #include <libmesh/bounding_box.h>
 #include <tuple>
 #include <algorithm>
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
-
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
+#include "test_comm.h"
+#include "libmesh_cppunit.h"
 
 using namespace libMesh;
 
@@ -231,28 +219,28 @@ public:
     BoundingBox unit(Point(0.,0.,0.), Point(1.,1.,1.));
 
     // Test points inside the box
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.5, 0.5, 0.5)), -0.5, TOLERANCE * TOLERANCE);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.5, 0.6, 0.5)), -0.4, TOLERANCE * TOLERANCE);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.4, 0.5, 0.5)), -0.4, TOLERANCE * TOLERANCE);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.1, 0.1, 0.1)), -0.1, TOLERANCE * TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(-0.5, unit.signed_distance(Point(0.5, 0.5, 0.5)), TOLERANCE * TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(-0.4, unit.signed_distance(Point(0.5, 0.6, 0.5)), TOLERANCE * TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(-0.4, unit.signed_distance(Point(0.4, 0.5, 0.5)), TOLERANCE * TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(-0.1, unit.signed_distance(Point(0.1, 0.1, 0.1)), TOLERANCE * TOLERANCE);
 
     // Test points on the box
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(1.0, 0.5, 0.5)), 0., TOLERANCE * TOLERANCE);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(1.0, 0., 0.)), 0., TOLERANCE * TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(0., unit.signed_distance(Point(1.0, 0.5, 0.5)), TOLERANCE * TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL(0., unit.signed_distance(Point(1.0, 0., 0.)), TOLERANCE * TOLERANCE);
 
     // Test points outside the box
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(1.5, 0.5, 0.5)), 0.5, TOLERANCE * TOLERANCE);  // right
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(-0.5, 0.5, 0.5)), 0.5, TOLERANCE * TOLERANCE); // left
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.5, 0.5, 1.5)), 0.5, TOLERANCE * TOLERANCE);  // above
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.5, 0.5, -0.5)), 0.5, TOLERANCE * TOLERANCE); // below
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.5, -0.5, 0.5)), 0.5, TOLERANCE * TOLERANCE); // front
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(0.5, 1.5, 0.5)), 0.5, TOLERANCE * TOLERANCE);  // back
+    LIBMESH_ASSERT_FP_EQUAL(0.5, unit.signed_distance(Point(1.5, 0.5, 0.5)), TOLERANCE * TOLERANCE);  // right
+    LIBMESH_ASSERT_FP_EQUAL(0.5, unit.signed_distance(Point(-0.5, 0.5, 0.5)), TOLERANCE * TOLERANCE); // left
+    LIBMESH_ASSERT_FP_EQUAL(0.5, unit.signed_distance(Point(0.5, 0.5, 1.5)), TOLERANCE * TOLERANCE);  // above
+    LIBMESH_ASSERT_FP_EQUAL(0.5, unit.signed_distance(Point(0.5, 0.5, -0.5)), TOLERANCE * TOLERANCE); // below
+    LIBMESH_ASSERT_FP_EQUAL(0.5, unit.signed_distance(Point(0.5, -0.5, 0.5)), TOLERANCE * TOLERANCE); // front
+    LIBMESH_ASSERT_FP_EQUAL(0.5, unit.signed_distance(Point(0.5, 1.5, 0.5)), TOLERANCE * TOLERANCE);  // back
 
     // Outside the box, closest to a corner.
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(2., 2., 2.)), std::sqrt(3.), TOLERANCE * TOLERANCE);    // Point along line (0,0,0) -> (1,1,1)
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(-1., -1., -1.)), std::sqrt(3.), TOLERANCE * TOLERANCE); // Point along line (0,0,0) -> (1,1,1)
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(1.5, 1.5, -0.5)), std::sqrt(3.)/2., TOLERANCE * TOLERANCE); // Point along line (0.5,0.5,0.5) -> (1,1,0)
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(unit.signed_distance(Point(1.5, -0.5, -0.5)), std::sqrt(3.)/2., TOLERANCE * TOLERANCE); // Point along line (0.5,0.5,0.5) -> (1,0,0)
+    LIBMESH_ASSERT_FP_EQUAL(std::sqrt(Real(3)), unit.signed_distance(Point(2., 2., 2.)), TOLERANCE * TOLERANCE);    // Point along line (0,0,0) -> (1,1,1)
+    LIBMESH_ASSERT_FP_EQUAL(std::sqrt(Real(3)), unit.signed_distance(Point(-1., -1., -1.)), TOLERANCE * TOLERANCE); // Point along line (0,0,0) -> (1,1,1)
+    LIBMESH_ASSERT_FP_EQUAL(std::sqrt(Real(3))/2., unit.signed_distance(Point(1.5, 1.5, -0.5)), TOLERANCE * TOLERANCE); // Point along line (0.5,0.5,0.5) -> (1,1,0)
+    LIBMESH_ASSERT_FP_EQUAL(std::sqrt(Real(3))/2., unit.signed_distance(Point(1.5, -0.5, -0.5)), TOLERANCE * TOLERANCE); // Point along line (0.5,0.5,0.5) -> (1,0,0)
   }
 };
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -108,30 +108,28 @@ int main (int argc, char ** argv)
 
   // Check for proper usage.  The quadrature rule
   // must be given at run time.
-  if (argc < 3)
-    {
-      libmesh_error_msg("Usage: " << argv[0] << " -q <rule>\n"          \
-                        << "  where <rule> is one of QGAUSS, QSIMPSON, or QTRAP.");
-    }
-
+  libmesh_error_msg_if(argc < 3,
+                       "Usage: " << argv[0] << " -q <rule>\n"
+                       "  where <rule> is one of QGAUSS, QSIMPSON, or QTRAP.");
 
   // Tell the user what we are doing.
-  else
-    {
-      libMesh::out << "Running " << argv[0];
+  libMesh::out << "Running " << argv[0];
 
-      for (int i=1; i<argc; i++)
-        libMesh::out << " " << argv[i];
+  for (int i=1; i<argc; i++)
+    libMesh::out << " " << argv[i];
 
-      libMesh::out << std::endl << std::endl;
-    }
-
+  libMesh::out << std::endl << std::endl;
 
   // Set the quadrature rule type that the user wants from argv[2]
   quad_type = static_cast<QuadratureType>(std::atoi(argv[2]));
 
   // Skip this 3D example if libMesh was compiled as 1D-only.
   libmesh_example_requires(3 <= LIBMESH_DIM, "3D support");
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // The following is identical to example 4, and therefore
   // not commented.  Differences are mentioned when present.
@@ -181,6 +179,7 @@ int main (int argc, char ** argv)
   // This function just calls the function exact_solution via exact_solution_wrapper
   AnalyticFunction<> exact_solution_object(exact_solution_wrapper);
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
   // In general, when reusing a system-indexed exact solution, we want
   // to use the default system-ordering constructor for
   // DirichletBoundary, so we demonstrate that here.  In this case,
@@ -192,6 +191,7 @@ int main (int argc, char ** argv)
   // We must add the Dirichlet boundary condition _before_
   // we call equation_systems.init()
   equation_systems.get_system("Poisson").get_dof_map().add_dirichlet_boundary(dirichlet_bc);
+#endif
 
   equation_systems.init();
 

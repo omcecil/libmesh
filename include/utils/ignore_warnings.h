@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -66,8 +66,9 @@
 #pragma GCC diagnostic ignored "-Wredundant-decls"
 #pragma GCC diagnostic ignored "-Wcast-qual"
 #pragma GCC diagnostic ignored "-Wswitch-default"
-// And this for Eigen
+// And these are for Eigen
 #pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wstack-protector"
 // And this for VTK
 #pragma GCC diagnostic ignored "-Wlogical-op"
 // Ignore warnings from code that uses deprecated members of std, like std::auto_ptr.
@@ -84,6 +85,10 @@
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #if (__GNUC__ > 7)
 #pragma GCC diagnostic ignored "-Wparentheses"
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#if (__GNUC__ > 8)
+#pragma GCC diagnostic ignored "-Wdeprecated-copy"
+#endif // GCC > 8
 #endif // GCC > 7
 #endif // GCC > 6
 #endif // GCC > 5

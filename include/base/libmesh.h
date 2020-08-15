@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,7 +24,6 @@
 // Local includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/libmesh_base.h"
-#include "libmesh/parallel.h"
 
 #ifdef LIBMESH_FORWARD_DECLARE_ENUMS
 namespace libMesh
@@ -55,6 +54,11 @@ class vtkMPIController;
  */
 namespace libMesh
 {
+
+// Forward declarations
+namespace Parallel {
+  class Communicator;
+}
 
 /**
  * The \p LibMeshInit class, when constructed, initializes
@@ -94,9 +98,10 @@ public:
    * parameter to use a user-specified MPI communicator.
    */
   LibMeshInit(int argc, const char * const * argv,
-              MPI_Comm COMM_WORLD_IN=MPI_COMM_WORLD);
+              MPI_Comm COMM_WORLD_IN=MPI_COMM_WORLD, int n_threads=-1);
 #else
-  LibMeshInit(int argc, const char * const * argv);
+  LibMeshInit(int argc, const char * const * argv,
+              int COMM_WORLD_IN=0, int n_threads=-1);
 #endif
 
   /**
@@ -115,12 +120,12 @@ public:
    * for the user-input MPI_Comm if we were constructed with one, or a
    * wrapper for MPI_COMM_WORLD by default.
    */
-  const Parallel::Communicator & comm() const { return _comm; }
+  const Parallel::Communicator & comm() const { return *_comm; }
 
-  Parallel::Communicator & comm() { return _comm; }
+  Parallel::Communicator & comm() { return *_comm; }
 
 private:
-  Parallel::Communicator _comm;
+  Parallel::Communicator * _comm;
 
 #if defined(LIBMESH_HAVE_MPI) && defined(LIBMESH_HAVE_VTK)
   // VTK object for dealing with MPI stuff in VTK.
@@ -240,9 +245,15 @@ const Number zero = 0.;
 
 /**
  * A number which is used quite often to represent
- * an invalid or uninitialized value.
+ * an invalid or uninitialized value for an unsigned integer.
  */
 const unsigned int invalid_uint = static_cast<unsigned int>(-1);
+
+/**
+ * A number which is used quite often to represent
+ * an invalid or uninitialized value for an integer.
+ */
+const int invalid_int = std::numeric_limits<int>::max();
 
 } // namespace libMesh
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,7 +24,6 @@
 
 // C++ Includes
 #include <unordered_set>
-#include <utility> // std::make_pair
 
 namespace libMesh
 {
@@ -35,6 +34,7 @@ void GhostPointNeighbors::operator()
    processor_id_type p,
    GhostPointNeighbors::map_type & coupled_elements)
 {
+  libmesh_assert(_mesh);
   // Using the connected_nodes set rather than point_neighbors() gives
   // us correct results even in corner cases, such as where two
   // elements meet only at a corner.  ;-)
@@ -61,8 +61,10 @@ void GhostPointNeighbors::operator()
 
   for (const auto & elem : as_range(range_begin, range_end))
     {
+      libmesh_assert(_mesh->query_elem_ptr(elem->id()) == elem);
+
       if (elem->processor_id() != p)
-        coupled_elements.insert (std::make_pair(elem,nullcm));
+        coupled_elements.emplace(elem, nullcm);
 
       for (auto neigh : elem->neighbor_ptr_range())
         {
@@ -76,14 +78,12 @@ void GhostPointNeighbors::operator()
 
                   for (const Elem * f : family)
                     if (f->processor_id() != p)
-                      coupled_elements.insert
-                        (std::make_pair(f, nullcm));
+                      coupled_elements.emplace(f, nullcm);
                 }
               else
 #endif
                 if (neigh->processor_id() != p)
-                  coupled_elements.insert
-                    (std::make_pair(neigh, nullcm));
+                  coupled_elements.emplace(neigh, nullcm);
             }
         }
 
@@ -106,15 +106,14 @@ void GhostPointNeighbors::operator()
     }
 
   // Connect any interior_parents who are really in our mesh
-  for (const auto & elem : _mesh.element_ptr_range())
+  for (const auto & elem : _mesh->element_ptr_range())
     {
       std::unordered_set<const Elem *>::iterator ip_it =
         interior_parents.find(elem);
 
       if (ip_it != interior_parents.end())
         {
-          coupled_elements.insert
-            (std::make_pair(elem, nullcm));
+          coupled_elements.emplace(elem, nullcm);
 
           // Shrink the set ASAP to speed up subsequent searches
           interior_parents.erase(ip_it);
@@ -124,11 +123,11 @@ void GhostPointNeighbors::operator()
   // Connect any active elements which are connected to our range's
   // elements' nodes by addin elements connected to nodes on active
   // local elements.
-  for (const auto & elem : _mesh.active_element_ptr_range())
+  for (const auto & elem : _mesh->active_element_ptr_range())
     if (elem->processor_id() != p)
       for (auto & n : elem->node_ref_range())
         if (connected_nodes.count(&n))
-          coupled_elements.insert(std::make_pair(elem, nullcm));
+          coupled_elements.emplace(elem, nullcm);
 }
 
 } // namespace libMesh

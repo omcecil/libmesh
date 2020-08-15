@@ -36,7 +36,9 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/xdr_cxx.h"
 #include "libmesh/timestamp.h"
-#include "libmesh/parallel.h"
+
+// TIMPI includes
+#include "timpi/communicator.h"
 
 // For checking for the existence of files
 #include <sys/stat.h>
@@ -284,6 +286,9 @@ void TransientRBConstruction::assemble_affine_expansion(bool skip_matrix_assembl
 
 Real TransientRBConstruction::train_reduced_basis(const bool resize_rb_eval_data)
 {
+  libmesh_error_msg_if(get_RB_training_type() == "POD",
+                       "POD RB training is not supported with TransientRBConstruction");
+
   compute_truth_projection_error = true;
   Real value = Parent::train_reduced_basis(resize_rb_eval_data);
   compute_truth_projection_error = false;
@@ -296,22 +301,22 @@ SparseMatrix<Number> * TransientRBConstruction::get_M_q(unsigned int q)
   TransientRBThetaExpansion & trans_theta_expansion =
     cast_ref<TransientRBThetaExpansion &>(get_rb_theta_expansion());
 
-  if (q >= trans_theta_expansion.get_n_M_terms())
-    libmesh_error_msg("Error: We must have q < Q_m in get_M_q.");
+  libmesh_error_msg_if(q >= trans_theta_expansion.get_n_M_terms(),
+                       "Error: We must have q < Q_m in get_M_q.");
 
   return M_q_vector[q].get();
 }
 
 SparseMatrix<Number> * TransientRBConstruction::get_non_dirichlet_M_q(unsigned int q)
 {
-  if (!store_non_dirichlet_operators)
-    libmesh_error_msg("Error: Must have store_non_dirichlet_operators==true to access non_dirichlet_M_q.");
+  libmesh_error_msg_if(!store_non_dirichlet_operators,
+                       "Error: Must have store_non_dirichlet_operators==true to access non_dirichlet_M_q.");
 
   TransientRBThetaExpansion & trans_theta_expansion =
     cast_ref<TransientRBThetaExpansion &>(get_rb_theta_expansion());
 
-  if (q >= trans_theta_expansion.get_n_M_terms())
-    libmesh_error_msg("Error: We must have q < Q_m in get_M_q.");
+  libmesh_error_msg_if(q >= trans_theta_expansion.get_n_M_terms(),
+                       "Error: We must have q < Q_m in get_M_q.");
 
   return non_dirichlet_M_q_vector[q].get();
 }
@@ -458,8 +463,7 @@ void TransientRBConstruction::set_L2_assembly(ElemAssembly & L2_assembly_in)
 
 ElemAssembly & TransientRBConstruction::get_L2_assembly()
 {
-  if (!L2_assembly)
-    libmesh_error_msg("Error: L2_assembly hasn't been initialized yet");
+  libmesh_error_msg_if(!L2_assembly, "Error: L2_assembly hasn't been initialized yet");
 
   return *L2_assembly;
 }
@@ -472,8 +476,8 @@ void TransientRBConstruction::assemble_Mq_matrix(unsigned int q, SparseMatrix<Nu
   TransientRBAssemblyExpansion & trans_assembly_expansion =
     cast_ref<TransientRBAssemblyExpansion &>(get_rb_assembly_expansion());
 
-  if (q >= trans_theta_expansion.get_n_M_terms())
-    libmesh_error_msg("Error: We must have q < Q_m in assemble_Mq_matrix.");
+  libmesh_error_msg_if(q >= trans_theta_expansion.get_n_M_terms(),
+                       "Error: We must have q < Q_m in assemble_Mq_matrix.");
 
   input_matrix->zero();
   add_scaled_matrix_and_vector(1.,
@@ -728,13 +732,13 @@ void TransientRBConstruction::add_IC_to_RB_space()
 {
   LOG_SCOPE("add_IC_to_RB_space()", "TransientRBConstruction");
 
-  if (get_rb_evaluation().get_n_basis_functions() > 0)
-    libmesh_error_msg("Error: Should not call TransientRBConstruction::add_IC_to_RB_space() " \
-                      << "on a system that already contains basis functions.");
+  libmesh_error_msg_if(get_rb_evaluation().get_n_basis_functions() > 0,
+                       "Error: Should not call TransientRBConstruction::add_IC_to_RB_space() "
+                       "on a system that already contains basis functions.");
 
-  if (!nonzero_initialization)
-    libmesh_error_msg("Error: Should not call TransientRBConstruction::add_IC_to_RB_space() " \
-                      << "when nonzero_initialization==false.");
+  libmesh_error_msg_if(!nonzero_initialization,
+                       "Error: Should not call TransientRBConstruction::add_IC_to_RB_space() "
+                       "when nonzero_initialization==false.");
 
   initialize_truth();
 
@@ -759,118 +763,66 @@ void TransientRBConstruction::add_IC_to_RB_space()
 void TransientRBConstruction::enrich_RB_space()
 {
   // Need SLEPc to get the POD eigenvalues
-#if defined(LIBMESH_HAVE_SLEPC)
   LOG_SCOPE("enrich_RB_space()", "TransientRBConstruction");
 
   // With the "method of snapshots", the size of
   // the eigenproblem is determined by the number
   // of time-steps (rather than the number of spatial dofs).
-  PetscBLASInt eigen_size = cast_int<PetscBLASInt>(temporal_data.size());
-  PetscBLASInt LDA = eigen_size; // The leading order of correlation_matrix
-  std::vector<Number> correlation_matrix(LDA*eigen_size);
-
-  for (int i=0; i<eigen_size; i++)
+  unsigned int n_snapshots = temporal_data.size();
+  DenseMatrix<Number> correlation_matrix(n_snapshots,n_snapshots);
+  for (unsigned int i=0; i<n_snapshots; i++)
     {
-      get_non_dirichlet_inner_product_matrix_if_avail()->vector_mult(*inner_product_storage_vector, *temporal_data[i]);
+      get_non_dirichlet_inner_product_matrix_if_avail()->vector_mult(
+        *inner_product_storage_vector, *temporal_data[i]);
 
-      for (int j=i; j<eigen_size; j++)
+      for (unsigned int j=0; j<=i; j++)
         {
           // Scale the inner products by the number of time-steps to normalize the
           // POD energy norm appropriately
           Number inner_prod = (temporal_data[j]->dot(*inner_product_storage_vector)) /
             (Real)(get_n_time_steps()+1);
 
-          // Fill upper triangular part of correlation_matrix
-          correlation_matrix[j*eigen_size+i] = inner_prod;
+          correlation_matrix(i,j) = inner_prod;
+          if(i != j)
+            {
+              correlation_matrix(j,i) = libmesh_conj(inner_prod);
+            }
         }
     }
 
-  // Call the LAPACK eigensolver
-  char JOBZ = 'V'; // Compute eigenvectors and eigenvalues
-  char RANGE = 'A'; // Compute all eigenvalues
-  char UPLO = 'U'; // Upper triangular symmetric matrix
+  // The POD can be formulated in terms of either the SVD or an eigenvalue problem.
+  // Here we use the SVD of the correlation matrix to obtain the POD eigenvalues and
+  // eigenvectors.
+  DenseVector<Real> sigma( n_snapshots );
+  DenseMatrix<Number> U( n_snapshots, n_snapshots );
+  DenseMatrix<Number> VT( n_snapshots, n_snapshots );
+  correlation_matrix.svd(sigma, U, VT );
 
-  Real VL = 0.; // Not used when RANGE = A
-  Real VU = 0.; // Not used when RANGE = A
-
-  PetscBLASInt IL = 0; // Not used when RANGE = A
-  PetscBLASInt IU = 0; // Not used when RANGE = A
-
-  Real ABSTOL = 1.e-14; // Absolute tolerance for eigensolver
-
-  PetscBLASInt M = 0; // (output) The total number of evals found
-
-  std::vector<Real> W(eigen_size); // (output) the eigenvalues
-
-  PetscBLASInt LDZ = eigen_size; // The leading order of Z
-  std::vector<Number> Z(LDZ*eigen_size); // (output) the eigenvectors
-
-  std::vector<PetscBLASInt> ISUPPZ(2*eigen_size); // Indicates which evecs in Z are nonzero
-
-  // Work array, sized according to lapack documentation
-  PetscBLASInt LWORK = 26*eigen_size;
-  std::vector<Number> WORK(LWORK);
-
-  // Work array, sized according to lapack documentation
-  PetscBLASInt LIWORK = 10*eigen_size;
-  std::vector<PetscBLASInt> IWORK(LIWORK);
-
-  PetscBLASInt INFO = 0;
-
-#ifdef LIBMESH_USE_REAL_NUMBERS // Use real numbers
-  // Call the eigensolver for symmetric eigenvalue problems.
-  // NOTE: evals in W are in ascending order
-  LAPACKsyevr_(&JOBZ, &RANGE, &UPLO, &eigen_size, correlation_matrix.data(),
-               &LDA, &VL, &VU, &IL, &IU, &ABSTOL, &M, W.data(), Z.data(), &LDZ,
-               ISUPPZ.data(), WORK.data(), &LWORK, IWORK.data(), &LIWORK, &INFO );
-#elif LIBMESH_USE_COMPLEX_NUMBERS // Use complex numbers
-  // Need some extra data in the complex case
-
-  // Work array, sized according to lapack documentation
-  PetscBLASInt LRWORK = 24*eigen_size;
-  std::vector<Real> RWORK(LRWORK);
-
-  // Call the eigensolver for symmetric eigenvalue problems.
-  // NOTE: evals in W are in ascending order
-  LAPACKsyevr_(&JOBZ, &RANGE, &UPLO, &eigen_size, correlation_matrix.data(),
-               &LDA, &VL, &VU, &IL, &IU, &ABSTOL, &M, W.data(), Z.data(), &LDZ,
-               ISUPPZ.data(), WORK.data(), &LWORK, RWORK.data(), &LRWORK, IWORK.data(),
-               &LIWORK, &INFO );
-#else
-#error libMesh does not yet support quaternions!
-#endif
-
-  if (INFO != 0)
-    libmesh_error_msg("Error in LAPACK syev eigensolver routine, INFO = " << INFO);
-
-  // eval and evec now hold the sorted eigenvalues/eigenvectors
-  libMesh::out << std::endl << "POD Eigenvalues:" << std::endl;
+  libMesh::out << std::endl << "POD singular values:" << std::endl;
   for (unsigned int i=0; i<=1; i++)
     {
-      libMesh::out << "eigenvalue " << i << " = " << W[eigen_size-1-i] << std::endl;
+      libMesh::out << "singular value " << i << " = " << sigma(i) << std::endl;
     }
-  libMesh::out << "..." << std::endl;// << "." << std::endl << "." << std::endl;
-  libMesh::out << "last eigenvalue = " << W[0] << std::endl;
+  libMesh::out << "..." << std::endl;
+  libMesh::out << "last singular value = " << sigma(n_snapshots-1) << std::endl;
   libMesh::out << std::endl;
 
   // Now load the new basis functions
-  unsigned int count = 0;
+  unsigned int j = 0;
   while (true)
     {
       // load the new basis function into the basis_functions vector.
       get_rb_evaluation().basis_functions.emplace_back(NumericVector<Number>::build(this->comm()));
-      NumericVector<Number> & current_bf = get_rb_evaluation().get_basis_function(get_rb_evaluation().get_n_basis_functions()-1);
+      NumericVector<Number> & current_bf =
+        get_rb_evaluation().get_basis_function(get_rb_evaluation().get_n_basis_functions()-1);
       current_bf.init (this->n_dofs(), this->n_local_dofs(), false, PARALLEL);
       current_bf.zero();
 
       // Perform the matrix multiplication of temporal data with
       // the next POD eigenvector
-      for (int j=0; j<eigen_size; j++)
+      for (unsigned int i=0; i<n_snapshots; i++)
         {
-          int Z_row = j;
-          int Z_col = (eigen_size-1-count);
-          int Z_index = Z_col*eigen_size + Z_row;
-          current_bf.add(Z[Z_index], *temporal_data[j]);
+          current_bf.add( U.el(i,j), *temporal_data[i] );
         }
 
       // We just set the norm to 1.
@@ -879,9 +831,9 @@ void TransientRBConstruction::enrich_RB_space()
       Real current_bf_norm = std::abs( std::sqrt( current_bf.dot(*inner_product_storage_vector) ) );
       current_bf.scale(1./current_bf_norm);
 
-      // Increment count here since we use the incremented counter
+      // Increment j here since we use the incremented counter
       // in the if clauses below
-      count++;
+      j++;
 
       // If positive POD_tol, we use it to determine the number of basis functions
       // to add, and then break the loop when POD_tol is satisfied, or after Nmax
@@ -903,22 +855,18 @@ void TransientRBConstruction::enrich_RB_space()
         }
       else
         {
-          if (count == get_delta_N())
+          if (j == get_delta_N())
             {
               break;
             }
           else
             if (get_rb_evaluation().get_n_basis_functions()==get_Nmax())
               {
-                set_delta_N(count);
+                set_delta_N(j);
                 break;
               }
         }
     }
-
-#else
-  libmesh_not_implemented();
-#endif
 }
 
 
@@ -950,12 +898,12 @@ void TransientRBConstruction::load_rb_solution()
   TransientRBEvaluation & trans_rb_eval = cast_ref<TransientRBEvaluation &>(get_rb_evaluation());
   DenseVector<Number> RB_solution_vector_k = trans_rb_eval.RB_temporal_solution_data[time_step];
 
-  if (RB_solution_vector_k.size() > get_rb_evaluation().get_n_basis_functions())
-    libmesh_error_msg("ERROR: rb_eval object contains " \
-                      << get_rb_evaluation().get_n_basis_functions() \
-                      << " basis functions. RB_solution vector constains " \
-                      << RB_solution_vector_k.size() \
-                      << " entries. RB_solution in TransientRBConstruction::load_rb_solution is too long!");
+  libmesh_error_msg_if(RB_solution_vector_k.size() > get_rb_evaluation().get_n_basis_functions(),
+                       "ERROR: rb_eval object contains "
+                       << get_rb_evaluation().get_n_basis_functions()
+                       << " basis functions. RB_solution vector constains "
+                       << RB_solution_vector_k.size()
+                       << " entries. RB_solution in TransientRBConstruction::load_rb_solution is too long!");
 
   for (unsigned int i=0; i<RB_solution_vector_k.size(); i++)
     solution->add(RB_solution_vector_k(i), get_rb_evaluation().get_basis_function(i));
@@ -1368,10 +1316,8 @@ void TransientRBConstruction::read_riesz_representors_from_files(const std::stri
   // should we be worried about leaks in the locations where we're about to fill entries?
   for (std::size_t i=0; i<trans_rb_eval.M_q_representor.size(); ++i)
     for (std::size_t j=0; j<trans_rb_eval.M_q_representor[i].size(); ++j)
-      {
-        if (trans_rb_eval.M_q_representor[i][j] != nullptr)
-          libmesh_error_msg("Error, must delete existing M_q_representor before reading in from file.");
-      }
+      libmesh_error_msg_if(trans_rb_eval.M_q_representor[i][j] != nullptr,
+                           "Error, must delete existing M_q_representor before reading in from file.");
 
   // Now ready to read them in from file!
   for (std::size_t i=0; i<trans_rb_eval.M_q_representor.size(); ++i)
@@ -1386,8 +1332,7 @@ void TransientRBConstruction::read_riesz_representors_from_files(const std::stri
           {
             int stat_result = stat(file_name.str().c_str(), &stat_info);
 
-            if (stat_result != 0)
-              libmesh_error_msg("File does not exist: " << file_name.str());
+            libmesh_error_msg_if(stat_result != 0, "File does not exist: " << file_name.str());
           }
 
         Xdr aqr_data(file_name.str(),

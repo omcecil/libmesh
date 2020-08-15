@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -57,8 +57,7 @@ void TrilinosPreconditioner<T>::apply(const NumericVector<T> & /* x */,
 template <typename T>
 void TrilinosPreconditioner<T>::init ()
 {
-  if (!this->_matrix)
-    libmesh_error_msg("ERROR: No matrix set for PetscPreconditioner, but init() called");
+  libmesh_error_msg_if(!this->_matrix, "ERROR: No matrix set for PetscPreconditioner, but init() called");
 
   // Clear the preconditioner in case it has been created in the past
   if (!this->_is_initialized)

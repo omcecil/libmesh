@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,11 +22,18 @@
 #include "libmesh/fe.h"
 #include "libmesh/fe_interface.h"
 #include "libmesh/elem.h"
-#include "libmesh/threads.h"
 #include "libmesh/tensor_value.h"
+
 
 namespace libMesh
 {
+
+
+LIBMESH_DEFAULT_VECTORIZED_FE(0,LAGRANGE_VEC)
+LIBMESH_DEFAULT_VECTORIZED_FE(1,LAGRANGE_VEC)
+LIBMESH_DEFAULT_VECTORIZED_FE(2,LAGRANGE_VEC)
+LIBMESH_DEFAULT_VECTORIZED_FE(3,LAGRANGE_VEC)
+
 
 // ------------------------------------------------------------
 // Lagrange-specific implementations
@@ -735,16 +742,18 @@ template <> RealGradient FE<3,LAGRANGE_VEC>::shape_second_deriv(const ElemType t
 
 // 0-D
 template <> RealGradient FE<0,LAGRANGE_VEC>::shape(const Elem * elem, const Order order,
-                                                   const unsigned int i, const Point & p)
+                                                   const unsigned int i, const Point & p,
+                                                   const bool add_p_level)
 {
-  Real value = FE<0,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  Real value = FE<0,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
   return libMesh::RealGradient( value );
 }
 template <> RealGradient FE<0,LAGRANGE_VEC>::shape_deriv(const Elem * elem, const Order order,
                                                          const unsigned int i, const unsigned int j,
-                                                         const Point & p)
+                                                         const Point & p,
+                                                         const bool add_p_level)
 {
-  Real value = FE<0,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  Real value = FE<0,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
   return libMesh::RealGradient( value );
 }
 
@@ -752,9 +761,10 @@ template <> RealGradient FE<0,LAGRANGE_VEC>::shape_deriv(const Elem * elem, cons
 
 template <> RealGradient FE<0,LAGRANGE_VEC>::shape_second_deriv(const Elem * elem, const Order order,
                                                                 const unsigned int i, const unsigned int j,
-                                                                const Point & p)
+                                                                const Point & p,
+                                                                const bool add_p_level)
 {
-  Real value = FE<0,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  Real value = FE<0,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
   return libMesh::RealGradient( value );
 }
 
@@ -762,25 +772,28 @@ template <> RealGradient FE<0,LAGRANGE_VEC>::shape_second_deriv(const Elem * ele
 
 // 1-D
 template <> RealGradient FE<1,LAGRANGE_VEC>::shape(const Elem * elem, const Order order,
-                                                   const unsigned int i, const Point & p)
+                                                   const unsigned int i, const Point & p,
+                                                   const bool add_p_level)
 {
-  Real value = FE<1,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  Real value = FE<1,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
   return libMesh::RealGradient( value );
 }
 template <> RealGradient FE<1,LAGRANGE_VEC>::shape_deriv(const Elem * elem, const Order order,
                                                          const unsigned int i, const unsigned int j,
-                                                         const Point & p)
+                                                         const Point & p,
+                                                         const bool add_p_level)
 {
-  Real value = FE<1,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  Real value = FE<1,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
   return libMesh::RealGradient( value );
 }
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 template <> RealGradient FE<1,LAGRANGE_VEC>::shape_second_deriv(const Elem * elem, const Order order,
                                                                 const unsigned int i, const unsigned int j,
-                                                                const Point & p)
+                                                                const Point & p,
+                                                                const bool add_p_level)
 {
-  Real value = FE<1,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  Real value = FE<1,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
   return libMesh::RealGradient( value );
 }
 
@@ -788,9 +801,10 @@ template <> RealGradient FE<1,LAGRANGE_VEC>::shape_second_deriv(const Elem * ele
 
 // 2-D
 template <> RealGradient FE<2,LAGRANGE_VEC>::shape(const Elem * elem, const Order order,
-                                                   const unsigned int i, const Point & p)
+                                                   const unsigned int i, const Point & p,
+                                                   const bool add_p_level)
 {
-  Real value = FE<2,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + elem->p_level()), i/2, p );
+  Real value = FE<2,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i/2, p );
 
   switch( i%2 )
     {
@@ -809,9 +823,10 @@ template <> RealGradient FE<2,LAGRANGE_VEC>::shape(const Elem * elem, const Orde
 }
 template <> RealGradient FE<2,LAGRANGE_VEC>::shape_deriv(const Elem * elem, const Order order,
                                                          const unsigned int i, const unsigned int j,
-                                                         const Point & p)
+                                                         const Point & p,
+                                                         const bool add_p_level)
 {
-  Real value = FE<2,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i/2, j, p );
+  Real value = FE<2,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i/2, j, p );
 
   switch( i%2 )
     {
@@ -832,9 +847,10 @@ template <> RealGradient FE<2,LAGRANGE_VEC>::shape_deriv(const Elem * elem, cons
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 template <> RealGradient FE<2,LAGRANGE_VEC>::shape_second_deriv(const Elem * elem, const Order order,
                                                                 const unsigned int i, const unsigned int j,
-                                                                const Point & p)
+                                                                const Point & p,
+                                                                const bool add_p_level)
 {
-  Real value = FE<2,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i/2, j, p );
+  Real value = FE<2,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i/2, j, p );
 
   switch( i%2 )
     {
@@ -856,9 +872,10 @@ template <> RealGradient FE<2,LAGRANGE_VEC>::shape_second_deriv(const Elem * ele
 
 // 3-D
 template <> RealGradient FE<3,LAGRANGE_VEC>::shape(const Elem * elem, const Order order,
-                                                   const unsigned int i, const Point & p)
+                                                   const unsigned int i, const Point & p,
+                                                   const bool add_p_level)
 {
-  Real value = FE<3,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + elem->p_level()), i/3, p );
+  Real value = FE<3,LAGRANGE>::shape( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i/3, p );
 
   switch( i%3 )
     {
@@ -880,9 +897,10 @@ template <> RealGradient FE<3,LAGRANGE_VEC>::shape(const Elem * elem, const Orde
 }
 template <> RealGradient FE<3,LAGRANGE_VEC>::shape_deriv(const Elem * elem, const Order order,
                                                          const unsigned int i, const unsigned int j,
-                                                         const Point & p)
+                                                         const Point & p,
+                                                         const bool add_p_level)
 {
-  Real value = FE<3,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i/3, j, p );
+  Real value = FE<3,LAGRANGE>::shape_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i/3, j, p );
 
   switch( i%3 )
     {
@@ -907,9 +925,10 @@ template <> RealGradient FE<3,LAGRANGE_VEC>::shape_deriv(const Elem * elem, cons
 
 template <> RealGradient FE<3,LAGRANGE_VEC>::shape_second_deriv(const Elem * elem, const Order order,
                                                                 const unsigned int i, const unsigned int j,
-                                                                const Point & p)
+                                                                const Point & p,
+                                                                const bool add_p_level)
 {
-  Real value = FE<3,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + elem->p_level()), i/3, j, p );
+  Real value = FE<3,LAGRANGE>::shape_second_deriv( elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i/3, j, p );
 
   switch( i%3 )
     {

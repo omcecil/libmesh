@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -89,6 +89,12 @@ InfQuad6::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s]) - trim};
 }
 
+std::vector<unsigned>
+InfQuad6::nodes_on_edge(const unsigned int e) const
+{
+  return nodes_on_side(e);
+}
+
 #ifdef LIBMESH_ENABLE_AMR
 
 const float InfQuad6::_embedding_matrix[InfQuad6::num_children][InfQuad6::num_nodes][InfQuad6::num_nodes] =
@@ -150,7 +156,7 @@ dof_id_type InfQuad6::key (const unsigned int s) const
 
 
 
-unsigned int InfQuad6::which_node_am_i(unsigned int side,
+unsigned int InfQuad6::local_side_node(unsigned int side,
                                        unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
@@ -166,16 +172,23 @@ std::unique_ptr<Elem> InfQuad6::build_side_ptr (const unsigned int i,
 {
   // libmesh_assert_less (i, this->n_sides());
 
+  std::unique_ptr<Elem> edge;
   if (proxy)
     {
       switch (i)
         {
         case 0:
-          return libmesh_make_unique<Side<Edge3,InfQuad6>>(this,i);
+          {
+            edge = libmesh_make_unique<Side<Edge3,InfQuad6>>(this,i);
+            break;
+          }
 
         case 1:
         case 2:
-          return libmesh_make_unique<Side<InfEdge2,InfQuad6>>(this,i);
+          {
+            edge = libmesh_make_unique<Side<InfEdge2,InfQuad6>>(this,i);
+            break;
+          }
 
         default:
           libmesh_error_msg("Invalid side i = " << i);
@@ -184,9 +197,6 @@ std::unique_ptr<Elem> InfQuad6::build_side_ptr (const unsigned int i,
 
   else
     {
-      // Return value
-      std::unique_ptr<Elem> edge;
-
       switch (i)
         {
         case 0:
@@ -207,14 +217,18 @@ std::unique_ptr<Elem> InfQuad6::build_side_ptr (const unsigned int i,
           libmesh_error_msg("Invalid side i = " << i);
         }
 
-      edge->subdomain_id() = this->subdomain_id();
-
       // Set the nodes
-      for (unsigned n=0; n<edge->n_nodes(); ++n)
+      for (auto n : edge->node_index_range())
         edge->set_node(n) = this->node_ptr(InfQuad6::side_nodes_map[i][n]);
-
-      return edge;
     }
+
+#ifdef LIBMESH_ENABLE_DEPRECATED
+  if (!proxy) // proxy sides used to leave parent() set
+#endif
+    edge->set_parent(nullptr);
+  edge->set_interior_parent(this);
+
+  return edge;
 }
 
 
@@ -255,7 +269,9 @@ void InfQuad6::build_side_ptr (std::unique_ptr<Elem> & side,
     }
 
   side->subdomain_id() = this->subdomain_id();
-
+#ifdef LIBMESH_ENABLE_AMR
+  side->set_p_level(this->p_level());
+#endif
   // Set the nodes
   for (auto n : side->node_index_range())
     side->set_node(n) = this->node_ptr(InfQuad6::side_nodes_map[i][n]);

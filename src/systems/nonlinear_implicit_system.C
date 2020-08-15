@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -53,6 +53,7 @@ NonlinearImplicitSystem::NonlinearImplicitSystem (EquationSystems & es,
 
   es.parameters.set<Real>("nonlinear solver absolute residual tolerance") = 1e-35;
   es.parameters.set<Real>("nonlinear solver relative residual tolerance") = 1e-8;
+  es.parameters.set<Real>("nonlinear solver divergence tolerance") = 1e+4;
   es.parameters.set<Real>("nonlinear solver absolute step tolerance") = 1e-8;
   es.parameters.set<Real>("nonlinear solver relative step tolerance") = 1e-8;
 }
@@ -105,33 +106,37 @@ void NonlinearImplicitSystem::set_solver_parameters ()
   const unsigned int maxfuncs =
     es.parameters.get<unsigned int>("nonlinear solver maximum function evaluations");
 
-  const Real abs_resid_tol =
-    es.parameters.get<Real>("nonlinear solver absolute residual tolerance");
+  const double abs_resid_tol =
+    double(es.parameters.get<Real>("nonlinear solver absolute residual tolerance"));
 
-  const Real rel_resid_tol =
-    es.parameters.get<Real>("nonlinear solver relative residual tolerance");
+  const double rel_resid_tol =
+    double(es.parameters.get<Real>("nonlinear solver relative residual tolerance"));
 
-  const Real abs_step_tol =
-    es.parameters.get<Real>("nonlinear solver absolute step tolerance");
+  const double div_tol =
+    double(es.parameters.get<Real>("nonlinear solver divergence tolerance"));
 
-  const Real rel_step_tol =
-    es.parameters.get<Real>("nonlinear solver relative step tolerance");
+  const double abs_step_tol =
+    double(es.parameters.get<Real>("nonlinear solver absolute step tolerance"));
+
+  const double rel_step_tol =
+    double(es.parameters.get<Real>("nonlinear solver relative step tolerance"));
 
   // Get the user-specified linear solver tolerances
   const unsigned int maxlinearits =
     es.parameters.get<unsigned int>("linear solver maximum iterations");
 
-  const Real linear_tol =
-    es.parameters.get<Real>("linear solver tolerance");
+  const double linear_tol =
+    double(es.parameters.get<Real>("linear solver tolerance"));
 
-  const Real linear_min_tol =
-    es.parameters.get<Real>("linear solver minimum tolerance");
+  const double linear_min_tol =
+    double(es.parameters.get<Real>("linear solver minimum tolerance"));
 
   // Set all the parameters on the NonlinearSolver
   nonlinear_solver->max_nonlinear_iterations = maxits;
   nonlinear_solver->max_function_evaluations = maxfuncs;
   nonlinear_solver->absolute_residual_tolerance = abs_resid_tol;
   nonlinear_solver->relative_residual_tolerance = rel_resid_tol;
+  nonlinear_solver->divergence_tolerance = div_tol;
   nonlinear_solver->absolute_step_tolerance = abs_step_tol;
   nonlinear_solver->relative_step_tolerance = rel_step_tol;
   nonlinear_solver->max_linear_iterations = maxlinearits;
@@ -219,14 +224,14 @@ void NonlinearImplicitSystem::assembly(bool get_residual,
   //-----------------------------------------------------------------------------
   // if the user has provided both function pointers and objects only the pointer
   // will be used, so catch that as an error
-  if (nonlinear_solver->jacobian && nonlinear_solver->jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Jacobian!");
+  libmesh_error_msg_if(nonlinear_solver->jacobian && nonlinear_solver->jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the Jacobian!");
 
-  if (nonlinear_solver->residual && nonlinear_solver->residual_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Residual!");
+  libmesh_error_msg_if(nonlinear_solver->residual && nonlinear_solver->residual_object,
+                       "ERROR: cannot specify both a function and object to compute the Residual!");
 
-  if (nonlinear_solver->matvec && nonlinear_solver->residual_and_jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
+  libmesh_error_msg_if(nonlinear_solver->matvec && nonlinear_solver->residual_and_jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
 
   if (get_jacobian)

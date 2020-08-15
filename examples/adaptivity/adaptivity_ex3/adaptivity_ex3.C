@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -76,6 +76,8 @@
 #include "libmesh/elem.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/enum_solver_package.h"
+#include "libmesh/dirichlet_boundaries.h"
+#include "libmesh/wrapped_function.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -109,6 +111,9 @@ Gradient exact_derivative(const Point & p,
 
 // Set the dimensionality of the mesh
 unsigned int dim = 2;
+
+// Set the number of variables to solve for
+unsigned int n_vars = 1;
 
 // Choose whether or not to use the singular solution
 bool singularity = true;
@@ -146,6 +151,7 @@ int main(int argc, char ** argv)
   const std::string refine_type     = input_file("refinement_type", "h");
   const std::string approx_type     = input_file("approx_type", "LAGRANGE");
   const unsigned int approx_order   = input_file("approx_order", 1);
+  n_vars                            = input_file("n_vars", n_vars);
   const std::string element_type    = input_file("element_type", "tensor");
   const int extra_error_quadrature  = input_file("extra_error_quadrature", 0);
   const int max_linear_iterations   = input_file("max_linear_iterations", 5000);
@@ -242,12 +248,35 @@ int main(int argc, char ** argv)
   // Adds the variable "u" to "Laplace", using
   // the finite element type and order specified
   // in the config file
-  system.add_variable("u", static_cast<Order>(approx_order),
-                      Utility::string_to_enum<FEFamily>(approx_type));
+  unsigned int u_var =
+    system.add_variable("u", static_cast<Order>(approx_order),
+                        Utility::string_to_enum<FEFamily>(approx_type));
+
+  std::vector<unsigned int> all_vars(1, u_var);
+
+  // For benchmarking purposes, add more variables if requested.
+  for (unsigned int var_num=1; var_num < n_vars; ++var_num)
+    {
+      std::ostringstream var_name;
+      var_name << "u" << var_num;
+      unsigned int next_var =
+        system.add_variable(var_name.str(),
+                            static_cast<Order>(approx_order),
+                            Utility::string_to_enum<FEFamily>(approx_type));
+      all_vars.push_back(next_var);
+    }
 
   // Give the system a pointer to the matrix assembly
   // function.
   system.attach_assemble_function (assemble_laplace);
+
+  // Add Dirichlet boundary conditions
+  std::set<boundary_id_type> all_bdys { 0 };
+
+  WrappedFunction<Number> exact_val(system, exact_solution);
+  WrappedFunction<Gradient> exact_grad(system, exact_derivative);
+  DirichletBoundary exact_bc(all_bdys, all_vars, exact_val, exact_grad);
+  system.get_dof_map().add_dirichlet_boundary(exact_bc);
 
   // Initialize the data structures for the equation system.
   equation_systems.init();
@@ -270,6 +299,17 @@ int main(int argc, char ** argv)
 
   // Use higher quadrature order for more accurate error results
   exact_sol.extra_quadrature_order(extra_error_quadrature);
+
+  // Compute the initial error
+  exact_sol.compute_error("Laplace", "u");
+
+  // Print out the error values
+  libMesh::out << "Initial L2-Error is: "
+               << exact_sol.l2_error("Laplace", "u")
+               << std::endl;
+  libMesh::out << "Initial H1-Error is: "
+               << exact_sol.h1_error("Laplace", "u")
+               << std::endl;
 
   // A refinement loop.
   for (unsigned int r_step=0; r_step<max_r_steps; r_step++)
@@ -316,6 +356,14 @@ int main(int argc, char ** argv)
       // Compute any discontinuity.  There should be none.
       {
         DiscontinuityMeasure disc;
+
+        // This is a subclass of JumpErrorEstimator, based on
+        // measuring discontinuities across sides between
+        // elements, and we can tell it to use a cheaper
+        // "unweighted" quadrature rule when numerically
+        // integrating those discontinuities.
+        disc.use_unweighted_quadrature_rules = true;
+
         ErrorVector disc_error;
         disc.estimate_error(system, disc_error);
 
@@ -400,6 +448,13 @@ int main(int argc, char ** argv)
                   // driving adaptive refinement in many problems
                   KellyErrorEstimator error_estimator;
 
+                  // This is a subclass of JumpErrorEstimator, based on
+                  // measuring gradient discontinuities across sides
+                  // between elements, and we can tell it to use a
+                  // cheaper "unweighted" quadrature rule when
+                  // numerically integrating those discontinuities.
+                  error_estimator.use_unweighted_quadrature_rules = true;
+
                   error_estimator.estimate_error (system, error);
                 }
 
@@ -453,8 +508,9 @@ int main(int argc, char ** argv)
                   hpselector.singular_points.push_back(Point());
                   hpselector.select_refinement(system);
                 }
-              else if (refine_type != "h")
-                libmesh_error_msg("Unknown refinement_type = " << refine_type);
+              else
+                libmesh_error_msg_if(refine_type != "h",
+                                     "Unknown refinement_type = " << refine_type);
 
               // This call actually refines and coarsens the flagged
               // elements.
@@ -653,7 +709,7 @@ void assemble_laplace(EquationSystems & es,
   const DofMap & dof_map = system.get_dof_map();
 
   // Get a constant reference to the Finite Element type
-  // for the first (and only) variable in the system.
+  // for the first (and only) variable type in the system.
   FEType fe_type = dof_map.variable_type(0);
 
   // Build a Finite Element object of the specified type.  Since the
@@ -676,7 +732,6 @@ void assemble_laplace(EquationSystems & es,
   // We begin with the element Jacobian * quadrature weight at each
   // integration point.
   const std::vector<Real> & JxW      = fe->get_JxW();
-  const std::vector<Real> & JxW_face = fe_face->get_JxW();
 
   // The physical XY locations of the quadrature points on the element.
   // These might be useful for evaluating spatially varying material
@@ -684,17 +739,11 @@ void assemble_laplace(EquationSystems & es,
   const std::vector<Point> & q_point = fe->get_xyz();
 
   // The element shape functions evaluated at the quadrature points.
-  // For this simple problem we usually only need them on element
-  // boundaries.
   const std::vector<std::vector<Real>> & phi = fe->get_phi();
-  const std::vector<std::vector<Real>> & psi = fe_face->get_phi();
 
   // The element shape function gradients evaluated at the quadrature
   // points.
   const std::vector<std::vector<RealGradient>> & dphi = fe->get_dphi();
-
-  // The XY locations of the quadrature points used for face integration
-  const std::vector<Point> & qface_points = fe_face->get_xyz();
 
   // Define data structures to contain the element matrix
   // and right-hand-side vector contribution.  Following
@@ -738,7 +787,6 @@ void assemble_laplace(EquationSystems & es,
 
       const unsigned int n_dofs =
         cast_int<unsigned int>(dof_indices.size());
-      libmesh_assert_equal_to (n_dofs, phi.size());
 
       // Zero the element matrix and right-hand side before
       // summing them.  We use the resize member here because
@@ -756,80 +804,48 @@ void assemble_laplace(EquationSystems & es,
       perf_log.pop("elem init");
 
       // Now we will build the element matrix.  This involves
-      // a double loop to integrate the test functions (i) against
-      // the trial functions (j).
+      // a quadruple loop to integrate the test functions (i) against
+      // the trial functions (j) for each variable (v) at each
+      // quadrature point (qp).
       //
       // Now start logging the element matrix computation
       perf_log.push ("Ke");
 
-      for (unsigned int qp=0; qp<qrule->n_points(); qp++)
-        for (unsigned int i=0; i != n_dofs; i++)
-          for (unsigned int j=0; j != n_dofs; j++)
-            Ke(i,j) += JxW[qp]*(dphi[i][qp]*dphi[j][qp]);
+      std::vector<dof_id_type> dof_indices_u;
+      dof_map.dof_indices (elem, dof_indices_u, 0);
+      const unsigned int n_u_dofs = dof_indices_u.size();
+      libmesh_assert_equal_to (n_u_dofs, phi.size());
+      libmesh_assert_equal_to (n_u_dofs, dphi.size());
 
-      // We need a forcing function to make the 1D case interesting
-      if (mesh_dim == 1)
-        for (unsigned int qp=0; qp<qrule->n_points(); qp++)
-          {
-            Real x = q_point[qp](0);
-            Real f = singularity ? sqrt(3.)/9.*pow(-x, -4./3.) :
-              cos(x);
-            for (unsigned int i=0; i != n_dofs; ++i)
-              Fe(i) += JxW[qp]*phi[i][qp]*f;
-          }
+      for (unsigned int v=0; v != n_vars; ++v)
+        {
+          DenseSubMatrix<Number> Kuu(Ke);
+          Kuu.reposition (v*n_u_dofs, v*n_u_dofs, n_u_dofs, n_u_dofs);
+
+          for (unsigned int qp=0; qp<qrule->n_points(); qp++)
+            for (unsigned int i=0; i != n_u_dofs; i++)
+              for (unsigned int j=0; j != n_u_dofs; j++)
+                Kuu(i,j) += JxW[qp]*(dphi[i][qp]*dphi[j][qp]);
+
+          // We need a forcing function to make the 1D case interesting
+          if (mesh_dim == 1)
+            {
+              DenseSubVector<Number> Fu(Fe);
+              Fu.reposition (v*n_u_dofs, n_u_dofs);
+
+              for (unsigned int qp=0; qp<qrule->n_points(); qp++)
+                {
+                  Real x = q_point[qp](0);
+                  Real f = singularity ? sqrt(3.)/9.*pow(-x, -4./3.) :
+                    cos(x);
+                  for (unsigned int i=0; i != n_u_dofs; ++i)
+                    Fu(i) += JxW[qp]*phi[i][qp]*f;
+                }
+            }
+        }
 
       // Stop logging the matrix computation
       perf_log.pop ("Ke");
-
-
-      // At this point the interior element integration has
-      // been completed.  However, we have not yet addressed
-      // boundary conditions.  For this example we will only
-      // consider simple Dirichlet boundary conditions imposed
-      // via the penalty method.
-      //
-      // This approach adds the L2 projection of the boundary
-      // data in penalty form to the weak statement.  This is
-      // a more generic approach for applying Dirichlet BCs
-      // which is applicable to non-Lagrange finite element
-      // discretizations.
-      {
-        // Start logging the boundary condition computation
-        perf_log.push ("BCs");
-
-        // The penalty value.
-        const Real penalty = 1.e10;
-
-        // The following loops over the sides of the element.
-        // If the element has no neighbor on a side then that
-        // side MUST live on a boundary of the domain.
-        for (auto s : elem->side_index_range())
-          if (elem->neighbor_ptr(s) == nullptr)
-            {
-              fe_face->reinit(elem, s);
-
-              for (unsigned int qp=0; qp<qface->n_points(); qp++)
-                {
-                  const Number value = exact_solution (qface_points[qp],
-                                                       es.parameters,
-                                                       "null",
-                                                       "void");
-
-                  // RHS contribution
-                  for (unsigned int i=0; i != n_dofs; i++)
-                    Fe(i) += penalty*JxW_face[qp]*value*psi[i][qp];
-
-                  // Matrix contribution
-                  for (unsigned int i=0; i != n_dofs; i++)
-                    for (unsigned int j=0; j != n_dofs; j++)
-                      Ke(i,j) += penalty*JxW_face[qp]*psi[i][qp]*psi[j][qp];
-                }
-            }
-
-        // Stop logging the boundary condition computation
-        perf_log.pop ("BCs");
-      }
-
 
       // The element matrix and right-hand-side are now built
       // for this element.  Add them to the global matrix and
@@ -837,15 +853,13 @@ void assemble_laplace(EquationSystems & es,
       // and NumericVector::add_vector() members do this for us.
       // Start logging the insertion of the local (element)
       // matrix and vector into the global matrix and vector
-      perf_log.push ("matrix insertion");
+      LOG_SCOPE_WITH("matrix insertion", "", perf_log);
 
-      dof_map.constrain_element_matrix_and_vector(Ke, Fe, dof_indices);
+      // Use heterogenously here to handle Dirichlet as well as AMR
+      // constraints.
+      dof_map.heterogenously_constrain_element_matrix_and_vector(Ke, Fe, dof_indices);
       system.matrix->add_matrix (Ke, dof_indices);
       system.rhs->add_vector    (Fe, dof_indices);
-
-      // Start logging the insertion of the local (element)
-      // matrix and vector into the global matrix and vector
-      perf_log.pop ("matrix insertion");
     }
 
   // That's it.  We don't need to do anything else to the

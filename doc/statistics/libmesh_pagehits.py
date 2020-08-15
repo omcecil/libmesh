@@ -226,6 +226,22 @@ data = [
     'Jan 2019',   8643,      0, 0.0,
     'Feb 2019',   8729,      0, 0.0,
     'Mar 2019',   7916,      0, 0.0,
+    'Apr 2019',   9256,      0, 0.0,
+    'May 2019',   8841,      0, 0.0,
+    'Jun 2019',   7443,      0, 0.0,
+    'Jul 2019',   7718,      0, 0.0,
+    'Aug 2019',   6167,      0, 0.0,
+    'Sep 2019',   7215,      0, 0.0,
+    'Oct 2019',   8026,      0, 0.0,
+    'Nov 2019',   6529,      0, 0.0,
+    'Dec 2019',   6468,      0, 0.0,
+    'Jan 2020',   6545,      0, 0.0,
+    'Feb 2020',   6577,      0, 0.0,
+    'Mar 2020',   5658,      0, 0.0,
+    'Apr 2020',   6349,      0, 0.0,
+    'May 2020',   7004,      0, 0.0,
+    'Jun 2020',   7590,      0, 0.0,
+    'Jul 2020',   6093,      0, 0.0,
 ]
 
 # Extract number of hits/month
@@ -258,8 +274,8 @@ ax.plot(date_nums, n_hits_month, marker='o', linewidth=2, color=u'#4878cf')
 # Create title
 fig.suptitle('libmesh.github.io Hits/Month (in Thousands)')
 
-# Set up x-tick locations -- August of each year
-ticks_names = ['2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019']
+# Set up x-tick locations
+ticks_names = ['2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019', '2020']
 
 # Get numerical values for the names
 tick_nums = []

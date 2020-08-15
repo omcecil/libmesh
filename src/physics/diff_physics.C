@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -46,8 +46,7 @@ void DifferentiablePhysics::init_physics (const System & sys)
 void DifferentiablePhysics::time_evolving (unsigned int var,
                                            unsigned int order)
 {
-  if (order != 1 && order != 2)
-    libmesh_error_msg("Input order must be 1 or 2!");
+  libmesh_error_msg_if(order != 1 && order != 2, "Input order must be 1 or 2!");
 
   if (_time_evolving.size() <= var)
     _time_evolving.resize(var+1, 0);
@@ -65,7 +64,7 @@ bool DifferentiablePhysics::nonlocal_mass_residual(bool request_jacobian,
 {
   FEMContext & context = cast_ref<FEMContext &>(c);
 
-  for (unsigned int var = 0; var != context.n_vars(); ++var)
+  for (auto var : make_range(context.n_vars()))
     {
       if (!this->is_time_evolving(var))
         continue;

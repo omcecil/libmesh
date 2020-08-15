@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -32,7 +32,8 @@
 namespace libMesh
 {
 
-// Forward declaration
+// Forward declarations
+class EquationSystems;
 template <typename T> class NumericVector;
 
 // The Nemesis API header file.  Should already be
@@ -86,7 +87,7 @@ public:
   /**
    * Fills: num_nodes_global, num_elems_global, num_elem_blks_global,
    * num_node_sets_global, num_side_sets_global
-   * Call after: read_header()
+   * Call after: read_and_store_header_info()
    * Call before: Any other get_* function from this class
    */
   void get_init_global();
@@ -296,6 +297,20 @@ public:
   virtual void initialize(std::string title, const MeshBase & mesh, bool use_discontinuous=false) override;
 
   /**
+   * This function uses global communication routines to determine the
+   * number of element blocks across the entire mesh.
+   */
+  void compute_num_global_elem_blocks(const MeshBase & pmesh);
+
+  /**
+   * This function builds the libmesh -> exodus and exodus -> libmesh
+   * node and element maps.  These maps allow us to have a consistent
+   * numbering scheme within an Exodus file, given an existing globally
+   * consistent numbering scheme from LibMesh.
+   */
+  void build_element_and_node_maps(const MeshBase & pmesh);
+
+  /**
    * Takes a parallel solution vector containing the node-major
    * solution vector for all variables and outputs it to the files.
    * \param parallel_soln
@@ -312,6 +327,14 @@ public:
    */
   void write_nodal_solution(const NumericVector<Number> & parallel_soln,
                             const std::vector<std::string> & names,
+                            int timestep,
+                            const std::vector<std::string> & output_names);
+
+  /**
+   * Outputs EquationSystems current_local_solution nodal values.
+   */
+  void write_nodal_solution(const EquationSystems & es,
+                            const std::vector<std::pair<unsigned int, unsigned int>> & var_nums,
                             int timestep,
                             const std::vector<std::string> & output_names);
 
@@ -334,8 +357,8 @@ public:
    * one subdomain at a time.
    */
   void write_element_values(const MeshBase & mesh,
-                            const NumericVector<Number> & parallel_soln,
-                            const std::vector<std::string> & names,
+                            const EquationSystems & es,
+                            const std::vector<std::pair<unsigned int, unsigned int>> &var_nums,
                             int timestep,
                             const std::vector<std::set<subdomain_id_type>> & vars_active_subdomains);
 
@@ -610,12 +633,6 @@ private:
 
   /**
    * This function uses global communication routines to determine the
-   * number of element blocks across the entire mesh.
-   */
-  void compute_num_global_elem_blocks(const MeshBase & pmesh);
-
-  /**
-   * This function uses global communication routines to determine the
    * number of nodesets across the entire mesh.
    */
   void compute_num_global_nodesets(const MeshBase & pmesh);
@@ -625,14 +642,6 @@ private:
    * number of sidesets across the entire mesh.
    */
   void compute_num_global_sidesets(const MeshBase & pmesh);
-
-  /**
-   * This function builds the libmesh -> exodus and exodus -> libmesh
-   * node and element maps.  These maps allow us to have a consistent
-   * numbering scheme within an Exodus file, given an existing globally
-   * consistent numbering scheme from LibMesh.
-   */
-  void build_element_and_node_maps(const MeshBase & pmesh);
 
   /**
    * This function constructs the set of border node IDs present

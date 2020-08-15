@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,21 +21,23 @@
 #define LIBMESH_FE_TYPE_H
 
 // Local includes
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/compare_types.h"
 #include "libmesh/libmesh_config.h"
 #include "libmesh/enum_order.h"
 #include "libmesh/enum_fe_family.h" // LAGRANGE
 #include "libmesh/enum_inf_map_type.h" // CARTESIAN
+#include "libmesh/hashing.h"
 
 // C++ includes
 #include <memory>
+#include <functional>
 
 namespace libMesh
 {
 
 // Forward declarations
 class QBase;
+class FEType;
 
 /**
  * This provides a shim class that wraps the Order enum.
@@ -87,6 +89,7 @@ private:
    */
   int _order;
 
+  friend struct std::hash<FEType>;
 };
 
 /**
@@ -307,18 +310,39 @@ public:
    * \returns The default quadrature order for this \p FEType.  The
    * default quadrature order is calculated assuming a polynomial of
    * degree \p order and is based on integrating the mass matrix for
-   * such an element exactly.
+   * such an element exactly on affine elements.
    */
   Order default_quadrature_order () const;
 
   /**
    * \returns A quadrature rule of appropriate type and order for this \p
    * FEType.  The default quadrature rule is based on integrating the mass
-   * matrix for such an element exactly.  Higher or lower degree rules can
-   * be chosen by changing the extraorder parameter.
+   * matrix for such an element exactly, with an additional power on
+   * the basis order to help account for nonlinearities and/or
+   * nonuniform coefficients.  Higher or lower degree rules can be
+   * chosen by changing the extraorder parameter.
    */
   std::unique_ptr<QBase> default_quadrature_rule (const unsigned int dim,
                                                   const int extraorder=0) const;
+
+  /**
+   * \returns The default quadrature order for integrating unweighted
+   * basis functions of this \p FEType.
+   * The unweighted quadrature order is calculated assuming a
+   * polynomial of degree \p order and is based on integrating the
+   * shape functions for such an element exactly on affine elements.
+   */
+  Order unweighted_quadrature_order () const;
+
+  /**
+   * \returns A quadrature rule of appropriate type and order for
+   * unweighted integration of this \p FEType.  The default quadrature
+   * rule is based on integrating the shape functions on an affine
+   * element exactly.  Higher or lower degree rules can be chosen by
+   * changing the extraorder parameter.
+   */
+  std::unique_ptr<QBase> unweighted_quadrature_rule (const unsigned int dim,
+                                                     const int extraorder=0) const;
 
 
 private:
@@ -335,7 +359,28 @@ Order FEType::default_quadrature_order () const
   return static_cast<Order>(2*static_cast<unsigned int>(order.get_order()) + 1);
 }
 
+inline
+Order FEType::unweighted_quadrature_order () const
+{
+  return order;
+}
+
 } // namespace libMesh
 
+namespace std
+{
+template <>
+struct hash<libMesh::FEType>
+{
+  std::size_t operator()(const libMesh::FEType & fe_type) const
+    {
+      std::size_t seed = 0;
+      // Old compiler versions seem to need the static_cast
+      libMesh::boostcopy::hash_combine(seed, static_cast<int>(fe_type.family));
+      libMesh::boostcopy::hash_combine(seed, fe_type.order._order);
+      return seed;
+    }
+};
+}
 
 #endif // LIBMESH_FE_TYPE_H

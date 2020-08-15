@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 // libmesh includes
 #include "libmesh/elem.h"
 #include "libmesh/equation_systems.h"
@@ -17,16 +11,8 @@
 
 // test includes
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -58,16 +44,16 @@ private:
     // Test that the copy constructor works
     ParsedFunction<Number> x2_copy(x2);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(x2_copy(Point(0.5,1.5,2.5))), 1.0, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (1.0, libmesh_real(x2_copy(Point(0.5,1.5,2.5))), TOLERANCE*TOLERANCE);
 
     ParsedFunction<Number> xy8("x*y*8");
 
     // Test that the move ctor works
     ParsedFunction<Number> xy8_stolen(std::move(xy8));
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(xy8_stolen(Point(0.5,1.5,2.5))), 6.0, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (6.0, libmesh_real(xy8_stolen(Point(0.5,1.5,2.5))), TOLERANCE*TOLERANCE);
   }
 
   void testInlineGetter()
@@ -78,23 +64,23 @@ private:
     ParsedFunction<Number> ax2_stolen("x");
     ax2_stolen = std::move(ax2);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(ax2_stolen(Point(0.25,0.25,0.25))), 2.25, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (2.25, libmesh_real(ax2_stolen(Point(0.25,0.25,0.25))), TOLERANCE*TOLERANCE);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(ax2_stolen.get_inline_value("a")), 4.5, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (4.5, libmesh_real(ax2_stolen.get_inline_value("a")), TOLERANCE*TOLERANCE);
 
     ParsedFunction<Number> cxy8
       ("a := 4 ; b := a/2+1; c:=b-a+3.5; c*x*2*y*4");
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(cxy8(Point(0.5,0.5,0.5))), 5.0, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (5.0, libmesh_real(cxy8(Point(0.5,0.5,0.5))), TOLERANCE*TOLERANCE);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(cxy8.get_inline_value("b")), 3.0, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (3.0, libmesh_real(cxy8.get_inline_value("b")), TOLERANCE*TOLERANCE);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(cxy8.get_inline_value("c")), 2.5, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (2.5, libmesh_real(cxy8.get_inline_value("c")), TOLERANCE*TOLERANCE);
   }
 
   void testInlineSetter()
@@ -102,24 +88,24 @@ private:
     ParsedFunction<Number> ax2("a:=4.5;a*x*2");
     ax2.set_inline_value("a", 2.5);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(ax2(Point(0.25,0.25,0.25))), 1.25, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (1.25, libmesh_real(ax2(Point(0.25,0.25,0.25))), TOLERANCE*TOLERANCE);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(ax2.get_inline_value("a")), 2.5, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (2.5, libmesh_real(ax2.get_inline_value("a")), TOLERANCE*TOLERANCE);
 
     ParsedFunction<Number> cxy8
       ("a := 4 ; b := a/2+1; c:=b-a+3.5; c*x*2*y*4");
     cxy8.set_inline_value("a", 2);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(cxy8(Point(0.5,0.5,0.5))), 7.0, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (7.0, libmesh_real(cxy8(Point(0.5,0.5,0.5))), TOLERANCE*TOLERANCE);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(cxy8.get_inline_value("b")), 2.0, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (2.0, libmesh_real(cxy8.get_inline_value("b")), TOLERANCE*TOLERANCE);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL
-      (libmesh_real(cxy8.get_inline_value("c")), 3.5, TOLERANCE*TOLERANCE);
+    LIBMESH_ASSERT_FP_EQUAL
+      (3.5, libmesh_real(cxy8.get_inline_value("c")), TOLERANCE*TOLERANCE);
   }
 
   void testTimeDependence()

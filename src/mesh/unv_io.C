@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -32,8 +32,11 @@
 #include "libmesh/cell_hex20.h"
 #include "libmesh/cell_tet10.h"
 #include "libmesh/cell_prism6.h"
+#include "libmesh/utility.h"
+#include "libmesh/boundary_info.h"
 
 // C++ includes
+#include <array>
 #include <iomanip>
 #include <algorithm> // for std::sort
 #include <fstream>
@@ -127,8 +130,7 @@ void UNVIO::read_implementation (std::istream & in_stream)
   elems_of_dimension.resize(4, false);
 
   {
-    if (!in_stream.good())
-      libmesh_error_msg("ERROR: Input file not good.");
+    libmesh_error_msg_if(!in_stream.good(), "ERROR: Input file not good.");
 
     // Flags to be set when certain sections are encountered
     bool
@@ -174,8 +176,8 @@ void UNVIO::read_implementation (std::istream & in_stream)
                 // The current implementation requires the nodes to
                 // have been read before reaching the elements
                 // section.
-                if (!found_node)
-                  libmesh_error_msg("ERROR: The Nodes section must come before the Elements section of the UNV file!");
+                libmesh_error_msg_if(!found_node,
+                                     "ERROR: The Nodes section must come before the Elements section of the UNV file!");
 
                 found_elem = true;
                 this->elements_in(in_stream);
@@ -188,8 +190,8 @@ void UNVIO::read_implementation (std::istream & in_stream)
                 // The current implementation requires the nodes and
                 // elements to have already been read before reaching
                 // the groups section.
-                if (!found_node || !found_elem)
-                  libmesh_error_msg("ERROR: The Nodes and Elements sections must come before the Groups section of the UNV file!");
+                libmesh_error_msg_if(!found_node || !found_elem,
+                                     "ERROR: The Nodes and Elements sections must come before the Groups section of the UNV file!");
 
                 found_group = true;
                 this->groups_in(in_stream);
@@ -214,11 +216,8 @@ void UNVIO::read_implementation (std::istream & in_stream)
 
     // By now we better have found the datasets for nodes and elements,
     // otherwise the unv file is bad!
-    if (!found_node)
-      libmesh_error_msg("ERROR: Could not find nodes!");
-
-    if (!found_elem)
-      libmesh_error_msg("ERROR: Could not find elements!");
+    libmesh_error_msg_if(!found_node, "ERROR: Could not find nodes!");
+    libmesh_error_msg_if(!found_elem, "ERROR: Could not find elements!");
   }
 
 
@@ -228,12 +227,12 @@ void UNVIO::read_implementation (std::istream & in_stream)
     MeshInput<MeshBase>::mesh().set_mesh_dimension(max_elem_dimension_seen());
 
 #if LIBMESH_DIM < 3
-    if (MeshInput<MeshBase>::mesh().mesh_dimension() > LIBMESH_DIM)
-      libmesh_error_msg("Cannot open dimension "                        \
-                        << MeshInput<MeshBase>::mesh().mesh_dimension() \
-                        << " mesh file when configured without "        \
-                        << MeshInput<MeshBase>::mesh().mesh_dimension() \
-                        << "D support." );
+    libmesh_error_msg_if(MeshInput<MeshBase>::mesh().mesh_dimension() > LIBMESH_DIM,
+                         "Cannot open dimension "
+                         << MeshInput<MeshBase>::mesh().mesh_dimension()
+                         << " mesh file when configured without "
+                         << MeshInput<MeshBase>::mesh().mesh_dimension()
+                         << "D support." );
 #endif
 
     // Delete any lower-dimensional elements that might have been
@@ -289,8 +288,7 @@ void UNVIO::write (const std::string & file_name)
 
 void UNVIO::write_implementation (std::ostream & out_file)
 {
-  if (!out_file.good())
-    libmesh_error_msg("ERROR: Output file not good.");
+  libmesh_error_msg_if(!out_file.good(), "ERROR: Output file not good.");
 
   // write the nodes, then the elements
   this->nodes_out    (out_file);
@@ -311,10 +309,6 @@ void UNVIO::nodes_in (std::istream & in_file)
 
   // node label, we use an int here so we can read in a -1
   int node_label;
-
-  // always 3 coordinates in the UNV file, no matter
-  // what LIBMESH_DIM is.
-  Point xyz;
 
   // We'll just read the floating point values as strings even when
   // there are no "D" characters in the file.  This will make parsing
@@ -360,10 +354,27 @@ void UNVIO::nodes_in (std::istream & in_file)
       // stream in the xyz values.
       coords_stream.str(line);
       coords_stream.clear(); // clear iostate bits!  Important!
-      coords_stream >> xyz(0) >> xyz(1) >> xyz(2);
+
+      // always 3 coordinates in the UNV file, no matter
+      // what LIBMESH_DIM is.
+      std::array<Real, 3> xyz;
+
+      coords_stream >> xyz[0] >> xyz[1] >> xyz[2];
+
+      Point p(xyz[0]);
+#if LIBMESH_DIM > 1
+      p(1) = xyz[1];
+#else
+      libmesh_assert_equal_to(xyz[1], 0);
+#endif
+#if LIBMESH_DIM > 2
+      p(2) = xyz[2];
+#else
+      libmesh_assert_equal_to(xyz[2], 0);
+#endif
 
       // Add node to the Mesh, bump the counter.
-      Node * added_node = mesh.add_point(xyz, ctr++);
+      Node * added_node = mesh.add_point(p, ctr++);
 
       // Maintain the mapping between UNV node ids and libmesh Node
       // pointers.
@@ -504,9 +515,9 @@ void UNVIO::groups_in (std::istream & in_file)
                     // one dimension lower than the max element
                     // dimension.  Not sure if "edge" BCs in 3D
                     // actually make sense/are required...
-                    if (group_elem->dim()+1 != max_dim)
-                      libmesh_error_msg("ERROR: Expected boundary element of dimension " \
-                                        << max_dim-1 << " but got " << group_elem->dim());
+                    libmesh_error_msg_if(group_elem->dim()+1 != max_dim,
+                                         "ERROR: Expected boundary element of dimension "
+                                         << max_dim-1 << " but got " << group_elem->dim());
 
                     // Set the current group number as the lower-dimensional element's subdomain ID.
                     // We will use this later to set a boundary ID.
@@ -514,7 +525,7 @@ void UNVIO::groups_in (std::istream & in_file)
                       cast_int<subdomain_id_type>(group_number);
 
                     // Store the lower-dimensional element in the provide_bcs container.
-                    provide_bcs.insert(std::make_pair(group_elem->key(), group_elem));
+                    provide_bcs.emplace(group_elem->key(), group_elem);
                   }
 
                 // dim == max_dim means this group defines a subdomain ID
@@ -647,13 +658,13 @@ void UNVIO::elements_in (std::istream & in_file)
         in_file >> node_labels[j];
 
       // element pointer, to be allocated
-      Elem * elem = nullptr;
+      std::unique_ptr<Elem> elem;
 
       switch (fe_descriptor_id)
         {
         case 11: // Rod
           {
-            elem = new Edge2;
+            elem = Elem::build(EDGE2);
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=1;
@@ -672,7 +683,7 @@ void UNVIO::elements_in (std::istream & in_file)
         case 41: // Plane Stress Linear Triangle
         case 91: // Thin Shell   Linear Triangle
           {
-            elem = new Tri3;  // create new element
+            elem = Elem::build(TRI3);  // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=2;
@@ -683,7 +694,7 @@ void UNVIO::elements_in (std::istream & in_file)
         case 42: // Plane Stress Quadratic Triangle
         case 92: // Thin Shell   Quadratic Triangle
           {
-            elem = new Tri6;  // create new element
+            elem = Elem::build(TRI6);  // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=5;
@@ -700,7 +711,7 @@ void UNVIO::elements_in (std::istream & in_file)
         case 44: // Plane Stress Linear Quadrilateral
         case 94: // Thin Shell   Linear Quadrilateral
           {
-            elem = new Quad4; // create new element
+            elem = Elem::build(QUAD4); // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=3;
@@ -712,7 +723,7 @@ void UNVIO::elements_in (std::istream & in_file)
         case 45: // Plane Stress Quadratic Quadrilateral
         case 95: // Thin Shell   Quadratic Quadrilateral
           {
-            elem = new Quad8; // create new element
+            elem = Elem::build(QUAD8); // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=7;
@@ -727,7 +738,7 @@ void UNVIO::elements_in (std::istream & in_file)
 
         case 300: // Thin Shell   Quadratic Quadrilateral (nine nodes)
           {
-            elem = new Quad9; // create new element
+            elem = Elem::build(QUAD9); // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=7;
@@ -746,7 +757,7 @@ void UNVIO::elements_in (std::istream & in_file)
 
         case 111: // Solid Linear Tetrahedron
           {
-            elem = new Tet4;  // create new element
+            elem = Elem::build(TET4);  // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=1;
@@ -757,7 +768,7 @@ void UNVIO::elements_in (std::istream & in_file)
 
         case 112: // Solid Linear Prism
           {
-            elem = new Prism6;  // create new element
+            elem = Elem::build(PRISM6);  // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=1;
@@ -770,7 +781,7 @@ void UNVIO::elements_in (std::istream & in_file)
 
         case 115: // Solid Linear Brick
           {
-            elem = new Hex8;  // create new element
+            elem = Elem::build(HEX8);  // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=4;
@@ -785,7 +796,7 @@ void UNVIO::elements_in (std::istream & in_file)
 
         case 116: // Solid Quadratic Brick
           {
-            elem = new Hex20; // create new element
+            elem = Elem::build(HEX20); // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=12;
@@ -817,7 +828,7 @@ void UNVIO::elements_in (std::istream & in_file)
 
         case 118: // Solid Quadratic Tetrahedron
           {
-            elem = new Tet10; // create new element
+            elem = Elem::build(TET10); // create new element
 
             assign_elem_nodes[1]=0;
             assign_elem_nodes[2]=4;
@@ -840,11 +851,10 @@ void UNVIO::elements_in (std::istream & in_file)
       for (dof_id_type j=1; j<=n_nodes; j++)
         {
           // Map the UNV node ID to the libmesh node ID
-          auto it = _unv_node_id_to_libmesh_node_ptr.find(node_labels[j]);
-          if (it != _unv_node_id_to_libmesh_node_ptr.end())
-            elem->set_node(assign_elem_nodes[j]) = it->second;
-          else
-            libmesh_error_msg("ERROR: UNV node " << node_labels[j] << " not found!");
+          auto & node_ptr =
+            libmesh_map_find(_unv_node_id_to_libmesh_node_ptr, node_labels[j]);
+
+          elem->set_node(assign_elem_nodes[j]) = node_ptr;
         }
 
       elems_of_dimension[elem->dim()] = true;
@@ -857,7 +867,7 @@ void UNVIO::elements_in (std::istream & in_file)
       _unv_elem_id_to_libmesh_elem_id[element_label] = ctr;
 
       // Add the element to the Mesh
-      mesh.add_elem(elem);
+      mesh.add_elem(std::move(elem));
 
       // Increment the counter for the next iteration
       ctr++;
@@ -888,8 +898,8 @@ void UNVIO::nodes_out (std::ostream & out_file)
   // A reference to the parent class's mesh
   const MeshBase & mesh = MeshOutput<MeshBase>::mesh();
 
-  // Use scientific notation with capital E and 16 digits for printing out the coordinates
-  out_file << std::scientific << std::setprecision(16) << std::uppercase;
+  // Use scientific notation with capital E and default 17 digits for printing out the coordinates
+  out_file << std::scientific << std::setprecision(this->ascii_precision()) << std::uppercase;
 
   for (const auto & current_node : mesh.node_ptr_range())
     {
@@ -1164,8 +1174,7 @@ void UNVIO::read_dataset(std::string file_name)
 {
   std::ifstream in_stream(file_name.c_str());
 
-  if (!in_stream.good())
-    libmesh_error_msg("Error opening UNV data file.");
+  libmesh_error_msg_if(!in_stream.good(), "Error opening UNV data file.");
 
   std::string olds, news, dummy;
 
@@ -1199,8 +1208,7 @@ void UNVIO::read_dataset(std::string file_name)
           in_stream >> dataset_location;
 
           // Currently only nodal datasets are supported.
-          if (dataset_location != 1)
-            libmesh_error_msg("ERROR: Currently only Data at nodes is supported.");
+          libmesh_error_msg_if(dataset_location != 1, "ERROR: Currently only Data at nodes is supported.");
 
           // Ignore the rest of this line and the next five records.
           for (unsigned int i=0; i<6; i++)
@@ -1303,16 +1311,13 @@ void UNVIO::read_dataset(std::string file_name)
                 } // end loop data_cnt
 
               // Get a pointer to the Node associated with the UNV node id.
-              auto it = _unv_node_id_to_libmesh_node_ptr.find(f_n_id);
-
-              if (it == _unv_node_id_to_libmesh_node_ptr.end())
-                libmesh_error_msg("UNV node id " << f_n_id << " was not found.");
+              auto & node_ptr = libmesh_map_find(_unv_node_id_to_libmesh_node_ptr, f_n_id);
 
               // Store the nodal values in our map which uses the
               // libMesh Node* as the key.  We use operator[] here
               // because we want to create an empty vector if the
               // entry does not already exist.
-              _node_data[it->second] = values;
+              _node_data[node_ptr] = values;
             } // end while (true)
         } // end if (news == "2414")
     } // end while (true)

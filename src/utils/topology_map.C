@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,8 +22,9 @@
 #include "libmesh/topology_map.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/node.h"
-#include "libmesh/parallel.h"
+#include "libmesh/parallel_only.h"
 #include "libmesh/remote_elem.h"
+#include "libmesh/libmesh_logging.h"
 
 // C++ Includes
 #include <limits>
@@ -56,10 +57,10 @@ void TopologyMap::add_node(const Node & mid_node,
 
   libmesh_assert_not_equal_to(mid_node_id, DofObject::invalid_id);
 
-  for (std::size_t i=0; i != bracketing_nodes.size(); ++i)
+  for (auto pair : bracketing_nodes)
     {
-      const dof_id_type id1 = bracketing_nodes[i].first;
-      const dof_id_type id2 = bracketing_nodes[i].second;
+      const dof_id_type id1 = pair.first;
+      const dof_id_type id2 = pair.second;
       const dof_id_type lower_id = std::min(id1, id2);
       const dof_id_type upper_id = std::max(id1, id2);
 
@@ -72,8 +73,8 @@ void TopologyMap::add_node(const Node & mid_node,
         libmesh_assert_equal_to (it->second, mid_node_id);
 #endif
 
-      this->_map.insert(std::make_pair(std::make_pair(lower_id, upper_id),
-                                       mid_node_id));
+      this->_map.emplace(std::make_pair(lower_id, upper_id),
+                         mid_node_id);
 
     }
 }
@@ -83,12 +84,10 @@ dof_id_type TopologyMap::find(const std::vector<std::pair<dof_id_type, dof_id_ty
 {
   dof_id_type new_node_id = DofObject::invalid_id;
 
-  for (std::size_t i = 0; i != bracketing_nodes.size(); ++i)
+  for (auto pair : bracketing_nodes)
     {
-      const dof_id_type lower_id = std::min(bracketing_nodes[i].first,
-                                            bracketing_nodes[i].second);
-      const dof_id_type upper_id = std::max(bracketing_nodes[i].first,
-                                            bracketing_nodes[i].second);
+      const dof_id_type lower_id = std::min(pair.first, pair.second);
+      const dof_id_type upper_id = std::max(pair.first, pair.second);
 
       const dof_id_type possible_new_node_id =
         this->find(lower_id, upper_id);
@@ -152,7 +151,7 @@ void TopologyMap::fill(const MeshBase & mesh)
           if (child == remote_elem)
             continue;
 
-          for (unsigned int n = 0; n != elem->n_nodes_in_child(c); ++n)
+          for (unsigned int n = 0, nnic = elem->n_nodes_in_child(c); n != nnic; ++n)
             {
               const std::vector<std::pair<dof_id_type, dof_id_type>>
                 bracketing_nodes = elem->bracketing_nodes(c,n);

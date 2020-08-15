@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -45,13 +45,19 @@
 #endif
 #include <complex>
 #include <typeinfo> // std::bad_cast
-
+#include <type_traits> // std::decay
+#include <functional> // std::less, etc
 
 // Include the MPI definition
 #ifdef LIBMESH_HAVE_MPI
 # include "libmesh/ignore_warnings.h"
 # include <mpi.h>
 # include "libmesh/restore_warnings.h"
+#endif
+
+// Quad precision if we need it
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+#include "libmesh/float128_shims.h"
 #endif
 
 // _basic_ library functionality
@@ -61,25 +67,12 @@
 // Proxy class for libMesh::out/err output
 #include "libmesh/ostream_proxy.h"
 
-// Here we add missing types to the standard namespace.  For example,
-// std::max(double, float) etc... are well behaved but not defined
-// by the standard.  This also includes workarounds for super-strict
-// implementations, for example Sun Studio and PGI C++.  However,
-// this necessarily requires breaking the ISO-C++ standard, and is
-// really just a hack.  As such, only do it if we are building the
-// libmesh library itself.  Specifically, *DO NOT* export this to
-// user code or install this header.
-#ifdef LIBMESH_IS_COMPILING_ITSELF
-#  include "libmesh/libmesh_augment_std_namespace.h"
-#endif
-
 // Make sure the libmesh_nullptr define is available for backwards
 // compatibility, although we no longer use it in the library.
 #include "libmesh/libmesh_nullptr.h"
 
 namespace libMesh
 {
-
 
 // A namespace for functions used in the bodies of the macros below.
 // The macros generally call these functions with __FILE__, __LINE__,
@@ -110,10 +103,6 @@ void report_error(const char * file, int line, const char * date, const char * t
 #  undef COMPLEX
 #endif
 
-#ifdef MPI_REAL
-#  undef MPI_REAL
-#endif
-
 // Check to see if TOLERANCE has been defined by another
 // package, if so we might want to change the name...
 #ifdef TOLERANCE
@@ -131,17 +120,29 @@ typedef LIBMESH_DEFAULT_SCALAR_TYPE Real;
 // considered "good enough" when doing floating point comparisons.
 // For example, v == 0 is changed to std::abs(v) < TOLERANCE.
 
-#ifndef LIBMESH_DEFAULT_SINGLE_PRECISION
+#ifdef LIBMESH_DEFAULT_SINGLE_PRECISION
+static const Real TOLERANCE = 2.5e-3;
+# if defined (LIBMESH_DEFAULT_TRIPLE_PRECISION) || \
+     defined (LIBMESH_DEFAULT_QUADRUPLE_PRECISION)
+#  error Cannot define multiple precision levels
+# endif
+#endif
+
 #ifdef LIBMESH_DEFAULT_TRIPLE_PRECISION
 static const Real TOLERANCE = 1.e-8;
-# define MPI_REAL MPI_LONG_DOUBLE
-#else
-static const Real TOLERANCE = 1.e-6;
-# define MPI_REAL MPI_DOUBLE
+# if defined (LIBMESH_DEFAULT_QUADRUPLE_PRECISION)
+#  error Cannot define multiple precision levels
+# endif
 #endif
-#else
-static const Real TOLERANCE = 2.5e-3;
-# define MPI_REAL MPI_FLOAT
+
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+static const Real TOLERANCE = 1.e-11;
+#endif
+
+#if !defined (LIBMESH_DEFAULT_SINGLE_PRECISION) && \
+    !defined (LIBMESH_DEFAULT_TRIPLE_PRECISION) && \
+    !defined (LIBMESH_DEFAULT_QUADRUPLE_PRECISION)
+static const Real TOLERANCE = 1.e-6;
 #endif
 
 // Define the type to use for complex numbers
@@ -256,6 +257,14 @@ extern bool warned_about_auto_ptr;
 #define libmesh_dbg_var(var)
 #endif
 
+// The libmesh_inf_var() macro indicates that an argument to a function
+// is used only when infinite elements are enabled
+#ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
+#define libmesh_inf_var(var) var
+#else
+#define libmesh_inf_var(var)
+#endif
+
 // The libmesh_assert() macro acts like C's assert(), but throws a
 // libmesh_error() (including stack trace, etc) instead of just exiting
 #ifdef NDEBUG
@@ -270,6 +279,10 @@ extern bool warned_about_auto_ptr;
 #define libmesh_assert_greater_equal_msg(expr1,expr2, msg)  ((void) 0)
 
 #else
+
+#define libmesh_assertion_types(expr1,expr2)                            \
+  typedef typename std::decay<decltype(expr1)>::type libmesh_type1;     \
+  typedef typename std::decay<decltype(expr2)>::type libmesh_type2
 
 #define libmesh_assert_msg(asserted, msg)                               \
   do {                                                                  \
@@ -287,45 +300,102 @@ extern bool warned_about_auto_ptr;
 
 #define libmesh_assert_equal_to_msg(expr1,expr2, msg)                   \
   do {                                                                  \
-    if (!(expr1 == expr2)) {                                            \
+    if (!((expr1) == (expr2))) {                                        \
       libMesh::err << "Assertion `" #expr1 " == " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
       libmesh_error();                                                  \
     } } while (0)
 
 #define libmesh_assert_not_equal_to_msg(expr1,expr2, msg)               \
   do {                                                                  \
-    if (!(expr1 != expr2)) {                                            \
+    if (!((expr1) != (expr2))) {                                        \
       libMesh::err << "Assertion `" #expr1 " != " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
       libmesh_error();                                                  \
     } } while (0)
 
+// Older Clang has a parsing bug that can't seem to handle the handle the decay statement when
+// expanding these macros. We'll just fall back to the previous behavior with those older compilers
+#if defined(__clang__) && (__clang_major__ <= 3)
+
 #define libmesh_assert_less_msg(expr1,expr2, msg)                       \
   do {                                                                  \
-    if (!(expr1 < expr2)) {                                             \
+    if (!((expr1) < (expr2))) {                                         \
       libMesh::err << "Assertion `" #expr1 " < " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
       libmesh_error();                                                  \
     } } while (0)
 
 #define libmesh_assert_greater_msg(expr1,expr2, msg)                    \
   do {                                                                  \
-    if (!(expr1 > expr2)) {                                             \
+    if (!((expr1) > (expr2))) {                                         \
       libMesh::err << "Assertion `" #expr1 " > " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
       libmesh_error();                                                  \
     } } while (0)
 
 #define libmesh_assert_less_equal_msg(expr1,expr2, msg)                 \
   do {                                                                  \
-    if (!(expr1 <= expr2)) {                                            \
+    if (!((expr1) <= (expr2))) {                                        \
       libMesh::err << "Assertion `" #expr1 " <= " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
       libmesh_error();                                                  \
     } } while (0)
 
 #define libmesh_assert_greater_equal_msg(expr1,expr2, msg)              \
   do {                                                                  \
-    if (!(expr1 >= expr2)) {                                            \
+    if (!((expr1) >= (expr2))) {                                        \
       libMesh::err << "Assertion `" #expr1 " >= " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
       libmesh_error();                                                  \
     } } while (0)
+
+// Newer clangs and all other supported compilers
+#else
+
+template <template <class> class Comp>
+struct casting_compare {
+
+  template <typename T1, typename T2>
+  bool operator()(const T1 & e1, const T2 & e2) const
+  {
+    typedef typename std::decay<T1>::type DT1;
+    typedef typename std::decay<T2>::type DT2;
+    return (Comp<DT2>()(static_cast<DT2>(e1), e2) &&
+            Comp<DT1>()(e1, static_cast<DT1>(e2)));
+  }
+
+  template <typename T1>
+  bool operator()(const T1 & e1, const T1 & e2) const
+  {
+    return Comp<T1>()(e1, e2);
+  }
+};
+
+#define libmesh_assert_less_msg(expr1,expr2, msg)                       \
+  do {                                                                  \
+    if (!libMesh::casting_compare<std::less>()(expr1, expr2)) {         \
+      libMesh::err << "Assertion `" #expr1 " < " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
+      libmesh_error();                                                  \
+    } } while (0)
+
+#define libmesh_assert_greater_msg(expr1,expr2, msg)                    \
+  do {                                                                  \
+    if (!libMesh::casting_compare<std::greater>()(expr1, expr2)) {      \
+      libMesh::err << "Assertion `" #expr1 " > " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
+      libmesh_error();                                                  \
+    } } while (0)
+
+#define libmesh_assert_less_equal_msg(expr1,expr2, msg)                 \
+  do {                                                                  \
+    if (!libMesh::casting_compare<std::less_equal>()(expr1, expr2)) {   \
+      libMesh::err << "Assertion `" #expr1 " <= " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
+      libmesh_error();                                                  \
+    } } while (0)
+
+#define libmesh_assert_greater_equal_msg(expr1,expr2, msg)              \
+  do {                                                                  \
+    if (!libMesh::casting_compare<std::greater_equal>()(expr1, expr2)) { \
+      libMesh::err << "Assertion `" #expr1 " >= " #expr2 "' failed.\n" #expr1 " = " << (expr1) << "\n" #expr2 " = " << (expr2) << '\n' << msg << std::endl; \
+      libmesh_error();                                                  \
+    } } while (0)
+
+#endif // clang <4.0
+
 #endif
 
 
@@ -359,6 +429,12 @@ extern bool warned_about_auto_ptr;
   } while (0)
 
 #define libmesh_error() libmesh_error_msg("")
+
+#define libmesh_error_msg_if(cond, msg)         \
+  do {                                          \
+    if (cond)                                   \
+      libmesh_error_msg(msg);                   \
+  } while (0)
 
 #define libmesh_exceptionless_error_msg(msg)                            \
   do {                                                                  \
@@ -488,16 +564,6 @@ inline Tnew cast_ref(Told & oldvar)
 #endif
 }
 
-#ifdef LIBMESH_ENABLE_DEPRECATED
-template <typename Tnew, typename Told>
-inline Tnew libmesh_cast_ref(Told & oldvar)
-{
-  // we use the less redundantly named libMesh::cast_ref now
-  libmesh_deprecated();
-  return cast_ref<Tnew>(oldvar);
-}
-#endif
-
 // We use two different function names to avoid an odd overloading
 // ambiguity bug with icc 10.1.008
 template <typename Tnew, typename Told>
@@ -522,12 +588,16 @@ inline Tnew cast_ptr (Told * oldvar)
 }
 
 
+#ifdef LIBMESH_ENABLE_DEPRECATED
 template <typename Tnew, typename Told>
 inline Tnew libmesh_cast_ptr (Told * oldvar)
 {
+  libmesh_deprecated();
+
   // we use the less redundantly named libMesh::cast_ptr now
   return cast_ptr<Tnew>(oldvar);
 }
+#endif // LIBMESH_ENABLE_DEPRECATED
 
 
 // cast_int asserts that the value of the castee is within the
@@ -590,5 +660,31 @@ namespace libMeshEnums
 {
 using namespace libMesh;
 }
+
+// Backwards compatibility with pre-TIMPI reference
+namespace TIMPI {}
+
+namespace libMesh {
+  namespace Parallel {
+    using namespace TIMPI;
+  }
+}
+
+
+// Here we add missing types to the standard namespace.  For example,
+// std::max(double, float) etc... are well behaved but not defined
+// by the standard.  This also includes workarounds for super-strict
+// implementations, for example Sun Studio and PGI C++.  However,
+// this necessarily requires breaking the ISO-C++ standard, and is
+// really just a hack.  As such, only do it if we are building the
+// libmesh library itself.  Specifically, *DO NOT* export this to
+// user code or install this header.
+//
+// We put this at the end of libmesh_common.h so we can make use of
+// any exotic definitions of Real above.
+#ifdef LIBMESH_IS_COMPILING_ITSELF
+#  include "libmesh/libmesh_augment_std_namespace.h"
+#endif
+
 
 #endif // LIBMESH_LIBMESH_COMMON_H

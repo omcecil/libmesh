@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -107,6 +107,21 @@ NumericVector<T> & EigenSparseVector<T>::operator -= (const NumericVector<T> & v
 
 
 template <typename T>
+NumericVector<T> & EigenSparseVector<T>::operator *= (const NumericVector<T> & v_in)
+{
+  libmesh_assert (this->closed());
+  libmesh_assert_equal_to(size(), v_in.size());
+
+  const EigenSparseVector<T> & v = cast_ref<const EigenSparseVector<T> &>(v_in);
+
+  _vec = _vec.cwiseProduct(v._vec);
+
+  return *this;
+}
+
+
+
+template <typename T>
 NumericVector<T> & EigenSparseVector<T>::operator /= (const NumericVector<T> & v_in)
 {
   libmesh_assert (this->closed());
@@ -151,9 +166,7 @@ void EigenSparseVector<T>::add (const T v)
 {
   _vec += EigenSV::Constant(this->size(), v);
 
-#ifndef NDEBUG
   this->_is_closed = false;
-#endif
 }
 
 
@@ -293,9 +306,7 @@ EigenSparseVector<T>::operator = (const EigenSparseVector<T> & v)
 
   _vec = v._vec;
 
-#ifndef NDEBUG
   this->_is_closed = true;
-#endif
 
   return *this;
 }
@@ -374,9 +385,7 @@ void EigenSparseVector<T>::localize (const numeric_index_type libmesh_dbg_var(fi
 
   libmesh_assert_less_equal (send_list.size(), this->size());
 
-#ifndef NDEBUG
   this->_is_closed = true;
-#endif
 }
 
 

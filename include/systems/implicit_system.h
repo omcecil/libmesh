@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 
 // Local Includes
 #include "libmesh/explicit_system.h"
+#include "libmesh/auto_ptr.h"
 
 // C++ includes
 #include <cstddef>
@@ -312,8 +313,32 @@ public:
    * solution.  When not \p System but the user wants to
    * initialize the mayor matrix, then all the additional matrices,
    * if existent, have to be initialized by the user, too.
+   *
+   * This non-template method will add a derived matrix type corresponding to
+   * the solver package. If the user wishes to specify the matrix type to add,
+   * use the templated \p add_matrix method instead
+   *
+   * @param type The serial/parallel/ghosted type of the matrix
+   *
    */
-  SparseMatrix<Number> & add_matrix (const std::string & mat_name);
+  SparseMatrix<Number> & add_matrix (const std::string & mat_name, ParallelType type = PARALLEL);
+
+  /**
+   * Adds the additional matrix \p mat_name to this system.  Only
+   * allowed prior to \p assemble().  All additional matrices
+   * have the same sparsity pattern as the matrix used during
+   * solution.  When not \p System but the user wants to
+   * initialize the mayor matrix, then all the additional matrices,
+   * if existent, have to be initialized by the user, too.
+   *
+   * This method will create add a derived matrix of type
+   * \p MatrixType<Number>. One can use the non-templated \p add_matrix method to
+   * add a matrix corresponding to the default solver package
+   *
+   * @param type The serial/parallel/ghosted type of the matrix
+   */
+  template <template <typename> class>
+  SparseMatrix<Number> & add_matrix (const std::string & mat_name, ParallelType = PARALLEL);
 
   /**
    * Removes the additional matrix \p mat_name from this system
@@ -406,6 +431,11 @@ private:
   std::map<std::string, SparseMatrix<Number> *> _matrices;
 
   /**
+   * Holds the types of the matrices
+   */
+  std::map<std::string, ParallelType> _matrix_types;
+
+  /**
    * \p true when additional matrices may still be added, \p false otherwise.
    */
   bool _can_add_matrices;
@@ -426,6 +456,29 @@ inline
 unsigned int ImplicitSystem::n_matrices () const
 {
   return cast_int<unsigned int>(_matrices.size());
+}
+
+template <template <typename> class MatrixType>
+inline
+SparseMatrix<Number> &
+ImplicitSystem::add_matrix (const std::string & mat_name,
+                            const ParallelType type)
+{
+  // only add matrices before initializing...
+  libmesh_error_msg_if(!_can_add_matrices,
+                       "ERROR: Too late.  Cannot add matrices to the system after initialization"
+                       "\n any more.  You should have done this earlier.");
+
+  // Return the matrix if it is already there.
+  if (this->have_matrix(mat_name))
+    return *(_matrices[mat_name]);
+
+  // Otherwise build the matrix and return it.
+  SparseMatrix<Number> * buf = libmesh_make_unique<MatrixType<Number>>(this->comm()).release();
+  _matrices.emplace(mat_name, buf);
+  _matrix_types.emplace(mat_name, type);
+
+  return *buf;
 }
 
 } // namespace libMesh

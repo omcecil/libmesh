@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,8 +28,7 @@ int main(int argc, char ** argv)
 {
   using namespace libMesh;
 
-  if (argc < 2)
-    libmesh_error_msg("Usage: " << argv[0] << " inputconfigfile [outputconfigfile]");
+  libmesh_error_msg_if(argc < 2, "Usage: " << argv[0] << " inputconfigfile [outputconfigfile]");
 
   GetPot gp(argv[1]);
 

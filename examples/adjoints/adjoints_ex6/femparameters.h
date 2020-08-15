@@ -35,6 +35,7 @@ public:
   bool transient;
   unsigned int deltat_reductions;
   std::string timesolver_core;
+  std::string solution_history_type;
   libMesh::Real end_time, deltat, timesolver_theta,
     timesolver_maxgrowth, timesolver_tolerance,
     timesolver_upper_tolerance, steadystate_tolerance;
@@ -130,8 +131,8 @@ public:
   libMesh::Real min_step_length;
   unsigned int max_linear_iterations, max_nonlinear_iterations;
   libMesh::Real relative_step_tolerance, relative_residual_tolerance,
-    absolute_residual_tolerance,
-    initial_linear_tolerance, minimum_linear_tolerance,
+    absolute_residual_tolerance;
+  double initial_linear_tolerance, minimum_linear_tolerance,
     linear_tolerance_multiplier;
 
   // Initialization

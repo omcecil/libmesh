@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 // libmesh includes
 #include "libmesh/elem.h"
 #include "libmesh/equation_systems.h"
@@ -12,22 +6,17 @@
 #include "libmesh/numeric_vector.h"
 #include "libmesh/parsed_fem_function.h"
 #include "libmesh/system.h"
+#include <libmesh/auto_ptr.h> // libmesh_make_unique
+
+#ifdef LIBMESH_HAVE_FPARSER
 
 // test includes
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
 // C++ includes
 #include <memory>
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -36,9 +25,9 @@ class ParsedFEMFunctionTest : public CppUnit::TestCase
 public:
   void setUp() {
 #if LIBMESH_DIM > 2
-    mesh.reset(new Mesh(*TestCommWorld));
+    mesh = libmesh_make_unique<Mesh>(*TestCommWorld);
     MeshTools::Generation::build_cube(*mesh, 1, 1, 1);
-    es.reset(new EquationSystems(*mesh));
+    es = libmesh_make_unique<EquationSystems>(*mesh);
     sys = &(es->add_system<System> ("SimpleSystem"));
     sys->add_variable("x2");
     sys->add_variable("x3");
@@ -98,12 +87,19 @@ public:
     sol.close();
     sys->update();
 
-    c.reset(new FEMContext(*sys));
-    s.reset(new FEMContext(*sys));
+    c = libmesh_make_unique<FEMContext>(*sys);
+    s = libmesh_make_unique<FEMContext>(*sys);
     if (elem && elem->processor_id() == TestCommWorld->rank())
       {
+        c->get_element_fe(0)->get_phi();
+        c->get_element_fe(0)->get_dphi();
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+        c->get_element_fe(0)->get_d2phi();
+#endif
         c->pre_fe_reinit(*sys, elem);
         c->elem_fe_reinit();
+
+        s->get_side_fe(0)->get_normals(); // Prerequest
         s->pre_fe_reinit(*sys, elem);
         s->side = 3;
         s->side_fe_reinit();
@@ -150,16 +146,16 @@ private:
         // Test that copy constructor works
         ParsedFEMFunction<Number> x2_copy(x2);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(x2_copy(*c,Point(0.5,0.5,0.5))), 1.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (1.0, libmesh_real(x2_copy(*c,Point(0.5,0.5,0.5))), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> xy8(*sys, "x2*y4");
 
         // Test that move constructor works
         ParsedFEMFunction<Number> xy8_stolen(std::move(xy8));
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(xy8_stolen(*c,Point(0.5,0.5,0.5))), 2.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (2.0, libmesh_real(xy8_stolen(*c,Point(0.5,0.5,0.5))), TOLERANCE*TOLERANCE);
       }
   }
 
@@ -177,18 +173,18 @@ private:
         // ParsedFEMFunction<Number> c2_assigned(*sys, "grad_y_xyz");
         // c2_assigned = c2;
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(c2(*c,Point(0.35,0.45,0.55))), 2.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (2.0, libmesh_real(c2(*c,Point(0.35,0.45,0.55))), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> xz(*sys, "grad_y_xyz");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(xz(*c,Point(0.25,0.35,0.75))), 0.1875, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (0.1875, libmesh_real(xz(*c,Point(0.25,0.35,0.75))), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> xyz(*sys, "grad_y_xyz*grad_x_xy");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(xyz(*c,Point(0.25,0.5,0.75))), 0.09375, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (0.09375, libmesh_real(xyz(*c,Point(0.25,0.5,0.75))), TOLERANCE*TOLERANCE);
       }
   }
 
@@ -200,18 +196,18 @@ private:
       {
         ParsedFEMFunction<Number> c1(*sys, "hess_xy_xy");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(c1(*c,Point(0.35,0.45,0.55))), 1.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (1.0, libmesh_real(c1(*c,Point(0.35,0.45,0.55))), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> x(*sys, "hess_yz_xyz");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(x(*c,Point(0.25,0.35,0.55))), 0.25, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (0.25, libmesh_real(x(*c,Point(0.25,0.35,0.55))), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> xz(*sys, "hess_yz_xyz*grad_y_yz");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(xz(*c,Point(0.25,0.4,0.75))), 0.1875, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (0.1875, libmesh_real(xz(*c,Point(0.25,0.4,0.75))), TOLERANCE*TOLERANCE);
       }
   }
 
@@ -222,23 +218,23 @@ private:
       {
         ParsedFEMFunction<Number> ax2(*sys, "a:=4.5;a*x2");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(ax2(*c,Point(0.25,0.25,0.25))), 2.25, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (2.25, libmesh_real(ax2(*c,Point(0.25,0.25,0.25))), TOLERANCE*TOLERANCE);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(ax2.get_inline_value("a")), 4.5, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (4.5, libmesh_real(ax2.get_inline_value("a")), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> cxy8
           (*sys, "a := 4 ; b := a/2+1; c:=b-a+3.5; c*x2*y4");
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(cxy8(*c,Point(0.5,0.5,0.5))), 5.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (5.0, libmesh_real(cxy8(*c,Point(0.5,0.5,0.5))), TOLERANCE*TOLERANCE);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(cxy8.get_inline_value("b")), 3.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (3.0, libmesh_real(cxy8.get_inline_value("b")), TOLERANCE*TOLERANCE);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(cxy8.get_inline_value("c")), 2.5, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (2.5, libmesh_real(cxy8.get_inline_value("c")), TOLERANCE*TOLERANCE);
       }
   }
 
@@ -250,25 +246,25 @@ private:
         ParsedFEMFunction<Number> ax2(*sys, "a:=4.5;a*x2");
         ax2.set_inline_value("a", 2.5);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(ax2(*c,Point(0.25,0.25,0.25))), 1.25, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (1.25, libmesh_real(ax2(*c,Point(0.25,0.25,0.25))), TOLERANCE*TOLERANCE);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(ax2.get_inline_value("a")), 2.5, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (2.5, libmesh_real(ax2.get_inline_value("a")), TOLERANCE*TOLERANCE);
 
         ParsedFEMFunction<Number> cxy8
           (*sys, "a := 4 ; b := a/2+1; c:=b-a+3.5; c*x2*y4");
 
         cxy8.set_inline_value("a", 2);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(cxy8(*c,Point(0.5,0.5,0.5))), 7.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (7.0, libmesh_real(cxy8(*c,Point(0.5,0.5,0.5))), TOLERANCE*TOLERANCE);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(cxy8.get_inline_value("b")), 2.0, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (2.0, libmesh_real(cxy8.get_inline_value("b")), TOLERANCE*TOLERANCE);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL
-          (libmesh_real(cxy8.get_inline_value("c")), 3.5, TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL
+          (3.5, libmesh_real(cxy8.get_inline_value("c")), TOLERANCE*TOLERANCE);
 
       }
   }
@@ -289,12 +285,12 @@ private:
         // On side 3 of a hex the normal direction is +y
         for (std::size_t qp=0; qp != xyz.size(); ++qp)
           {
-            CPPUNIT_ASSERT_DOUBLES_EQUAL
-              (libmesh_real(nx(*s,xyz[qp])), 0.0, TOLERANCE*TOLERANCE);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL
-              (libmesh_real(ny(*s,xyz[qp])), 1.0, TOLERANCE*TOLERANCE);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL
-              (libmesh_real(nz(*s,xyz[qp])), 0.0, TOLERANCE*TOLERANCE);
+            LIBMESH_ASSERT_FP_EQUAL
+              (0.0, libmesh_real(nx(*s,xyz[qp])), TOLERANCE*TOLERANCE);
+            LIBMESH_ASSERT_FP_EQUAL
+              (1.0, libmesh_real(ny(*s,xyz[qp])), TOLERANCE*TOLERANCE);
+            LIBMESH_ASSERT_FP_EQUAL
+              (0.0, libmesh_real(nz(*s,xyz[qp])), TOLERANCE*TOLERANCE);
           }
       }
   }
@@ -302,3 +298,5 @@ private:
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(ParsedFEMFunctionTest);
+
+#endif // #ifdef LIBMESH_HAVE_FPARSER

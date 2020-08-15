@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -174,7 +174,7 @@ void EpetraMatrix<T>::init (const numeric_index_type m,
 
 
 template <typename T>
-void EpetraMatrix<T>::init ()
+void EpetraMatrix<T>::init (const ParallelType)
 {
   libmesh_assert(this->_dof_map);
 
@@ -198,6 +198,40 @@ void EpetraMatrix<T>::zero ()
   libmesh_assert (this->initialized());
 
   _mat->Scale(0.0);
+}
+
+
+
+template <typename T>
+std::unique_ptr<SparseMatrix<T>> EpetraMatrix<T>::zero_clone () const
+{
+  // This function is marked as "not implemented" since it hasn't been
+  // tested, the code below might serve as a possible implementation.
+  libmesh_not_implemented();
+
+  // Make empty copy with matching comm, initialize, and return.
+  auto mat_copy = libmesh_make_unique<EpetraMatrix<T>>(this->comm());
+  mat_copy->init();
+  mat_copy->zero();
+
+  // Work around an issue on older compilers.  We are able to simply
+  // "return mat_copy;" on newer compilers
+  return std::unique_ptr<SparseMatrix<T>>(mat_copy.release());
+}
+
+
+
+template <typename T>
+std::unique_ptr<SparseMatrix<T>> EpetraMatrix<T>::clone () const
+{
+  // We don't currently have a faster implementation than making a
+  // zero clone and then filling in the values.
+  auto mat_copy = this->zero_clone();
+  mat_copy->add(1., *this);
+
+  // Work around an issue on older compilers.  We are able to simply
+  // "return mat_copy;" on newer compilers
+  return std::unique_ptr<SparseMatrix<T>>(mat_copy.release());
 }
 
 

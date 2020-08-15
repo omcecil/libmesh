@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,13 @@
 #ifdef LIBMESH_HAVE_PETSC
 
 #include "libmesh_exceptions.h"
+#ifdef I
+# define LIBMESH_SAW_I
+#endif
 #include <petscsys.h>
+#ifndef LIBMESH_SAW_I
+# undef I // Avoid complex.h contamination
+#endif
 
 namespace libMesh
 {
@@ -41,10 +47,18 @@ public:
     SolverException(error_code_in)
   {
     const char * text;
+    char * specific;
     // This is one scenario where we don't catch the error code
     // returned by a PETSc function :)
-    PetscErrorMessage(error_code, &text, nullptr);
-    what_message = text;
+    PetscErrorMessage(error_code, &text, &specific);
+
+    // Usually the "specific" error message string is more useful than
+    // the generic text corresponding to the error_code, since many
+    // SETERRQ calls just use error_code == 1
+    if (specific)
+      what_message = std::string(specific);
+    else if (text)
+      what_message = std::string(text);
   }
 };
 

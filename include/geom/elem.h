@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,7 +28,6 @@
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/node.h"
 #include "libmesh/enum_elem_type.h" // INVALID_ELEM
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/multi_predicates.h"
 #include "libmesh/pointer_to_pointer_iter.h"
 #include "libmesh/int_range.h"
@@ -57,6 +56,7 @@ enum Order : int;
 #include <set>
 #include <vector>
 #include <memory>
+#include <array>
 
 namespace libMesh
 {
@@ -69,6 +69,8 @@ class Elem;
 class PeriodicBoundaries;
 class PointLocatorBase;
 #endif
+template <class SideType, class ParentType>
+class Side;
 
 
 /**
@@ -409,14 +411,30 @@ public:
    * \returns The local node id for node \p side_node on side \p side of
    * this Elem. Simply relies on the \p side_nodes_map for each of the
    * derived types. For example,
-   * Tri3::which_node_am_i(0, 0) -> 0
-   * Tri3::which_node_am_i(0, 1) -> 1
-   * Tri3::which_node_am_i(1, 0) -> 1
-   * Tri3::which_node_am_i(1, 1) -> 2
+   * Tri3::local_side_node(0, 0) -> 0
+   * Tri3::local_side_node(0, 1) -> 1
+   * Tri3::local_side_node(1, 0) -> 1
+   * Tri3::local_side_node(1, 1) -> 2
    * etc...
    */
-  virtual unsigned int which_node_am_i(unsigned int side,
+  virtual unsigned int local_side_node(unsigned int side,
                                        unsigned int side_node) const = 0;
+
+  /**
+   * Similar to Elem::local_side_node(), but instead of a side id, takes
+   * an edge id and a node id on that edge and returns a local node number
+   * for the Elem. The implementation relies on the "edge_nodes_map" tables
+   * for 3D elements. For 2D elements, calls local_side_node(). Throws an
+   * error if called on 1D elements.
+   */
+  virtual unsigned int local_edge_node(unsigned int edge,
+                                       unsigned int edge_node) const = 0;
+
+  /**
+   * This function is deprecated, call local_side_node(side, side_node) instead.
+   */
+  unsigned int which_node_am_i(unsigned int side,
+                               unsigned int side_node) const;
 
   /**
    * \returns \p true if a vertex of \p e is contained
@@ -522,12 +540,12 @@ public:
   void make_links_to_me_remote ();
 
   /**
-   * Resets the appropriate neighbor pointers of our nth neighbor (and
+   * Resets the \p neighbor_side pointers of our nth neighbor (and
    * its descendants, if appropriate) to point to this Elem instead of
    * to the global remote_elem.  Used by the library when a formerly
    * remote element is being added to the local processor.
    */
-  void make_links_to_me_local (unsigned int n);
+  void make_links_to_me_local (unsigned int n, unsigned int neighbor_side);
 
   /**
    * \returns \p true if this element is remote, false otherwise.
@@ -711,6 +729,16 @@ public:
    * \returns the (local) node numbers on the specified side
    */
   virtual std::vector<unsigned int> nodes_on_side(const unsigned int /*s*/) const = 0;
+
+  /**
+   * \returns the (local) node numbers on the specified edge
+   */
+  virtual std::vector<unsigned int> nodes_on_edge(const unsigned int /*e*/) const = 0;
+
+  /**
+   * \returns the (local) side numbers that touch the specified edge
+   */
+  virtual std::vector<unsigned int> sides_on_edge(const unsigned int /*e*/) const = 0;
 
   /**
    * \returns \p true if the specified (local) node number is on the
@@ -1031,7 +1059,7 @@ public:
    * by storing the D-dimensional parent.  This method provides access to that
    * element.
    *
-   * This method is not safe to call if this->dim() == LIBMESH_DIM; in
+   * This method returns nullptr if this->dim() == LIBMESH_DIM; in
    * such cases no data storage for an interior parent pointer has
    * been allocated.
    */
@@ -1140,6 +1168,27 @@ public:
    */
   virtual bool is_child_on_side(const unsigned int c,
                                 const unsigned int s) const = 0;
+
+  /**
+   * \returns The value of the mapping type for the element.
+   */
+  ElemMappingType mapping_type () const;
+
+  /**
+   * Sets the value of the mapping type for the element.
+   */
+  void set_mapping_type (const ElemMappingType type);
+
+  /**
+   * \returns The value of the mapping data for the element.
+   */
+  unsigned char mapping_data () const;
+
+  /**
+   * Sets the value of the mapping data for the element.
+   */
+  void set_mapping_data (const unsigned char data);
+
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -1582,6 +1631,13 @@ public:
    */
   static std::unique_ptr<Elem> build (const ElemType type,
                                       Elem * p=nullptr);
+  /**
+   * Calls the build() method above with a nullptr parent, and
+   * additionally sets the newly-created Elem's id. This can be useful
+   * when adding pre-numbered Elems to a Mesh via add_elem() calls.
+   */
+  static std::unique_ptr<Elem> build_with_id (const ElemType type,
+                                              dof_id_type id);
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -1658,6 +1714,14 @@ protected:
                                   dof_id_type n1,
                                   dof_id_type n2,
                                   dof_id_type n3);
+
+  /**
+   * An implementation for simple (all sides equal) elements
+   */
+  template <typename Sideclass, typename Subclass>
+  std::unique_ptr<Elem>
+  simple_build_side_ptr(const unsigned int i,
+                        bool proxy);
 
   /**
    * An implementation for simple (all sides equal) elements
@@ -1763,6 +1827,18 @@ protected:
    */
   unsigned char _p_level;
 #endif
+
+  /**
+   * Mapping function type; currently either 0 (LAGRANGE) or 1
+   * (RATIONAL_BERNSTEIN).
+   */
+  unsigned char _map_type;
+
+  /**
+   * Mapping function data; currently used when needed to store the
+   * RATIONAL_BERNSTEIN nodal weight data index.
+   */
+  unsigned char _map_data;
 };
 
 
@@ -1846,13 +1922,14 @@ Elem::Elem(const unsigned int nn,
 #ifdef LIBMESH_ENABLE_AMR
   _children(nullptr),
 #endif
-  _sbd_id(0)
+  _sbd_id(0),
 #ifdef LIBMESH_ENABLE_AMR
-  ,
   _rflag(Elem::DO_NOTHING),
   _pflag(Elem::DO_NOTHING),
-  _p_level(0)
+  _p_level(0),
 #endif
+  _map_type(p ? p->mapping_type() : 0),
+  _map_data(p ? p->mapping_data() : 0)
 {
   this->processor_id() = DofObject::invalid_processor_id;
 
@@ -1882,6 +1959,8 @@ Elem::Elem(const unsigned int nn,
     {
       this->subdomain_id() = this->parent()->subdomain_id();
       this->processor_id() = this->parent()->processor_id();
+      _map_type = this->parent()->_map_type;
+      _map_data = this->parent()->_map_data;
     }
 
 #ifdef LIBMESH_ENABLE_AMR
@@ -1953,7 +2032,7 @@ dof_id_type Elem::node_id (const unsigned int i) const
 inline
 unsigned int Elem::local_node (const dof_id_type i) const
 {
-  for (unsigned int n=0; n != this->n_nodes(); ++n)
+  for (auto n : make_range(this->n_nodes()))
     if (this->node_id(n) == i)
       return n;
 
@@ -2011,7 +2090,7 @@ Node & Elem::node_ref (const unsigned int i)
 inline
 unsigned int Elem::get_node_index (const Node * node_ptr) const
 {
-  for (unsigned int n=0; n != this->n_nodes(); ++n)
+  for (auto n : make_range(this->n_nodes()))
     if (this->_nodes[n] == node_ptr)
       return n;
 
@@ -2211,6 +2290,35 @@ Elem::build_side_ptr (std::unique_ptr<const Elem> & elem,
 
 
 
+template <typename Sideclass, typename Subclass>
+inline
+std::unique_ptr<Elem>
+Elem::simple_build_side_ptr (const unsigned int i,
+                             bool proxy)
+{
+  libmesh_assert_less (i, this->n_sides());
+
+  std::unique_ptr<Elem> face;
+  if (proxy)
+    face = libmesh_make_unique<Side<Sideclass,Subclass>>(this,i);
+  else
+    {
+      face = libmesh_make_unique<Sideclass>(this);
+      for (auto n : face->node_index_range())
+        face->set_node(n) = this->node_ptr(Subclass::side_nodes_map[i][n]);
+    }
+
+#ifdef LIBMESH_ENABLE_DEPRECATED
+  if (!proxy) // proxy sides used to leave parent() set
+#endif
+    face->set_parent(nullptr);
+  face->set_interior_parent(this);
+
+  return face;
+}
+
+
+
 template <typename Subclass>
 inline
 void
@@ -2228,7 +2336,9 @@ Elem::simple_build_side_ptr (std::unique_ptr<Elem> & side,
   else
     {
       side->subdomain_id() = this->subdomain_id();
-
+#ifdef LIBMESH_ENABLE_AMR
+      side->set_p_level(this->p_level());
+#endif
       for (auto n : side->node_index_range())
         side->set_node(n) = this->node_ptr(Subclass::side_nodes_map[i][n]);
     }
@@ -2297,64 +2407,10 @@ unsigned int Elem::which_neighbor_am_i (const Elem * e) const
       libmesh_assert(eparent);
     }
 
-  for (unsigned int s=0, n_s = this->n_sides(); s != n_s; ++s)
+  for (auto s : make_range(this->n_sides()))
     if (this->neighbor_ptr(s) == eparent)
       return s;
 
-  return libMesh::invalid_uint;
-}
-
-
-
-inline
-unsigned int Elem::which_side_am_i (const Elem * e) const
-{
-  libmesh_assert(e);
-
-  const unsigned int ns = this->n_sides();
-  const unsigned int nn = this->n_nodes();
-
-  const unsigned int en = e->n_nodes();
-
-  // e might be on any side until proven otherwise
-  std::vector<bool> might_be_side(ns, true);
-
-  for (unsigned int i=0; i != en; ++i)
-    {
-      Point side_point = e->point(i);
-      unsigned int local_node_id = libMesh::invalid_uint;
-
-      // Look for a node of this that's contiguous with node i of
-      // e. Note that the exact floating point comparison of Point
-      // positions is intentional, see the class documentation for
-      // this function.
-      for (unsigned int j=0; j != nn; ++j)
-        if (this->point(j) == side_point)
-          local_node_id = j;
-
-      // If a node of e isn't contiguous with some node of this, then
-      // e isn't a side of this.
-      if (local_node_id == libMesh::invalid_uint)
-        return libMesh::invalid_uint;
-
-      // If a node of e isn't contiguous with some node on side s of
-      // this, then e isn't on side s.
-      for (unsigned int s=0; s != ns; ++s)
-        if (!this->is_node_on_side(local_node_id, s))
-          might_be_side[s] = false;
-    }
-
-  for (unsigned int s=0; s != ns; ++s)
-    if (might_be_side[s])
-      {
-#ifdef DEBUG
-        for (unsigned int s2=s+1; s2 < ns; ++s2)
-          libmesh_assert (!might_be_side[s2]);
-#endif
-        return s;
-      }
-
-  // Didn't find any matching side
   return libMesh::invalid_uint;
 }
 
@@ -2468,6 +2524,8 @@ Elem * Elem::parent ()
 inline
 void Elem::set_parent (Elem * p)
 {
+  // We no longer support using parent() as interior_parent()
+  libmesh_assert_equal_to(this->dim(), p ? p->dim() : this->dim());
   _elemlinks[0] = p;
 }
 
@@ -2533,6 +2591,38 @@ unsigned int Elem::p_level() const
 #else
   return 0;
 #endif
+}
+
+
+
+inline
+ElemMappingType Elem::mapping_type () const
+{
+  return static_cast<ElemMappingType>(_map_type);
+}
+
+
+
+inline
+void Elem::set_mapping_type(const ElemMappingType type)
+{
+  _map_type = cast_int<unsigned char>(type);
+}
+
+
+
+inline
+unsigned char Elem::mapping_data () const
+{
+  return _map_data;
+}
+
+
+
+inline
+void Elem::set_mapping_data(const unsigned char data)
+{
+  _map_data = data;
 }
 
 
@@ -2606,7 +2696,7 @@ Elem::RefinementState Elem::refinement_flag () const
 inline
 void Elem::set_refinement_flag(RefinementState rflag)
 {
-  _rflag = cast_int<RefinementState>(rflag);
+  _rflag = cast_int<unsigned char>(rflag);
 }
 
 
@@ -2645,53 +2735,6 @@ unsigned int Elem::max_descendant_p_level () const
     max_p_level = std::max(max_p_level,
                            c.max_descendant_p_level());
   return max_p_level;
-}
-
-
-
-inline
-void Elem::set_p_level(unsigned int p)
-{
-  // Maintain the parent's p level as the minimum of it's children
-  if (this->parent() != nullptr)
-    {
-      unsigned int parent_p_level = this->parent()->p_level();
-
-      // If our new p level is less than our parents, our parents drops
-      if (parent_p_level > p)
-        {
-          this->parent()->set_p_level(p);
-
-          // And we should keep track of the drop, in case we need to
-          // do a projection later.
-          this->parent()->set_p_refinement_flag(Elem::JUST_COARSENED);
-        }
-      // If we are the lowest p level and it increases, so might
-      // our parent's, but we have to check every other child to see
-      else if (parent_p_level == _p_level && _p_level < p)
-        {
-          _p_level = cast_int<unsigned char>(p);
-          parent_p_level = cast_int<unsigned char>(p);
-          for (auto & c : this->parent()->child_ref_range())
-            parent_p_level = std::min(parent_p_level,
-                                      c.p_level());
-
-          // When its children all have a higher p level, the parent's
-          // should rise
-          if (parent_p_level > this->parent()->p_level())
-            {
-              this->parent()->set_p_level(parent_p_level);
-
-              // And we should keep track of the rise, in case we need to
-              // do a projection later.
-              this->parent()->set_p_refinement_flag(Elem::JUST_REFINED);
-            }
-
-          return;
-        }
-    }
-
-  _p_level = cast_int<unsigned char>(p);
 }
 
 
@@ -2736,31 +2779,9 @@ dof_id_type Elem::compute_key (dof_id_type n0,
                                dof_id_type n1,
                                dof_id_type n2)
 {
-  // Order the numbers such that n0 < n1 < n2.
-  // We'll do it in 3 steps like this:
-  //
-  //     n0         n1                n2
-  //     min(n0,n1) max(n0,n1)        n2
-  //     min(n0,n1) min(n2,max(n0,n1) max(n2,max(n0,n1)
-  //           |\   /|                  |
-  //           | \ / |                  |
-  //           |  /  |                  |
-  //           | /  \|                  |
-  //  gb min= min   max              gb max
-
-  // Step 1
-  if (n0 > n1) std::swap (n0, n1);
-
-  // Step 2
-  if (n1 > n2) std::swap (n1, n2);
-
-  // Step 3
-  if (n0 > n1) std::swap (n0, n1);
-
-  libmesh_assert ((n0 < n1) && (n1 < n2));
-
-  dof_id_type array[3] = {n0, n1, n2};
-  return Utility::hashword(array, 3);
+  std::array<dof_id_type, 3> array = {{n0, n1, n2}};
+  std::sort(array.begin(), array.end());
+  return Utility::hashword(array);
 }
 
 
@@ -2771,26 +2792,9 @@ dof_id_type Elem::compute_key (dof_id_type n0,
                                dof_id_type n2,
                                dof_id_type n3)
 {
-  // Sort first
-  // Step 1
-  if (n0 > n1) std::swap (n0, n1);
-
-  // Step 2
-  if (n2 > n3) std::swap (n2, n3);
-
-  // Step 3
-  if (n0 > n2) std::swap (n0, n2);
-
-  // Step 4
-  if (n1 > n3) std::swap (n1, n3);
-
-  // Finally sort step 5
-  if (n1 > n2) std::swap (n1, n2);
-
-  libmesh_assert ((n0 < n1) && (n1 < n2) && (n2 < n3));
-
-  dof_id_type array[4] = {n0, n1, n2, n3};
-  return Utility::hashword(array, 4);
+  std::array<dof_id_type, 4> array = {{n0, n1, n2, n3}};
+  std::sort(array.begin(), array.end());
+  return Utility::hashword(array);
 }
 
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -65,25 +65,28 @@ struct PerfItem
 {
   PerfItem(const char * label,
            const char * header,
-           bool enabled=true) :
+           bool enabled=true,
+           PerfLog * my_perflog=&perflog) :
     _label(label),
     _header(header),
-    _enabled(enabled)
+    _enabled(enabled),
+    _perflog(*my_perflog)
   {
     if (_enabled)
-      libMesh::perflog.fast_push(label, header);
+      _perflog.fast_push(label, header);
   }
 
   ~PerfItem()
   {
     if (_enabled)
-      libMesh::perflog.fast_pop(_label, _header);
+      _perflog.fast_pop(_label, _header);
   }
 
 private:
   const char * _label;
   const char * _header;
   bool _enabled;
+  PerfLog & _perflog;
 };
 
 
@@ -100,12 +103,9 @@ private:
 
 #  define START_LOG(a,b)   { libMesh::perflog.push(a,b); }
 #  define STOP_LOG(a,b)    { libMesh::perflog.pop(a,b); }
-#ifdef LIBMESH_ENABLE_DEPRECATED
-#  define PALIBMESH_USE_LOG(a,b)   { libmesh_deprecated(); }
-#  define RESTART_LOG(a,b) { libmesh_deprecated(); }
-#endif
 #  define LOG_SCOPE(a,b)   libMesh::PerfItem TOKENPASTE2(perf_item_, __LINE__)(a,b);
 #  define LOG_SCOPE_IF(a,b,enabled)   libMesh::PerfItem TOKENPASTE2(perf_item_, __LINE__)(a,b,enabled);
+#  define LOG_SCOPE_WITH(a,b,logger)   libMesh::PerfItem TOKENPASTE2(perf_item_, __LINE__)(a,b,true,&logger);
 
 #else
 
@@ -115,6 +115,7 @@ private:
 #  define RESTART_LOG(a,b) {}
 #  define LOG_SCOPE(a,b)   {}
 #  define LOG_SCOPE_IF(a,b,enabled) {}
+#  define LOG_SCOPE_WITH(a,b,logger) {}
 
 #endif
 

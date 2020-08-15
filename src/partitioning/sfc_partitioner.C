@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -112,9 +112,9 @@ void SFCPartitioner::partition_range(MeshBase & mesh,
 
       const Point p = elem->centroid();
 
-      x[forward_map[elem->id()]] = p(0);
-      y[forward_map[elem->id()]] = p(1);
-      z[forward_map[elem->id()]] = p(2);
+      x[forward_map[elem->id()]] = double(p(0));
+      y[forward_map[elem->id()]] = double(p(1));
+      z[forward_map[elem->id()]] = double(p(2));
     }
 
   // We need an integer reference to pass to the Sfc interface.
@@ -166,7 +166,7 @@ void SFCPartitioner::partition_range(MeshBase & mesh,
 
     for (dof_id_type i=0; i<n_range_elem; i++)
       {
-        libmesh_assert_less (static_cast<unsigned int>(table[i] - 1), reverse_map.size());
+        libmesh_assert_less (table[i] - 1, reverse_map.size());
 
         Elem * elem = reverse_map[table[i] - 1];
 

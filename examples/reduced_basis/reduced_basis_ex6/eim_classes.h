@@ -9,9 +9,7 @@
 // Example includes
 #include "assembly.h"
 
-#ifndef LIBMESH_HAVE_CXX14_MAKE_UNIQUE
-using libMesh::make_unique;
-#endif
+using libMesh::RBEIMConstruction;
 
 // A simple subclass of RBEIMEvaluation. Overload
 // evaluate_parametrized_function to define the
@@ -23,9 +21,7 @@ public:
   SimpleEIMEvaluation(const libMesh::Parallel::Communicator & comm)
     : RBEIMEvaluation(comm)
   {
-    attach_parametrized_function(&g_x);
-    attach_parametrized_function(&g_y);
-    attach_parametrized_function(&g_z);
+    set_parametrized_function(libmesh_make_unique<Gxyz>());
   }
 
   /**
@@ -35,13 +31,6 @@ public:
   {
     return libmesh_make_unique<ThetaEIM>(*this, index);
   }
-
-  /**
-   * Parametrized functions that we approximate with EIM
-   */
-  Gx g_x;
-  Gy g_y;
-  Gz g_z;
 };
 
 // A simple subclass of RBEIMConstruction.
@@ -55,14 +44,9 @@ public:
   SimpleEIMConstruction (EquationSystems & es,
                          const std::string & name_in,
                          const unsigned int number_in)
-    : Parent(es, name_in, number_in)
+    : RBEIMConstruction(es, name_in, number_in)
   {
   }
-
-  /**
-   * The type of the parent.
-   */
-  typedef RBEIMConstruction Parent;
 
   /**
    * Provide an implementation of build_eim_assembly
@@ -77,40 +61,11 @@ public:
    */
   virtual void init_data()
   {
-    Parent::init_data();
+    this->add_variable ("eim_var", libMesh::FIRST);
 
-    set_inner_product_assembly(eim_ip);
+    RBEIMConstruction::init_data();
   }
 
-  /**
-   * Initialize the implicit system that is used to perform L2 projections.
-   */
-  virtual void init_implicit_system()
-  {
-    this->add_variable ("L2_proj_var", libMesh::FIRST);
-  }
-
-  /**
-   * Initialize the explicit system that is used to store the basis functions.
-   */
-  virtual void init_explicit_system()
-  {
-    Gx_var = get_explicit_system().add_variable ("x_comp_of_G", libMesh::FIRST);
-    Gy_var = get_explicit_system().add_variable ("y_comp_of_G", libMesh::FIRST);
-    Gz_var = get_explicit_system().add_variable ("z_comp_of_G", libMesh::FIRST);
-  }
-
-  /**
-   * Variable numbers.
-   */
-  unsigned int Gx_var;
-  unsigned int Gy_var;
-  unsigned int Gz_var;
-
-  /**
-   * Inner product assembly object
-   */
-  Ex6EIMInnerProduct eim_ip;
 };
 
 #endif

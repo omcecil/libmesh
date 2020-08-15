@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,7 @@
 
 // Local includes
 #include "libmesh/statistics.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh_logging.h"
 
 namespace libMesh
@@ -194,7 +195,7 @@ void StatisticsVector<T>::histogram(std::vector<dof_id_type> & bin_members,
   LOG_SCOPE ("histogram()", "StatisticsVector");
 
   std::vector<Real> bin_bounds(n_bins+1);
-  for (std::size_t i=0; i<bin_bounds.size(); i++)
+  for (auto i : index_range(bin_bounds))
     bin_bounds[i] = min + Real(i) * bin_size;
 
   // Give the last bin boundary a little wiggle room: we don't want
@@ -206,7 +207,7 @@ void StatisticsVector<T>::histogram(std::vector<dof_id_type> & bin_members,
   bin_members.resize(n_bins);
 
   dof_id_type data_index = 0;
-  for (std::size_t j=0; j<bin_members.size(); j++) // bin vector indexing
+  for (auto j : index_range(bin_members)) // bin vector indexing
     {
       // libMesh::out << "(debug) Filling bin " << j << std::endl;
 
@@ -291,16 +292,16 @@ void StatisticsVector<T>::plot_histogram(const processor_id_type my_procid,
 
       // abscissa values are located at the center of each bin.
       out_stream << "x=[";
-      for (std::size_t i=0; i<bin_members.size(); ++i)
+      for (auto i : index_range(bin_members))
         {
           out_stream << min + (Real(i)+0.5)*bin_size << " ";
         }
       out_stream << "];\n";
 
       out_stream << "y=[";
-      for (std::size_t i=0; i<bin_members.size(); ++i)
+      for (auto bmi : bin_members)
         {
-          out_stream << bin_members[i] << " ";
+          out_stream << bmi << " ";
         }
       out_stream << "];\n";
       out_stream << "bar(x,y);\n";
@@ -371,6 +372,9 @@ template class StatisticsVector<float>;
 template class StatisticsVector<double>;
 #ifdef LIBMESH_DEFAULT_TRIPLE_PRECISION
 template class StatisticsVector<long double>;
+#endif
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+template class StatisticsVector<Real>;
 #endif
 template class StatisticsVector<int>;
 template class StatisticsVector<unsigned int>;

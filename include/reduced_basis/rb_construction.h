@@ -141,8 +141,17 @@ public:
   virtual Real truth_solve(int plot_solution);
 
   /**
-   * Train the reduced basis. This is the crucial function in the Offline
-   * stage: it generates the reduced basis using the "Greedy algorithm."
+   * Train the reduced basis. This can use different approaches, e.g. Greedy
+   * or POD, which are chosen using the RB_training_type member variable.
+   *
+   * In the case that we use Greedy training, this function returns the
+   * final maximum a posteriori error bound on the training set.
+   */
+  virtual Real train_reduced_basis(const bool resize_rb_eval_data=true);
+
+  /**
+   * Train the reduced basis using the "Greedy algorithm."
+   *
    * Each stage of the Greedy algorithm involves solving the reduced basis
    * over a large training set and selecting the parameter at which the
    * reduced basis error bound is largest, then performing a truth_solve
@@ -156,7 +165,7 @@ public:
    *
    * \returns The final maximum a posteriori error bound on the training set.
    */
-  virtual Real train_reduced_basis(const bool resize_rb_eval_data=true);
+  Real train_reduced_basis_with_greedy(const bool resize_rb_eval_data);
 
   /**
    * This function computes one basis function for each rhs term. This is
@@ -164,6 +173,23 @@ public:
    * that we do not have any "left-hand side" parameters, for example.
    */
   void enrich_basis_from_rhs_terms(const bool resize_rb_eval_data=true);
+
+  /**
+   * Train the reduced basis using Proper Orthogonal Decomposition (POD).
+   * This is an alternative to train_reduced_basis(), which uses the RB greedy
+   * algorithm. In contrast to the RB greedy algorithm, POD requires us to
+   * perform truth solves at all training samples, which can be computationally
+   * intensive.
+   *
+   * The main advantage of using POD is that it does not rely on the RB error
+   * indicator. The RB error indicator typically stagnates due to rounding
+   * error at approximately square-root of machine precision, since it involves
+   * taking the square-root of a sum of terms that cancel. This error indicator
+   * stagnation puts a limit on the accuracy level that can be achieved with
+   * the RB greedy algorithm, so for cases where we need higher accuracy, the
+   * POD approach is a good alternative.
+   */
+  void train_reduced_basis_with_POD();
 
   /**
    * (i) Compute the a posteriori error bound for each set of parameters
@@ -200,6 +226,12 @@ public:
   bool get_normalize_rb_bound_in_greedy() { return normalize_rb_bound_in_greedy; }
 
   /**
+   * Get/set the string that determines the training type.
+   */
+  void set_RB_training_type(const std::string & RB_training_type_in);
+  const std::string & get_RB_training_type() const;
+
+  /**
    * Get/set Nmax, the maximum number of RB
    * functions we are willing to compute.
    */
@@ -217,6 +249,12 @@ public:
    * into this system's solution vector.
    */
   virtual void load_rb_solution();
+
+  /**
+   * The slow (but simple, non-error prone) way to compute the residual dual norm.
+   * Useful for error checking.
+   */
+  Real compute_residual_dual_norm_slow(const unsigned int N);
 
   /**
    * Get a pointer to inner_product_matrix. Accessing via this
@@ -384,6 +422,7 @@ public:
                                       Real rel_training_tolerance_in,
                                       Real abs_training_tolerance_in,
                                       bool normalize_rb_error_bound_in_greedy_in,
+                                      const std::string & RB_training_type_in,
                                       RBParameters mu_min_in,
                                       RBParameters mu_max_in,
                                       std::map<std::string, std::vector<Real>> discrete_parameter_values_in,
@@ -421,22 +460,42 @@ public:
   ElemAssembly & get_inner_product_assembly();
 
   /**
+   * Specify the coefficients of the A_q operators to be used in the
+   * energy inner-product.
+   */
+  void set_energy_inner_product(const std::vector<Number> & energy_inner_product_coeffs_in);
+
+  /**
    * It is sometimes useful to be able to zero vector entries
    * that correspond to constrained dofs.
    */
   void zero_constrained_dofs_on_vector(NumericVector<Number> & vector);
 
   /**
+   * @return true if the most recent truth solve gave a zero solution.
+   */
+  virtual bool check_if_zero_truth_solve();
+
+#ifdef LIBMESH_ENABLE_DIRICHLET
+  /**
    * It's helpful to be able to generate a DirichletBoundary that stores a ZeroFunction in order
    * to impose Dirichlet boundary conditions.
    */
   static std::unique_ptr<DirichletBoundary> build_zero_dirichlet_boundary_object();
+#endif
 
   /**
    * Setter for the flag determining if convergence should be
    * checked after each solve.
    */
   void set_convergence_assertion_flag(bool flag);
+
+  /**
+   * Get/set flag to pre-evaluate the theta functions
+   */
+  bool get_preevaluate_thetas_flag() const;
+  void set_preevaluate_thetas_flag(bool flag);
+
 
   //----------- PUBLIC DATA MEMBERS -----------//
 
@@ -546,6 +605,16 @@ public:
   bool store_non_dirichlet_operators;
 
   /**
+   * Boolean flag to indicate whether we store a second copy of the
+   * basis without constraints or dof transformations applied to it.
+   * This is necessary when we have dof transformations and need
+   * to calculate the residual R(U) = C^T F - C^T A C U, since we
+   * need to evaluate R(U) using the untransformed basis U rather
+   * than C U to avoid "double applying" dof transformations in C.
+   */
+  bool store_untransformed_basis;
+
+  /**
    * A boolean flag to indicate whether or not we initialize the
    * Greedy algorithm by performing rb_solves on the training set
    * with an "empty" (i.e. N=0) reduced basis space.
@@ -614,6 +683,27 @@ protected:
                                     NumericVector<Number> * input_vector,
                                     bool symmetrize=false,
                                     bool apply_dof_constraints=true);
+
+  /**
+   * This function is called from add_scaled_matrix_and_vector()
+   * before each element matrix and vector are assembled into their
+   * global counterparts. By default it is a no-op, but it could be
+   * used to apply any user-defined transformations immediately prior
+   * to assembly. We use DGFEMContext since it allows for both DG and
+   * continuous Galerkin formulations.
+   */
+  virtual void post_process_elem_matrix_and_vector
+  (DGFEMContext & /*context*/) {}
+
+  /**
+   * Similarly, provide an opportunity to post-process the truth
+   * solution after the solve is complete. By default this is a no-op,
+   * but it could be used to apply any required user-defined post
+   * processing to the solution vector. Note: the truth solution is
+   * stored in the "solution" member of this class, which is inherited
+   * from the parent System class several levels up.
+   */
+  virtual void post_process_truth_solution() {}
 
   /**
    * Set current_local_solution = vec so that we can access vec
@@ -704,7 +794,11 @@ protected:
    * Reimplement this in derived classes in order to
    * call FE::get_*() as the particular physics requires.
    */
-  virtual void init_context(FEMContext &) {}
+  virtual void init_context(FEMContext &) {
+    // Failing to rederive init_context() means your FE objects don't
+    // know what to compute.
+    libmesh_deprecated();
+  }
 
   /**
    * Getter for the flag determining if convergence should be
@@ -717,6 +811,22 @@ protected:
    * Throw an error when that is not the case.
    */
   void check_convergence(LinearSolver<Number> & input_solver);
+
+  /**
+   * Get/set the current training parameter index
+   */
+  unsigned int get_current_training_parameter_index() const;
+  void set_current_training_parameter_index(unsigned int index);
+
+  /**
+   * Return the evaluated theta functions at the given training parameter index.
+   */
+  const std::vector<Number> & get_evaluated_thetas(unsigned int training_parameter_index) const;
+
+  /*
+   * Pre-evaluate the theta functions on the entire (local) training parameter set.
+   */
+  void preevaluate_thetas();
 
   //----------- PROTECTED DATA MEMBERS -----------//
 
@@ -768,6 +878,24 @@ private:
   ElemAssembly * inner_product_assembly;
 
   /**
+   * Boolean to indicate whether we're using the energy inner-product.
+   * If this is false then we use inner_product_assembly instead.
+   */
+  bool use_energy_inner_product;
+
+  /**
+   * We may optionally want to use the "energy inner-product" rather
+   * than the inner-product assembly specified in inner_product_assembly.
+   * In this case the inner-product will be defined by sum_q^Q k_q * A_q.
+   * Here we provide the k_q values that will be used.
+   * (Note that a true "energy-inner product" would obtain the k_q from
+   * the theta_q's, but this is different for each parameter choice so
+   * we just provide a fixed set of k_q's here to ensure that the
+   * inner-product is parameter independent)
+   */
+  std::vector<Number> energy_inner_product_coeffs;
+
+  /**
    * Vector storing the Q_a matrices from the affine expansion
    */
   std::vector<std::unique_ptr<SparseMatrix<Number>>> Aq_vector;
@@ -807,6 +935,45 @@ private:
    */
   bool normalize_rb_bound_in_greedy;
 
+  /**
+   * This string indicates the type of training that we will use.
+   * Options are:
+   *  - Greedy: Reduced basis greedy algorithm
+   *  - POD: Proper Orthogonal Decomposition
+   */
+  std::string RB_training_type;
+
+  /**
+   * In cases where we have dof transformations such as a change of
+   * coordinates at some nodes we need to store an extra set of basis
+   * functions which have not had dof transformations applied to them.
+   * These vectors are required in order to compute the residual in
+   * the error indicator.
+   */
+  std::vector<std::unique_ptr<NumericVector<Number>>> _untransformed_basis_functions;
+
+  /**
+   * We also store a copy of the untransformed solution in order to
+   * create _untransformed_basis_functions.
+   */
+  std::unique_ptr<NumericVector<Number>> _untransformed_solution;
+
+  /**
+   * Flag to indicate if we preevaluate the theta functions
+   */
+  bool _preevaluate_thetas_flag;
+
+  /**
+   * The current training parameter index during reduced basis training.
+   */
+  unsigned int _current_training_parameter_index;
+
+  /**
+   * Storage of evaluated theta functions at a set of parameters. This
+   * can be used to store all of our theta functions at training samples
+   * instead of re-evaluating the same values repeatedly during training.
+   */
+  std::vector<std::vector<Number>> _evaluated_thetas;
 };
 
 } // namespace libMesh

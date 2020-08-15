@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -65,9 +65,9 @@ std::string Node::get_info () const
     ", Point=" << *static_cast<const Point *>(this) << '\n';
 
   oss << "    DoFs=";
-  for (unsigned int s=0; s != this->n_systems(); ++s)
-    for (unsigned int v=0; v != this->n_vars(s); ++v)
-      for (unsigned int c=0; c != this->n_comp(s,v); ++c)
+  for (auto s : make_range(this->n_systems()))
+    for (auto v : make_range(this->n_vars(s)))
+      for (auto c : make_range(this->n_comp(s,v)))
         oss << '(' << s << '/' << v << '/' << this->dof_number(s,v,c) << ") ";
 
   return oss.str();

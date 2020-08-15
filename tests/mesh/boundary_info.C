@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/mesh.h>
 #include <libmesh/mesh_generation.h>
 #include <libmesh/boundary_info.h>
@@ -13,18 +7,11 @@
 #include <libmesh/zero_function.h>
 #include <libmesh/dirichlet_boundaries.h>
 #include <libmesh/dof_map.h>
+#include <libmesh/parallel.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -35,9 +22,13 @@ class BoundaryInfoTest : public CppUnit::TestCase {
 public:
   CPPUNIT_TEST_SUITE( BoundaryInfoTest );
 
+  CPPUNIT_TEST( testNameCopying );
+
 #if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+# ifdef LIBMESH_ENABLE_DIRICHLET
   CPPUNIT_TEST( testShellFaceConstraints );
+# endif
 #endif
 #if LIBMESH_DIM > 2
   CPPUNIT_TEST( testEdgeBoundaryConditions );
@@ -251,6 +242,43 @@ public:
     CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(n_elem), bi.n_edge_conds());
   }
 
+  void testNameCopying()
+  {
+      Mesh mesh(*TestCommWorld);
+      MeshTools::Generation::build_line(mesh,
+                                        8,
+                                        0., 1.,
+                                        EDGE2);
+
+      Mesh mesh2(mesh);
+
+      BoundaryInfo & bi = mesh.get_boundary_info();
+      bi.sideset_name(0) = "zero";
+      bi.sideset_name(1) = "one";
+      bi.sideset_name(2) = "two";
+      bi.sideset_name(3) = "three";
+      bi.nodeset_name(0) = "ZERO";
+      bi.nodeset_name(1) = "ONE";
+
+      BoundaryInfo bi2 {bi};
+      CPPUNIT_ASSERT_EQUAL(bi2.get_sideset_name(0), std::string("zero"));
+      CPPUNIT_ASSERT_EQUAL(bi2.get_sideset_name(1), std::string("one"));
+      CPPUNIT_ASSERT_EQUAL(bi2.get_sideset_name(2), std::string("two"));
+      CPPUNIT_ASSERT_EQUAL(bi2.get_sideset_name(3), std::string("three"));
+      CPPUNIT_ASSERT_EQUAL(bi2.get_nodeset_name(0), std::string("ZERO"));
+      CPPUNIT_ASSERT_EQUAL(bi2.get_nodeset_name(1), std::string("ONE"));
+
+      BoundaryInfo & bi3 = mesh2.get_boundary_info();
+      bi3 = bi;
+      CPPUNIT_ASSERT_EQUAL(bi3.get_sideset_name(0), std::string("zero"));
+      CPPUNIT_ASSERT_EQUAL(bi3.get_sideset_name(1), std::string("one"));
+      CPPUNIT_ASSERT_EQUAL(bi3.get_sideset_name(2), std::string("two"));
+      CPPUNIT_ASSERT_EQUAL(bi3.get_sideset_name(3), std::string("three"));
+      CPPUNIT_ASSERT_EQUAL(bi3.get_nodeset_name(0), std::string("ZERO"));
+      CPPUNIT_ASSERT_EQUAL(bi3.get_nodeset_name(1), std::string("ONE"));
+  }
+
+#ifdef LIBMESH_ENABLE_DIRICHLET
   void testShellFaceConstraints()
   {
     // Make a simple two element mesh that we can use to test constraints
@@ -279,13 +307,13 @@ public:
     mesh.add_point( Point(0.0, 1.0), 3 );
     mesh.add_point( Point(0.0, 0.0), 0 );
 
-    Elem* elem_top = mesh.add_elem( new QuadShell4 );
+    Elem * elem_top = mesh.add_elem(Elem::build(QUADSHELL4));
     elem_top->set_node(0) = mesh.node_ptr(0);
     elem_top->set_node(1) = mesh.node_ptr(1);
     elem_top->set_node(2) = mesh.node_ptr(2);
     elem_top->set_node(3) = mesh.node_ptr(3);
 
-    Elem* elem_bottom = mesh.add_elem( new QuadShell4 );
+    Elem * elem_bottom = mesh.add_elem(Elem::build(QUADSHELL4));
     elem_bottom->set_node(0) = mesh.node_ptr(4);
     elem_bottom->set_node(1) = mesh.node_ptr(5);
     elem_bottom->set_node(2) = mesh.node_ptr(1);
@@ -295,7 +323,8 @@ public:
     bi.add_shellface(elem_top, 0, 10);
     bi.add_shellface(elem_bottom, 1, 20);
 
-    mesh.prepare_for_use(false /*skip_renumber*/);
+    mesh.allow_renumbering(true);
+    mesh.prepare_for_use();
 
     CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), bi.n_shellface_conds());
 
@@ -346,6 +375,7 @@ public:
           }
       }
   }
+#endif // LIBMESH_ENABLE_DIRICHLET
 
 };
 

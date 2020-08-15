@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -29,6 +29,9 @@ namespace libMesh
 {
 
 
+LIBMESH_DEFAULT_VECTORIZED_FE(3,CLOUGH)
+
+
 template <>
 Real FE<3,CLOUGH>::shape(const ElemType,
                          const Order,
@@ -45,7 +48,22 @@ template <>
 Real FE<3,CLOUGH>::shape(const Elem * libmesh_dbg_var(elem),
                          const Order,
                          const unsigned int,
-                         const Point &)
+                         const Point &,
+                         const bool)
+{
+  libmesh_assert(elem);
+
+  libmesh_not_implemented();
+  return 0.;
+}
+
+
+template <>
+Real FE<3,CLOUGH>::shape(const FEType,
+                         const Elem * libmesh_dbg_var(elem),
+                         const unsigned int,
+                         const Point &,
+                         const bool)
 {
   libmesh_assert(elem);
 
@@ -73,7 +91,8 @@ Real FE<3,CLOUGH>::shape_deriv(const Elem * libmesh_dbg_var(elem),
                                const Order,
                                const unsigned int,
                                const unsigned int,
-                               const Point &)
+                               const Point &,
+                               const bool)
 {
   libmesh_assert(elem);
   libmesh_not_implemented();
@@ -81,15 +100,54 @@ Real FE<3,CLOUGH>::shape_deriv(const Elem * libmesh_dbg_var(elem),
 }
 
 
+template <>
+Real FE<3,CLOUGH>::shape_deriv(const FEType,
+                               const Elem * libmesh_dbg_var(elem),
+                               const unsigned int,
+                               const unsigned int,
+                               const Point &,
+                               const bool)
+{
+  libmesh_assert(elem);
+  libmesh_not_implemented();
+  return 0.;
+}
+
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+
+template <>
+Real FE<3,CLOUGH>::shape_second_deriv(const ElemType,
+                                      const Order,
+                                      const unsigned int,
+                                      const unsigned int,
+                                      const Point &)
+{
+  libmesh_error_msg("Clough-Tocher elements require the real element \nto construct gradient-based degrees of freedom.");
+  return 0.;
+}
+
 
 template <>
 Real FE<3,CLOUGH>::shape_second_deriv(const Elem * libmesh_dbg_var(elem),
                                       const Order,
                                       const unsigned int,
                                       const unsigned int,
-                                      const Point &)
+                                      const Point &,
+                                      const bool)
+{
+  libmesh_assert(elem);
+  libmesh_not_implemented();
+  return 0.;
+}
+
+template <>
+Real FE<3,CLOUGH>::shape_second_deriv(const FEType,
+                                      const Elem * libmesh_dbg_var(elem),
+                                      const unsigned int,
+                                      const unsigned int,
+                                      const Point &,
+                                      const bool)
 {
   libmesh_assert(elem);
   libmesh_not_implemented();

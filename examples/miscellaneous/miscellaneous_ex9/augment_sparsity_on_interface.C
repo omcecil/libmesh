@@ -3,6 +3,7 @@
 
 // libMesh includes
 #include "libmesh/elem.h"
+#include "libmesh/boundary_info.h"
 
 using namespace libMesh;
 
@@ -143,7 +144,7 @@ void AugmentSparsityOnInterface::operator()
   for (const auto & elem : as_range(range_begin, range_end))
     {
       if (elem->processor_id() != p)
-        coupled_elements.insert (std::make_pair(elem, null_mat));
+        coupled_elements.emplace(elem, null_mat);
 
       for (auto side : elem->side_index_range())
         if (elem->neighbor_ptr(side) == nullptr)
@@ -154,7 +155,7 @@ void AugmentSparsityOnInterface::operator()
               {
                 const Elem * neighbor = ltu_it->second;
                 if (neighbor->processor_id() != p)
-                  coupled_elements.insert (std::make_pair(neighbor, null_mat));
+                  coupled_elements.emplace(neighbor, null_mat);
               }
           }
 
@@ -164,7 +165,7 @@ void AugmentSparsityOnInterface::operator()
         {
           const Elem * neighbor = utl_it->second;
           if (neighbor->processor_id() != p)
-            coupled_elements.insert (std::make_pair(neighbor, null_mat));
+            coupled_elements.emplace(neighbor, null_mat);
         }
 
     }

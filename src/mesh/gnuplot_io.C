@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -162,8 +162,7 @@ void GnuPlotIO::write_solution(const std::string & fname,
       // Create an output stream for data file
       std::ofstream data(data_file_name.c_str());
 
-      if (!data.good())
-        libmesh_error_msg("ERROR: opening output data file " << data_file_name);
+      libmesh_error_msg_if(!data.good(), "ERROR: opening output data file " << data_file_name);
 
       // get ordered nodal data using a map
       std::map<Real, std::vector<Number>> node_map;

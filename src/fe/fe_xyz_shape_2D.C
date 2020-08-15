@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,28 +23,19 @@
 #include "libmesh/elem.h"
 
 
-
 namespace libMesh
 {
 
 
-template <>
-Real FE<2,XYZ>::shape(const ElemType,
-                      const Order,
-                      const unsigned int,
-                      const Point &)
-{
-  libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
-  return 0.;
-}
-
+LIBMESH_DEFAULT_VECTORIZED_FE(2,XYZ)
 
 
 template <>
 Real FE<2,XYZ>::shape(const Elem * elem,
                       const Order libmesh_dbg_var(order),
                       const unsigned int i,
-                      const Point & point_in)
+                      const Point & point_in,
+                      const bool libmesh_dbg_var(add_p_level))
 {
 #if LIBMESH_DIM > 1
 
@@ -52,10 +43,10 @@ Real FE<2,XYZ>::shape(const Elem * elem,
 
   Point centroid = elem->centroid();
   Point max_distance = Point(0.,0.,0.);
-  for (unsigned int p = 0; p < elem->n_nodes(); p++)
+  for (const Point & p : elem->node_ref_range())
     for (unsigned int d = 0; d < 2; d++)
       {
-        const Real distance = std::abs(centroid(d) - elem->point(p)(d));
+        const Real distance = std::abs(centroid(d) - p(d));
         max_distance(d) = std::max(distance, max_distance(d));
       }
 
@@ -71,7 +62,7 @@ Real FE<2,XYZ>::shape(const Elem * elem,
 #ifndef NDEBUG
   // totalorder is only used in the assertion below, so
   // we avoid declaring it when asserts are not active.
-  const unsigned int totalorder = order + elem->p_level();
+  const unsigned int totalorder = order + add_p_level * elem->p_level();
 #endif
   libmesh_assert_less (i, (totalorder+1)*(totalorder+2)/2);
 
@@ -141,19 +132,21 @@ Real FE<2,XYZ>::shape(const Elem * elem,
       return val;
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM <= 1
+  libmesh_assert(true || order || add_p_level);
+  libmesh_ignore(elem, i, point_in);
+  libmesh_not_implemented();
 #endif
 }
 
 
 
+
 template <>
-Real FE<2,XYZ>::shape_deriv(const ElemType,
-                            const Order,
-                            const unsigned int,
-                            const unsigned int,
-                            const Point &)
+Real FE<2,XYZ>::shape(const ElemType,
+                      const Order,
+                      const unsigned int,
+                      const Point &)
 {
   libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
   return 0.;
@@ -162,11 +155,26 @@ Real FE<2,XYZ>::shape_deriv(const ElemType,
 
 
 template <>
+Real FE<2,XYZ>::shape(const FEType fet,
+                      const Elem * elem,
+                      const unsigned int i,
+                      const Point & p,
+                      const bool add_p_level)
+{
+  return FE<2,XYZ>::shape(elem, fet.order, i, p, add_p_level);
+}
+
+
+
+
+
+template <>
 Real FE<2,XYZ>::shape_deriv(const Elem * elem,
                             const Order libmesh_dbg_var(order),
                             const unsigned int i,
                             const unsigned int j,
-                            const Point & point_in)
+                            const Point & point_in,
+                            const bool libmesh_dbg_var(add_p_level))
 {
 #if LIBMESH_DIM > 1
 
@@ -176,10 +184,10 @@ Real FE<2,XYZ>::shape_deriv(const Elem * elem,
 
   Point centroid = elem->centroid();
   Point max_distance = Point(0.,0.,0.);
-  for (unsigned int p = 0; p < elem->n_nodes(); p++)
+  for (const Point & p : elem->node_ref_range())
     for (unsigned int d = 0; d < 2; d++)
       {
-        const Real distance = std::abs(centroid(d) - elem->point(p)(d));
+        const Real distance = std::abs(centroid(d) - p(d));
         max_distance(d) = std::max(distance, max_distance(d));
       }
 
@@ -195,7 +203,7 @@ Real FE<2,XYZ>::shape_deriv(const Elem * elem,
 #ifndef NDEBUG
   // totalorder is only used in the assertion below, so
   // we avoid declaring it when asserts are not active.
-  const unsigned int totalorder = order + elem->p_level();
+  const unsigned int totalorder = order + add_p_level * elem->p_level();
 #endif
   libmesh_assert_less (i, (totalorder+1)*(totalorder+2)/2);
 
@@ -345,33 +353,48 @@ Real FE<2,XYZ>::shape_deriv(const Elem * elem,
       libmesh_error_msg("Invalid j = " << j);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM <= 1
+  libmesh_assert(true || order || add_p_level);
+  libmesh_ignore(elem, i, j, point_in);
+  libmesh_not_implemented();
 #endif
 }
 
 
-#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
-
 template <>
-Real FE<2,XYZ>::shape_second_deriv(const ElemType,
-                                   const Order,
-                                   const unsigned int,
-                                   const unsigned int,
-                                   const Point &)
+Real FE<2,XYZ>::shape_deriv(const ElemType,
+                            const Order,
+                            const unsigned int,
+                            const unsigned int,
+                            const Point &)
 {
   libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
   return 0.;
 }
 
 
+template <>
+Real FE<2,XYZ>::shape_deriv(const FEType fet,
+                            const Elem * elem,
+                            const unsigned int i,
+                            const unsigned int j,
+                            const Point & p,
+                            const bool add_p_level)
+{
+  return FE<2,XYZ>::shape_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
+
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 template <>
 Real FE<2,XYZ>::shape_second_deriv(const Elem * elem,
                                    const Order libmesh_dbg_var(order),
                                    const unsigned int i,
                                    const unsigned int j,
-                                   const Point & point_in)
+                                   const Point & point_in,
+                                   const bool libmesh_dbg_var(add_p_level))
 {
 #if LIBMESH_DIM > 1
 
@@ -402,7 +425,7 @@ Real FE<2,XYZ>::shape_second_deriv(const Elem * elem,
 #ifndef NDEBUG
   // totalorder is only used in the assertion below, so
   // we avoid declaring it when asserts are not active.
-  const unsigned int totalorder = order + elem->p_level();
+  const unsigned int totalorder = order + add_p_level * elem->p_level();
 #endif
   libmesh_assert_less (i, (totalorder+1)*(totalorder+2)/2);
 
@@ -597,10 +620,38 @@ Real FE<2,XYZ>::shape_second_deriv(const Elem * elem,
       libmesh_error_msg("Invalid shape function derivative j = " << j);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM <= 1
+  libmesh_assert(true || order || add_p_level);
+  libmesh_ignore(elem, i, j, point_in);
+  libmesh_not_implemented();
 #endif
 }
+
+
+template <>
+Real FE<2,XYZ>::shape_second_deriv(const ElemType,
+                                   const Order,
+                                   const unsigned int,
+                                   const unsigned int,
+                                   const Point &)
+{
+  libmesh_error_msg("XYZ polynomials require the element \nbecause the centroid is needed.");
+  return 0.;
+}
+
+
+
+template <>
+Real FE<2,XYZ>::shape_second_deriv(const FEType fet,
+                                   const Elem * elem,
+                                   const unsigned int i,
+                                   const unsigned int j,
+                                   const Point & p,
+                                   const bool add_p_level)
+{
+  return FE<2,XYZ>::shape_second_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
 
 #endif
 

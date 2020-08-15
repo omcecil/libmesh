@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -29,7 +29,6 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h"
-#include "libmesh/auto_ptr.h" // deprecated
 
 // Trilinos includes.  Ignore many unused parameter warnings coming
 // from these headers.

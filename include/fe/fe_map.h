@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,7 +25,6 @@
 #include "libmesh/point.h"
 #include "libmesh/vector_value.h"
 #include "libmesh/fe_type.h"
-#include "libmesh/auto_ptr.h" // deprecated
 
 // C++ includes
 #include <memory>
@@ -53,6 +52,8 @@ public:
   virtual ~FEMap(){}
 
   static std::unique_ptr<FEMap> build(FEType fe_type);
+
+  static FEFamily map_fe_type(const Elem & elem);
 
   template<unsigned int Dim>
   void init_reference_to_physical_map(const std::vector<Point> & qp,
@@ -133,6 +134,75 @@ public:
   template<unsigned int Dim>
   void init_edge_shape_functions(const std::vector<Point> & qp,
                                  const Elem * edge);
+
+  /**
+   * \returns The location (in physical space) of the point
+   * \p p located on the reference element.
+   */
+  static Point map (const unsigned int dim,
+                    const Elem * elem,
+                    const Point & reference_point);
+
+  /**
+   * \returns component \p j of d(xyz)/d(xi eta zeta) (in physical
+   * space) of the point \p p located on the reference element.
+   */
+  static Point map_deriv (const unsigned int dim,
+                          const Elem * elem,
+                          const unsigned int j,
+                          const Point & reference_point);
+
+  /**
+   * \returns The location (on the reference element) of the
+   * point \p p located in physical space.  This function requires
+   * inverting the (possibly nonlinear) transformation map, so
+   * it is not trivial. The optional parameter \p tolerance defines
+   * how close is "good enough."  The map inversion iteration
+   * computes the sequence \f$ \{ p_n \} \f$, and the iteration is
+   * terminated when \f$ \|p - p_n\| < \mbox{\texttt{tolerance}} \f$
+   *
+   * When secure == true, the following checks are enabled:
+   *
+   * In DEBUG mode only:
+   * .) dim==1,2: throw an error if det(J) <= 0 for any Newton iteration.
+   * .) Print warning for every iteration beyond max_cnt in which the Newton scheme has not converged.
+   *
+   * In !DEBUG mode only:
+   * .) Print a _single_ warning (1 warning for the entire simulation)
+   *    if the Newton scheme ever requires more than max_cnt iterations.
+   *
+   * In both DEBUG and !DEBUG modes:
+   * .) dim==3: Throw an exception for singular Jacobian.
+   * .) Throw an error if the Newton iteration has not converged in 2*max_cnt iterations.
+   *
+   * In addition to the checks above, the "extra_checks" parameter can
+   * be used to turn on some additional tests. In particular, when
+   * extra_checks == true *and* compiled in DEBUG mode:
+   * .) Print a warning if p != map(inverse_map(p)) to within tolerance.
+   * .) Print a warning if the inverse-mapped point is not on the reference element to within tolerance.
+   */
+  static Point inverse_map (const unsigned int dim,
+                            const Elem * elem,
+                            const Point & p,
+                            const Real tolerance = TOLERANCE,
+                            const bool secure = true,
+                            const bool extra_checks = true);
+
+  /**
+   * Takes a number points in physical space (in the \p
+   * physical_points vector) and finds their location on the reference
+   * element for the input element \p elem.  The values on the
+   * reference element are returned in the vector \p
+   * reference_points. The other parameters have the same meaning
+   * as the single Point version of inverse_map() above.
+   */
+  static void inverse_map (unsigned int dim,
+                           const Elem * elem,
+                           const std::vector<Point> & physical_points,
+                           std::vector<Point> &       reference_points,
+                           const Real tolerance = TOLERANCE,
+                           const bool secure = true,
+                           const bool extra_checks = true);
 
   /**
    * \returns The \p xyz spatial locations of the quadrature
@@ -554,6 +624,12 @@ public:
     calculate_dxyz = true; return JxW; }
 
   /**
+   * Allows the user to prerequest additional calculations in between
+   * two calls to reinit();
+   */
+  void add_calculations();
+
+  /**
    * Set the Jacobian tolerance used for determining when the mapping fails. The mapping is
    * determined to fail if jac <= jacobian_tolerance.
    */
@@ -941,13 +1017,6 @@ protected:
   mutable bool calculate_d2xyz;
 
 #endif
-
-  /**
-   * FE classes should be able to reset calculations_started in a few
-   * special cases.
-   */
-  template <unsigned int Dim, FEFamily T>
-  friend class FE;
 
   /**
    * The Jacobian tolerance used for determining when the mapping fails. The mapping is

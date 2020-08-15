@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -280,7 +280,7 @@ void assemble_ellipticdg(EquationSystems & es,
               std::unique_ptr<const Elem> elem_side (elem->build_side_ptr(side));
               // h element dimension to compute the interior penalty penalty parameter
               const unsigned int elem_b_order = static_cast<unsigned int> (fe_elem_face->get_order());
-              const double h_elem = elem->volume()/elem_side->volume() * 1./pow(elem_b_order, 2.);
+              const Real h_elem = elem->volume()/elem_side->volume() * 1./pow(elem_b_order, 2.);
 
               for (unsigned int qp=0; qp<qface.n_points(); qp++)
                 {
@@ -341,7 +341,7 @@ void assemble_ellipticdg(EquationSystems & es,
                   const unsigned int elem_b_order = static_cast<unsigned int>(fe_elem_face->get_order());
                   const unsigned int neighbor_b_order = static_cast<unsigned int>(fe_neighbor_face->get_order());
                   const double side_order = (elem_b_order + neighbor_b_order)/2.;
-                  const double h_elem = (elem->volume()/elem_side->volume()) * 1./pow(side_order,2.);
+                  const Real h_elem = (elem->volume()/elem_side->volume()) * 1./pow(side_order,2.);
 
                   // The quadrature point locations on the neighbor side
                   std::vector<Point> qface_neighbor_point;
@@ -364,11 +364,9 @@ void assemble_ellipticdg(EquationSystems & es,
                                                 qface.get_points(),
                                                 qface_neighbor_point);
                   else
-                    FEInterface::inverse_map (elem->dim(),
-                                              fe->get_fe_type(),
-                                              neighbor,
-                                              qface_point,
-                                              qface_neighbor_point);
+                    FEMap::inverse_map (elem->dim(), neighbor,
+                                        qface_point,
+                                        qface_neighbor_point);
 
                   // Calculate the neighbor element shape functions at those locations
                   fe_neighbor_face->reinit(neighbor, &qface_neighbor_point);
@@ -569,8 +567,8 @@ int main (int argc, char** argv)
         command_line_value(std::string("element_type"),
                            std::string("MONOMIAL"));
 
-      if (fe_str != "MONOMIAL" || fe_str != "XYZ")
-        libmesh_error_msg("Error: This example must be run with MONOMIAL or XYZ element types.");
+      libmesh_error_msg_if(fe_str != "MONOMIAL" || fe_str != "XYZ",
+                           "Error: This example must be run with MONOMIAL or XYZ element types.");
 
       ellipticdg_system.add_variable ("u", p_order, Utility::string_to_enum<FEFamily>(fe_str));
     }

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 
 // Local Includes
 #include "libmesh/ghosting_functor.h"
+#include "libmesh/auto_ptr.h"
 
 namespace libMesh
 {
@@ -40,7 +41,19 @@ public:
   /**
    * Constructor.
    */
-  GhostPointNeighbors(const MeshBase & mesh) : _mesh(mesh) {}
+  GhostPointNeighbors(const MeshBase & mesh) : GhostingFunctor(mesh) {}
+
+  /**
+   * Constructor.
+   */
+  GhostPointNeighbors(const GhostPointNeighbors & other) : GhostingFunctor(other){}
+
+  /**
+   * A clone() is needed because GhostingFunctor can not be shared between
+   * different meshes. The operations in  GhostingFunctor are mesh dependent.
+   */
+  virtual std::unique_ptr<GhostingFunctor> clone () const override
+  { return libmesh_make_unique<GhostPointNeighbors>(*this); }
 
   /**
    * For the specified range of active elements, find their point
@@ -50,11 +63,7 @@ public:
   virtual void operator() (const MeshBase::const_element_iterator & range_begin,
                            const MeshBase::const_element_iterator & range_end,
                            processor_id_type p,
-                           map_type & coupled_elements);
-
-private:
-
-  const MeshBase & _mesh;
+                           map_type & coupled_elements) override;
 };
 
 } // namespace libMesh

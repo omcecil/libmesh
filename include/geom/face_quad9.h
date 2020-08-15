@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -104,6 +104,8 @@ public:
 
   virtual std::vector<unsigned int> nodes_on_side(const unsigned int s) const override;
 
+  virtual std::vector<unsigned int> nodes_on_edge(const unsigned int e) const override;
+
   /**
    * \returns \p true if the specified (local) node number is on the
    * specified edge (== is_node_on_side in 2D).
@@ -150,7 +152,7 @@ public:
   /**
    * \returns \p Quad9::side_nodes_map[side][side_node] after doing some range checking.
    */
-  virtual unsigned int which_node_am_i(unsigned int side,
+  virtual unsigned int local_side_node(unsigned int side,
                                        unsigned int side_node) const override;
 
   virtual std::unique_ptr<Elem> build_side_ptr (const unsigned int i,

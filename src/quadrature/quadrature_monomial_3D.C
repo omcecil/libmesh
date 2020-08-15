@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,11 +25,10 @@ namespace libMesh
 {
 
 
-void QMonomial::init_3D(const ElemType type_in,
-                        unsigned int p)
+void QMonomial::init_3D(const ElemType, unsigned int)
 {
 
-  switch (type_in)
+  switch (_type)
     {
       //---------------------------------------------
       // Hex quadrature rules
@@ -37,7 +36,7 @@ void QMonomial::init_3D(const ElemType type_in,
     case HEX20:
     case HEX27:
       {
-        switch(_order + 2*p)
+        switch(get_order())
           {
 
             // The CONSTANT/FIRST rule is the 1-point Gauss "product" rule...we fall
@@ -323,7 +322,7 @@ void QMonomial::init_3D(const ElemType type_in,
     default:
       {
         QGauss gauss_rule(3, _order);
-        gauss_rule.init(type_in, p);
+        gauss_rule.init(_type, _p_level);
 
         // Swap points and weights with the about-to-be destroyed rule.
         _points.swap (gauss_rule.get_points() );
@@ -331,7 +330,7 @@ void QMonomial::init_3D(const ElemType type_in,
 
         return;
       }
-    } // end switch (type_in)
+    } // end switch (_type)
 }
 
 } // namespace libMesh

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,6 @@
 
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/dof_map.h"
 #include "libmesh/equation_systems.h"
@@ -33,6 +31,7 @@
 #include "libmesh/qoi_set.h"
 #include "libmesh/sensitivity_data.h"
 #include "libmesh/sparse_matrix.h"
+#include "libmesh/utility.h"
 
 namespace libMesh
 {
@@ -138,7 +137,7 @@ void ImplicitSystem::init_matrices ()
 
   // Initialize matrices
   for (auto & pr : _matrices)
-    pr.second->init ();
+    pr.second->init (_matrix_types[pr.first]);
 
   // Set the additional matrices to 0.
   for (auto & pr : _matrices)
@@ -200,12 +199,13 @@ void ImplicitSystem::assemble ()
 
 
 
-SparseMatrix<Number> & ImplicitSystem::add_matrix (const std::string & mat_name)
+SparseMatrix<Number> & ImplicitSystem::add_matrix (const std::string & mat_name,
+                                                   const ParallelType type)
 {
   // only add matrices before initializing...
-  if (!_can_add_matrices)
-    libmesh_error_msg("ERROR: Too late.  Cannot add matrices to the system after initialization"
-                      << "\n any more.  You should have done this earlier.");
+  libmesh_error_msg_if(!_can_add_matrices,
+                       "ERROR: Too late.  Cannot add matrices to the system after initialization"
+                       "\n any more.  You should have done this earlier.");
 
   // Return the matrix if it is already there.
   if (this->have_matrix(mat_name))
@@ -213,7 +213,8 @@ SparseMatrix<Number> & ImplicitSystem::add_matrix (const std::string & mat_name)
 
   // Otherwise build the matrix and return it.
   SparseMatrix<Number> * buf = SparseMatrix<Number>::build(this->comm()).release();
-  _matrices.insert (std::make_pair (mat_name, buf));
+  _matrices.emplace(mat_name, buf);
+  _matrix_types.emplace(mat_name, type);
 
   return *buf;
 }
@@ -262,26 +263,14 @@ SparseMatrix<Number> * ImplicitSystem::request_matrix (const std::string & mat_n
 
 const SparseMatrix<Number> & ImplicitSystem::get_matrix (const std::string & mat_name) const
 {
-  // Make sure the matrix exists
-  const_matrices_iterator pos = _matrices.find (mat_name);
-
-  if (pos == _matrices.end())
-    libmesh_error_msg("ERROR: matrix " << mat_name << " does not exist in this system!");
-
-  return *(pos->second);
+  return *(libmesh_map_find(_matrices, mat_name));
 }
 
 
 
 SparseMatrix<Number> & ImplicitSystem::get_matrix (const std::string & mat_name)
 {
-  // Make sure the matrix exists
-  matrices_iterator pos = _matrices.find (mat_name);
-
-  if (pos == _matrices.end())
-    libmesh_error_msg("ERROR: matrix " << mat_name << " does not exist in this system!");
-
-  return *(pos->second);
+  return *(libmesh_map_find(_matrices, mat_name));
 }
 
 
@@ -340,13 +329,13 @@ ImplicitSystem::sensitivity_solve (const ParameterVector & parameters)
 
   // Solve the linear system.
   SparseMatrix<Number> * pc = this->request_matrix("Preconditioner");
-  for (auto p : IntRange<unsigned int>(0, parameters.size()))
+  for (auto p : make_range(parameters.size()))
     {
       std::pair<unsigned int, Real> rval =
         linear_solver->solve (*matrix, pc,
                               this->add_sensitivity_solution(p),
                               this->get_sensitivity_rhs(p),
-                              solver_params.second,
+                              double(solver_params.second),
                               solver_params.first);
 
       totalrval.first  += rval.first;
@@ -355,7 +344,7 @@ ImplicitSystem::sensitivity_solve (const ParameterVector & parameters)
 
   // The linear solver may not have fit our constraints exactly
 #ifdef LIBMESH_ENABLE_CONSTRAINTS
-  for (auto p : IntRange<unsigned int>(0, parameters.size()))
+  for (auto p : make_range(parameters.size()))
     this->get_dof_map().enforce_constraints_exactly
       (*this, &this->get_sensitivity_solution(p),
        /* homogeneous = */ true);
@@ -393,13 +382,13 @@ ImplicitSystem::adjoint_solve (const QoISet & qoi_indices)
     this->get_linear_solve_parameters();
   std::pair<unsigned int, Real> totalrval = std::make_pair(0,0.0);
 
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       {
         const std::pair<unsigned int, Real> rval =
           linear_solver->adjoint_solve (*matrix, this->add_adjoint_solution(i),
                                         this->get_adjoint_rhs(i),
-                                        solver_params.second,
+                                        double(solver_params.second),
                                         solver_params.first);
 
         totalrval.first  += rval.first;
@@ -410,7 +399,7 @@ ImplicitSystem::adjoint_solve (const QoISet & qoi_indices)
 
   // The linear solver may not have fit our constraints exactly
 #ifdef LIBMESH_ENABLE_CONSTRAINTS
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       this->get_dof_map().enforce_adjoint_constraints_exactly
         (this->get_adjoint_solution(i), i);
@@ -443,9 +432,11 @@ ImplicitSystem::weighted_sensitivity_adjoint_solve (const ParameterVector & para
 
   // FIXME: The derivation here does not yet take adjoint boundary
   // conditions into account.
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+#ifdef LIBMESH_ENABLE_DIRICHLET
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       libmesh_assert(!this->get_dof_map().has_adjoint_dirichlet_boundaries(i));
+#endif
 
   // We'll assemble the rhs first, because the R'' term will require
   // perturbing the jacobian
@@ -454,7 +445,7 @@ ImplicitSystem::weighted_sensitivity_adjoint_solve (const ParameterVector & para
   // any good reasons why users might want to save these:
 
   std::vector<std::unique_ptr<NumericVector<Number>>> temprhs(this->n_qois());
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       temprhs[i] = this->rhs->zero_clone();
 
@@ -485,7 +476,7 @@ ImplicitSystem::weighted_sensitivity_adjoint_solve (const ParameterVector & para
   this->assemble_qoi_derivative(qoi_indices,
                                 /* include_liftfunc = */ false,
                                 /* apply_constraints = */ true);
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       {
         this->get_adjoint_rhs(i).close();
@@ -505,7 +496,7 @@ ImplicitSystem::weighted_sensitivity_adjoint_solve (const ParameterVector & para
   this->assemble_qoi_derivative(qoi_indices,
                                 /* include_liftfunc = */ false,
                                 /* apply_constraints = */ true);
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       {
         this->get_adjoint_rhs(i).close();
@@ -538,13 +529,13 @@ ImplicitSystem::weighted_sensitivity_adjoint_solve (const ParameterVector & para
     this->get_linear_solve_parameters();
   std::pair<unsigned int, Real> totalrval = std::make_pair(0,0.0);
 
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       {
         const std::pair<unsigned int, Real> rval =
           linear_solver->solve (*matrix, this->add_weighted_sensitivity_adjoint_solution(i),
                                 *(temprhs[i]),
-                                solver_params.second,
+                                double(solver_params.second),
                                 solver_params.first);
 
         totalrval.first  += rval.first;
@@ -555,7 +546,7 @@ ImplicitSystem::weighted_sensitivity_adjoint_solve (const ParameterVector & para
 
   // The linear solver may not have fit our constraints exactly
 #ifdef LIBMESH_ENABLE_CONSTRAINTS
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       this->get_dof_map().enforce_constraints_exactly
         (*this, &this->get_weighted_sensitivity_adjoint_solution(i),
@@ -634,7 +625,7 @@ ImplicitSystem::weighted_sensitivity_solve (const ParameterVector & parameters_i
   const std::pair<unsigned int, Real> rval =
     linear_solver->solve (*matrix, this->add_weighted_sensitivity_solution(),
                           *temprhs,
-                          solver_params.second,
+                          double(solver_params.second),
                           solver_params.first);
 
   this->release_linear_solver(linear_solver);
@@ -845,7 +836,7 @@ void ImplicitSystem::forward_qoi_parameter_sensitivity (const QoISet & qoi_indic
   // We don't need these to be closed() in this function, but libMesh
   // standard practice is to have them closed() by the time the
   // function exits
-  for (unsigned int i=0; i != this->n_qois(); ++i)
+  for (auto i : make_range(this->n_qois()))
     if (qoi_indices.has_index(i))
       this->get_adjoint_rhs(i).close();
 

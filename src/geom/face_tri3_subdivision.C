@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,7 +28,10 @@ namespace libMesh
 // ------------------------------------------------------------
 // Tri3 subdivision class member functions
 
-Tri3Subdivision::Tri3Subdivision(Elem * p) : Tri3(p), _subdivision_updated(true)
+Tri3Subdivision::Tri3Subdivision(Elem * p) :
+  Tri3(p),
+  _subdivision_updated(p ? true : false),
+  _is_ghost(p ? true : false)
 {
   if (p)
     {
@@ -68,8 +71,9 @@ void Tri3Subdivision::prepare_subdivision_properties()
       if (this->node_ptr(i)->valence() != 6)
         {
           irregular_idx = i;
-          if (this->node_ptr(MeshTools::Subdivision::next[i])->valence() != 6 || this->node_ptr(MeshTools::Subdivision::prev[i])->valence() != 6)
-            libmesh_error_msg("Error: The mesh contains elements with more than one irregular vertex!");
+          libmesh_error_msg_if(this->node_ptr(MeshTools::Subdivision::next[i])->valence() != 6 ||
+                               this->node_ptr(MeshTools::Subdivision::prev[i])->valence() != 6,
+                               "Error: The mesh contains elements with more than one irregular vertex!");
         }
     }
 

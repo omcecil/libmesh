@@ -34,6 +34,7 @@
 #include "libmesh/condensed_eigen_system.h"
 #include "libmesh/linear_implicit_system.h"
 #include "libmesh/int_range.h"
+#include "libmesh/utility.h"
 
 namespace libMesh
 {
@@ -109,6 +110,10 @@ template <class Base>
 numeric_index_type RBConstructionBase<Base>::get_local_n_training_samples() const
 {
   libmesh_assert(training_parameters_initialized);
+
+  if (training_parameters.empty())
+    return 0;
+
   return training_parameters.begin()->second->local_size();
 }
 
@@ -116,6 +121,10 @@ template <class Base>
 numeric_index_type RBConstructionBase<Base>::get_first_local_training_index() const
 {
   libmesh_assert(training_parameters_initialized);
+
+  if (training_parameters.empty())
+    return 0;
+
   return training_parameters.begin()->second->first_local_index();
 }
 
@@ -123,6 +132,10 @@ template <class Base>
 numeric_index_type RBConstructionBase<Base>::get_last_local_training_index() const
 {
   libmesh_assert(training_parameters_initialized);
+
+  if (training_parameters.empty())
+    return 0;
+
   return training_parameters.begin()->second->last_local_index();
 }
 
@@ -184,7 +197,7 @@ void RBConstructionBase<Base>::initialize_training_parameters(const RBParameters
                                                               std::map<std::string,bool> log_param_scale,
                                                               bool deterministic)
 {
-  if(!is_quiet())
+  if (!is_quiet())
     {
       // Print out some info about the training set initialization
       libMesh::out << "Initializing training parameters with "
@@ -258,12 +271,12 @@ void RBConstructionBase<Base>::load_training_set(std::map<std::string, std::vect
 {
   // First, make sure that an initial training set has already been
   // generated
-  if (!training_parameters_initialized)
-    libmesh_error_msg("Error: load_training_set cannot be used to initialize parameters");
+  libmesh_error_msg_if(!training_parameters_initialized,
+                       "Error: load_training_set cannot be used to initialize parameters");
 
   // Make sure that the training set has the correct number of parameters
-  if (new_training_set.size() != get_n_params())
-    libmesh_error_msg("Error: Incorrect number of parameters in load_training_set.");
+  libmesh_error_msg_if(new_training_set.size() != get_n_params(),
+                       "Error: Incorrect number of parameters in load_training_set.");
 
   // Delete the training set vectors (but don't remove the existing keys!)
   for (auto & pr : training_parameters)
@@ -292,6 +305,26 @@ void RBConstructionBase<Base>::load_training_set(std::map<std::string, std::vect
           numeric_index_type index = first_index + i;
           training_vector->set(index, new_training_set[param_name][i]);
         }
+    }
+}
+
+
+template <class Base>
+void RBConstructionBase<Base>::set_training_parameter_values(
+  const std::string & param_name, const std::vector<Number> & values)
+{
+  libmesh_error_msg_if(!training_parameters_initialized,
+    "Training parameters must be initialized before calling set_training_parameter_values");
+  libmesh_error_msg_if(values.size() != get_local_n_training_samples(),
+    "Inconsistent sizes");
+
+  auto & training_vector = libmesh_map_find(training_parameters, param_name);
+
+  numeric_index_type first_index = training_vector->first_local_index();
+  for (auto i : make_range(get_local_n_training_samples()))
+    {
+      numeric_index_type index = first_index + i;
+      training_vector->set(index, values[i]);
     }
 }
 
@@ -385,7 +418,7 @@ void RBConstructionBase<Base>::generate_training_parameters_random(const Paralle
       NumericVector<Number> * training_vector = pr.second.get();
 
       numeric_index_type first_index = training_vector->first_local_index();
-      for (auto i : IntRange<numeric_index_type>(0, training_vector->local_size()))
+      for (auto i : make_range(training_vector->local_size()))
         {
           numeric_index_type index = first_index + i;
           Real random_number = static_cast<Real>(std::rand()) / RAND_MAX; // in range [0,1]
@@ -423,10 +456,10 @@ void RBConstructionBase<Base>::generate_training_parameters_deterministic(const 
   if (num_params == 0)
     return;
 
-  if (num_params > 2)
+  if (num_params > 3)
     {
       libMesh::out << "ERROR: Deterministic training sample generation "
-                   << " not implemented for more than two parameters." << std::endl;
+                   << " not implemented for more than three parameters." << std::endl;
       libmesh_not_implemented();
     }
 
@@ -435,164 +468,149 @@ void RBConstructionBase<Base>::generate_training_parameters_deterministic(const 
     pr.second.reset(nullptr);
 
   // Initialize training_parameters_in
-    for (const auto & pr : min_parameters)
+  std::vector<std::string> param_names(num_params);
+  unsigned int count = 0;
+  for (const auto & pr : min_parameters)
+    {
+      const std::string & param_name = pr.first;
+      param_names[count] = param_name;
+      training_parameters_in[param_name] = NumericVector<Number>::build(communicator);
+
+      if (!serial_training_set)
+        {
+          // Calculate the number of training parameters local to this processor
+          unsigned int n_local_training_samples;
+          unsigned int quotient  = n_training_samples_in/communicator.size();
+          unsigned int remainder = n_training_samples_in%communicator.size();
+          if (communicator.rank() < remainder)
+            n_local_training_samples = (quotient + 1);
+          else
+            n_local_training_samples = quotient;
+
+          training_parameters_in[param_name]->init(n_training_samples_in, n_local_training_samples, false, PARALLEL);
+        }
+      else
+        {
+          training_parameters_in[param_name]->init(n_training_samples_in, false, SERIAL);
+        }
+
+      count++;
+    }
+
+  // n_training_samples_per_param has 3 entries, but entries after "num_params"
+  // are unused so we just set their value to 1. We need to set it to 1 (rather
+  // than 0) so that we don't skip the inner part of the triply-nested loop over
+  // n_training_samples_per_param below.
+  std::vector<unsigned int> n_training_samples_per_param(3);
+  for (unsigned int param=0; param<3; param++)
+    {
+      if (param < num_params)
+        {
+          n_training_samples_per_param[param] =
+            static_cast<unsigned int>( std::round(std::pow(static_cast<Real>(n_training_samples_in), 1./num_params)) );
+        }
+      else
+        {
+          n_training_samples_per_param[param] = 1;
+        }
+    }
+
+  {
+    // The current implementation assumes that we have the same number of
+    // samples in each parameter, so we check that n_training_samples_in
+    // is consistent with this assumption.
+    unsigned int total_samples_check = 1;
+    for (unsigned int n_samples : n_training_samples_per_param)
       {
-        const std::string & param_name = pr.first;
-        training_parameters_in[param_name] = NumericVector<Number>::build(communicator);
-
-        if (!serial_training_set)
-          {
-            // Calculate the number of training parameters local to this processor
-            unsigned int n_local_training_samples;
-            unsigned int quotient  = n_training_samples_in/communicator.size();
-            unsigned int remainder = n_training_samples_in%communicator.size();
-            if (communicator.rank() < remainder)
-              n_local_training_samples = (quotient + 1);
-            else
-              n_local_training_samples = quotient;
-
-            training_parameters_in[param_name]->init(n_training_samples_in, n_local_training_samples, false, PARALLEL);
-          }
-        else
-          {
-            training_parameters_in[param_name]->init(n_training_samples_in, false, SERIAL);
-          }
+        total_samples_check *= n_samples;
       }
 
-  if (num_params == 1)
-    {
-      NumericVector<Number> * training_vector = training_parameters_in.begin()->second.get();
-      bool use_log_scaling = log_param_scale.begin()->second;
-      Real min_param = min_parameters.begin()->second;
-      Real max_param = max_parameters.begin()->second;
+    libmesh_error_msg_if(total_samples_check != n_training_samples_in,
+                         "Error: Number of training samples = "
+                         << n_training_samples_in
+                         << " does not enable a uniform grid of samples with "
+                         << num_params << " parameters.");
+  }
 
-      numeric_index_type first_index = training_vector->first_local_index();
-      for (auto i : IntRange<numeric_index_type>(0, training_vector->local_size()))
-        {
-          numeric_index_type index = first_index+i;
-          if (use_log_scaling)
-            {
-              Real epsilon = 1.e-6; // Prevent rounding errors triggering asserts
-              Real log_min   = log10(min_param + epsilon);
-              Real log_range = log10( (max_param-epsilon) / (min_param+epsilon) );
-              Real step_size = log_range /
-                std::max((unsigned int)1,(n_training_samples_in-1));
+  // First we make a list of training samples associated with each parameter,
+  // then we take a tensor product to obtain the final set of training samples.
+  std::vector<std::vector<Real>> training_samples_per_param(num_params);
+  {
+    unsigned int i = 0;
+    for (const std::string & param_name : param_names)
+      {
+        bool use_log_scaling = log_param_scale[param_name];
+        Real min_param = min_parameters.get_value(param_name);
+        Real max_param = max_parameters.get_value(param_name);
 
-              if (index<(n_training_samples_in-1))
-                {
-                  training_vector->set(index, pow(10., log_min + index*step_size ));
-                }
-              else
-                {
-                  // due to rounding error, the last parameter can be slightly
-                  // bigger than max_parameters, hence snap back to the max
-                  training_vector->set(index, max_param);
-                }
-            }
-          else
-            {
-              // Generate linearly scaled training parameters
-              Real step_size = (max_param - min_param) /
-                std::max((unsigned int)1,(n_training_samples_in-1));
-              training_vector->set(index, index*step_size + min_param);
-            }
-        }
-    }
+        training_samples_per_param[i].resize(n_training_samples_per_param[i]);
 
+        for (unsigned int j=0; j<n_training_samples_per_param[i]; j++)
+          {
+            // Generate log10 scaled training parameters
+            if (use_log_scaling)
+              {
+                Real epsilon = 1.e-6; // Prevent rounding errors triggering asserts
+                Real log_min   = log10(min_param + epsilon);
+                Real log_range = log10( (max_param-epsilon) / (min_param+epsilon) );
+                Real step_size = log_range /
+                  std::max((unsigned int)1,(n_training_samples_per_param[i]-1));
 
-  // This is for two parameters
-  if (num_params == 2)
-    {
-      // First make sure n_training_samples_in is a square number
-      unsigned int n_training_parameters_per_var = static_cast<unsigned int>( std::sqrt(static_cast<Real>(n_training_samples_in)) );
-      if ((n_training_parameters_per_var*n_training_parameters_per_var) != n_training_samples_in)
-        libmesh_error_msg("Error: Number of training parameters = " \
-                          << n_training_samples_in \
-                          << ".\n" \
-                          << "Deterministic training set generation with two parameters requires\n " \
-                          << "the number of training parameters to be a perfect square.");
+                if (j<(n_training_samples_per_param[i]-1))
+                  {
+                    training_samples_per_param[i][j] = pow(10., log_min + j*step_size );
+                  }
+                else
+                  {
+                    // due to rounding error, the last parameter can be slightly
+                    // bigger than max_parameters, hence snap back to the max
+                    training_samples_per_param[i][j] = max_param;
+                  }
+              }
+            else
+              {
+                // Generate linearly scaled training parameters
+                Real step_size = (max_param - min_param) /
+                  std::max((unsigned int)1,(n_training_samples_per_param[i]-1));
+                training_samples_per_param[i][j] = j*step_size + min_param;
+              }
 
-      // make a matrix to store all the parameters, put them in vector form afterwards
-      std::vector<std::vector<Real>> training_parameters_matrix(num_params);
+          }
+        i++;
+      }
+  }
 
-      unsigned int i = 0;
-      for (const auto & pr : min_parameters)
-        {
-          const std::string & param_name = pr.first;
-          Real min_param = pr.second;
-          bool use_log_scaling = log_param_scale[param_name];
-          Real max_param = max_parameters.get_value(param_name);
+  // Now load into training_samples_in
+  {
+    std::vector<unsigned int> indices(3);
+    unsigned int index_count = 0;
+    for (indices[0]=0; indices[0]<n_training_samples_per_param[0]; indices[0]++)
+      {
+        for (indices[1]=0; indices[1]<n_training_samples_per_param[1]; indices[1]++)
+          {
+            for (indices[2]=0; indices[2]<n_training_samples_per_param[2]; indices[2]++)
+              {
+                unsigned int param_count = 0;
+                for (const std::string & param_name : param_names)
+                  {
+                    libmesh_error_msg_if(!training_parameters_in.count(param_name), "Invalid parameter name: " + param_name);
 
-          training_parameters_matrix[i].resize(n_training_parameters_per_var);
+                    std::unique_ptr<NumericVector<Number>> & training_vector =
+                      training_parameters_in.find(param_name)->second;
 
-          for (unsigned int j=0; j<n_training_parameters_per_var; j++)
-            {
-              // Generate log10 scaled training parameters
-              if (use_log_scaling)
-                {
-                  Real epsilon = 1.e-6; // Prevent rounding errors triggering asserts
-                  Real log_min   = log10(min_param + epsilon);
-                  Real log_range = log10( (max_param-epsilon) / (min_param+epsilon) );
-                  Real step_size = log_range /
-                    std::max((unsigned int)1,(n_training_parameters_per_var-1));
-
-                  if (j<(n_training_parameters_per_var-1))
-                    {
-                      training_parameters_matrix[i][j] = pow(10., log_min + j*step_size );
-                    }
-                  else
-                    {
-                      // due to rounding error, the last parameter can be slightly
-                      // bigger than max_parameters, hence snap back to the max
-                      training_parameters_matrix[i][j] = max_param;
-                    }
-                }
-              else
-                {
-                  // Generate linearly scaled training parameters
-                  Real step_size = (max_param - min_param) /
-                    std::max((unsigned int)1,(n_training_parameters_per_var-1));
-                  training_parameters_matrix[i][j] = j*step_size + min_param;
-                }
-
-            }
-          i++;
-        }
-
-      // now load into training_samples_in:
-      std::map<std::string, std::unique_ptr<NumericVector<Number>>>::iterator new_it = training_parameters_in.begin();
-
-      NumericVector<Number> * training_vector_0 = new_it->second.get();
-      ++new_it;
-      NumericVector<Number> * training_vector_1 = new_it->second.get();
-
-      for (unsigned int index1=0; index1<n_training_parameters_per_var; index1++)
-        {
-          for (unsigned int index2=0; index2<n_training_parameters_per_var; index2++)
-            {
-              unsigned int index = index1*n_training_parameters_per_var + index2;
-
-              if ((training_vector_0->first_local_index() <= index) &&
-                  (index < training_vector_0->last_local_index()))
-                {
-                  training_vector_0->set(index, training_parameters_matrix[0][index1]);
-                  training_vector_1->set(index, training_parameters_matrix[1][index2]);
-                }
-            }
-        }
-
-      //     libMesh::out << "n_training_samples = " << n_training_samples_in << std::endl;
-      //     for (unsigned int index=0; index<n_training_samples_in; index++)
-      //     {
-      //         libMesh::out << "training parameters for index="<<index<<":"<<std::endl;
-      //         for (unsigned int param=0; param<num_params; param++)
-      //         {
-      //           libMesh::out << " " << (*training_parameters_in[param])(index);
-      //         }
-      //         libMesh::out << std::endl << std::endl;
-      //     }
-
-    }
+                    if ((training_vector->first_local_index() <= index_count) &&
+                        (index_count < training_vector->last_local_index()))
+                      {
+                        training_vector->set(
+                          index_count, training_samples_per_param[param_count][indices[param_count]]);
+                      }
+                    param_count++;
+                  }
+                index_count++;
+              }
+          }
+      }
+  }
 }
 
 
@@ -640,5 +658,6 @@ template class RBConstructionBase<CondensedEigenSystem>;
 #endif
 
 template class RBConstructionBase<LinearImplicitSystem>;
+template class RBConstructionBase<System>;
 
 } // namespace libMesh

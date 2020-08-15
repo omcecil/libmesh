@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,7 @@
 // Local includes
 #include "libmesh/fe.h"
 #include "libmesh/elem.h"
+#include "libmesh/fe_interface.h"
 
 
 // Anonymous namespace for persistent variables.
@@ -82,11 +83,13 @@ void clough_compute_coefs(const Elem * elem)
     return;
 #endif
 
-  const Order mapping_order        (elem->default_order());
-  const ElemType mapping_elem_type (elem->type());
+  const FEFamily mapping_family = FEMap::map_fe_type(*elem);
+  const FEType map_fe_type(elem->default_order(), mapping_family);
+
+  // Note: we explicitly don't consider the elem->p_level() when
+  // computing the number of mapping shape functions.
   const int n_mapping_shape_functions =
-    FE<2,LAGRANGE>::n_shape_functions(mapping_elem_type,
-                                      mapping_order);
+    FEInterface::n_shape_functions(map_fe_type, /*extra_order=*/0, elem);
 
   // Degrees of freedom are at vertices and edge midpoints
   std::vector<Point> dofpt;
@@ -101,15 +104,18 @@ void clough_compute_coefs(const Elem * elem)
   std::vector<Real> dxdxi(6), dxdeta(6), dydxi(6), dydeta(6);
   std::vector<Real> dxidx(6), detadx(6), dxidy(6), detady(6);
 
+  FEInterface::shape_deriv_ptr shape_deriv_ptr =
+    FEInterface::shape_deriv_function(map_fe_type, elem);
+
   for (int p = 0; p != 6; ++p)
     {
       //      libMesh::err << p << ' ' << dofpt[p];
       for (int i = 0; i != n_mapping_shape_functions; ++i)
         {
-          const Real ddxi = FE<2,LAGRANGE>::shape_deriv
-            (mapping_elem_type, mapping_order, i, 0, dofpt[p]);
-          const Real ddeta = FE<2,LAGRANGE>::shape_deriv
-            (mapping_elem_type, mapping_order, i, 1, dofpt[p]);
+          const Real ddxi = shape_deriv_ptr
+            (map_fe_type, elem, i, 0, dofpt[p], /*add_p_level=*/false);
+          const Real ddeta = shape_deriv_ptr
+            (map_fe_type, elem, i, 1, dofpt[p], /*add_p_level=*/false);
 
           //      libMesh::err << ddxi << ' ';
           //      libMesh::err << ddeta << std::endl;
@@ -1806,23 +1812,15 @@ namespace libMesh
 {
 
 
-template <>
-Real FE<2,CLOUGH>::shape(const ElemType,
-                         const Order,
-                         const unsigned int,
-                         const Point &)
-{
-  libmesh_error_msg("Clough-Tocher elements require the real element \nto construct gradient-based degrees of freedom.");
-  return 0.;
-}
-
+LIBMESH_DEFAULT_VECTORIZED_FE(2,CLOUGH)
 
 
 template <>
 Real FE<2,CLOUGH>::shape(const Elem * elem,
                          const Order order,
                          const unsigned int i,
-                         const Point & p)
+                         const Point & p,
+                         const bool add_p_level)
 {
   libmesh_assert(elem);
 
@@ -1830,7 +1828,8 @@ Real FE<2,CLOUGH>::shape(const Elem * elem,
 
   const ElemType type = elem->type();
 
-  const Order totalorder = static_cast<Order>(order + elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order + add_p_level * elem->p_level());
 
   switch (totalorder)
     {
@@ -1999,15 +1998,26 @@ Real FE<2,CLOUGH>::shape(const Elem * elem,
 
 
 template <>
-Real FE<2,CLOUGH>::shape_deriv(const ElemType,
-                               const Order,
-                               const unsigned int,
-                               const unsigned int,
-                               const Point &)
+Real FE<2,CLOUGH>::shape(const ElemType,
+                         const Order,
+                         const unsigned int,
+                         const Point &)
 {
   libmesh_error_msg("Clough-Tocher elements require the real element \nto construct gradient-based degrees of freedom.");
   return 0.;
 }
+
+
+template <>
+Real FE<2,CLOUGH>::shape(const FEType fet,
+                         const Elem * elem,
+                         const unsigned int i,
+                         const Point & p,
+                         const bool add_p_level)
+{
+  return FE<2,CLOUGH>::shape(elem, fet.order, i, p, add_p_level);
+}
+
 
 
 
@@ -2016,7 +2026,8 @@ Real FE<2,CLOUGH>::shape_deriv(const Elem * elem,
                                const Order order,
                                const unsigned int i,
                                const unsigned int j,
-                               const Point & p)
+                               const Point & p,
+                               const bool add_p_level)
 {
   libmesh_assert(elem);
 
@@ -2024,7 +2035,8 @@ Real FE<2,CLOUGH>::shape_deriv(const Elem * elem,
 
   const ElemType type = elem->type();
 
-  const Order totalorder = static_cast<Order>(order + elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order + add_p_level * elem->p_level());
 
   switch (totalorder)
     {
@@ -2191,15 +2203,41 @@ Real FE<2,CLOUGH>::shape_deriv(const Elem * elem,
 }
 
 
+template <>
+Real FE<2,CLOUGH>::shape_deriv(const ElemType,
+                               const Order,
+                               const unsigned int,
+                               const unsigned int,
+                               const Point &)
+{
+  libmesh_error_msg("Clough-Tocher elements require the real element \nto construct gradient-based degrees of freedom.");
+  return 0.;
+}
+
+
+template <>
+Real FE<2,CLOUGH>::shape_deriv(const FEType fet,
+                               const Elem * elem,
+                               const unsigned int i,
+                               const unsigned int j,
+                               const Point & p,
+                               const bool add_p_level)
+{
+  return FE<2,CLOUGH>::shape_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
+
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+
 
 template <>
 Real FE<2,CLOUGH>::shape_second_deriv(const Elem * elem,
                                       const Order order,
                                       const unsigned int i,
                                       const unsigned int j,
-                                      const Point & p)
+                                      const Point & p,
+                                      const bool add_p_level)
 {
   libmesh_assert(elem);
 
@@ -2207,7 +2245,8 @@ Real FE<2,CLOUGH>::shape_second_deriv(const Elem * elem,
 
   const ElemType type = elem->type();
 
-  const Order totalorder = static_cast<Order>(order + elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order + add_p_level * elem->p_level());
 
   switch (totalorder)
     {
@@ -2368,6 +2407,30 @@ Real FE<2,CLOUGH>::shape_second_deriv(const Elem * elem,
       libmesh_error_msg("ERROR: Unsupported polynomial order = " << order);
     }
 }
+
+
+template <>
+Real FE<2,CLOUGH>::shape_second_deriv(const ElemType,
+                                      const Order,
+                                      const unsigned int,
+                                      const unsigned int,
+                                      const Point &)
+{
+  libmesh_error_msg("Clough-Tocher elements require the real element \nto construct gradient-based degrees of freedom.");
+  return 0.;
+}
+
+template <>
+Real FE<2,CLOUGH>::shape_second_deriv(const FEType fet,
+                                      const Elem * elem,
+                                      const unsigned int i,
+                                      const unsigned int j,
+                                      const Point & p,
+                                      const bool add_p_level)
+{
+  return FE<2,CLOUGH>::shape_second_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
 
 #endif
 

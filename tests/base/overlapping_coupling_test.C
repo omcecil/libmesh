@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/equation_systems.h>
 #include <libmesh/replicated_mesh.h>
 #include <libmesh/numeric_vector.h>
@@ -18,19 +12,11 @@
 #include <libmesh/mesh_modification.h>
 #include <libmesh/partitioner.h>
 #include <libmesh/sparse_matrix.h>
-
+#include <libmesh/auto_ptr.h> // libmesh_make_unique
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -83,6 +69,7 @@ class OverlappingCouplingFunctor : public GhostingFunctor
    processor_id_type p,
    std::unordered_map<const Elem *,const CouplingMatrix*> & coupled_elements) override
   {
+    std::unique_ptr<PointLocatorBase> sub_point_locator = _mesh.sub_point_locator();
 
     for( const auto & elem : as_range(range_begin,range_end) )
       {
@@ -113,10 +100,10 @@ class OverlappingCouplingFunctor : public GhostingFunctor
 
         for ( const auto & qp : qpoints )
           {
-            const Elem * overlapping_elem = (*_point_locator)( qp, &allowed_subdomains );
+            const Elem * overlapping_elem = (*sub_point_locator)( qp, &allowed_subdomains );
 
             if( overlapping_elem && overlapping_elem->processor_id() != p )
-              coupled_elements.insert( std::make_pair(overlapping_elem,_coupling_matrix.get()) );
+              coupled_elements.emplace(overlapping_elem, _coupling_matrix.get());
           }
       }
   }
@@ -253,7 +240,7 @@ protected:
     // We are making assumptions in various places about the presence
     // of the elements on the current processor so we're restricting to
     // ReplicatedMesh for now.
-    _mesh.reset(new ReplicatedMesh(*TestCommWorld));
+    _mesh = libmesh_make_unique<ReplicatedMesh>(*TestCommWorld);
 
     _mesh->set_mesh_dimension(2);
 
@@ -263,8 +250,7 @@ protected:
     _mesh->add_point( Point(0.0,1.0),3 );
 
     {
-      Elem* elem = _mesh->add_elem( new Quad4 );
-      elem->set_id(0);
+      Elem * elem = _mesh->add_elem(Elem::build_with_id(QUAD4, 0));
       elem->subdomain_id() = 1;
 
       for (unsigned int n=0; n<4; n++)
@@ -275,8 +261,7 @@ protected:
     _mesh->add_point( Point(0.0,2.0),5 );
 
     {
-      Elem* elem = _mesh->add_elem( new Quad4 );
-      elem->set_id(1);
+      Elem * elem = _mesh->add_elem(Elem::build_with_id(QUAD4, 1));
       elem->subdomain_id() = 1;
 
       elem->set_node(0) = _mesh->node_ptr(3);
@@ -291,8 +276,7 @@ protected:
     _mesh->add_point( Point(0.0,2.0),9 );
 
     {
-      Elem* elem = _mesh->add_elem( new Quad4 );
-      elem->set_id(2);
+      Elem* elem = _mesh->add_elem(Elem::build_with_id(QUAD4, 2));
       elem->subdomain_id() = 2;
 
       elem->set_node(0) = _mesh->node_ptr(6);
@@ -301,20 +285,22 @@ protected:
       elem->set_node(3) = _mesh->node_ptr(9);
     }
 
-    _mesh->partitioner() = std::unique_ptr<Partitioner>(new OverlappingTestPartitioner);
+    _mesh->partitioner() = libmesh_make_unique<OverlappingTestPartitioner>();
 
     _mesh->prepare_for_use();
 
+#ifdef LIBMESH_ENABLE_AMR
     if (n_refinements > 0)
       {
         MeshRefinement refine(*_mesh);
         refine.uniformly_refine(n_refinements);
       }
+#endif // LIBMESH_ENABLE_AMR
   }
 
   void init(MeshBase & mesh)
   {
-    _es.reset( new EquationSystems(*_mesh) );
+    _es = libmesh_make_unique<EquationSystems>(*_mesh);
     LinearImplicitSystem & sys = _es->add_system<LinearImplicitSystem> ("SimpleSystem");
 
     std::set<subdomain_id_type> sub_one;
@@ -342,8 +328,7 @@ protected:
   {
     System & system = _es->get_system("SimpleSystem");
 
-
-    coupling.reset( new CouplingMatrix(system.n_vars()) );
+    coupling = libmesh_make_unique<CouplingMatrix>(system.n_vars());
 
     const unsigned int u_var = system.variable_number("U");
     const unsigned int l_var = system.variable_number("L");
@@ -371,12 +356,14 @@ public:
 
   CPPUNIT_TEST_SUITE( OverlappingFunctorTest );
 
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( checkCouplingFunctorQuad );
   CPPUNIT_TEST( checkCouplingFunctorQuadUnifRef );
   CPPUNIT_TEST( checkCouplingFunctorTri );
   CPPUNIT_TEST( checkCouplingFunctorTriUnifRef );
   CPPUNIT_TEST( checkOverlappingPartitioner );
   CPPUNIT_TEST( checkOverlappingPartitionerUnifRef );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -426,15 +413,18 @@ private:
 
   // This is basically to sanity check the coupling functor
   // with the supplied mesh to make sure all the assumptions
-  // are kosher.
+  // are kosher. This test requires AMR and some kind of a
+  // linear solver, so let's only run it if we have PETSc.
   void run_coupling_functor_test(unsigned int n_refinements)
   {
+#if defined(LIBMESH_ENABLE_AMR) && defined(LIBMESH_HAVE_SOLVER)
     if( n_refinements > 0 )
       {
         MeshRefinement refine(*_mesh);
         refine.uniformly_refine(n_refinements);
         _es->reinit();
       }
+#endif
 
     System & system = _es->get_system("SimpleSystem");
 
@@ -457,17 +447,19 @@ private:
                                                        _mesh->active_subdomain_elements_end(2) );
 
     CPPUNIT_ASSERT_EQUAL( n_elems_subdomain_two, (dof_id_type) subdomain_one_couplings.size() );
-    CPPUNIT_ASSERT_EQUAL( 2*n_elems_subdomain_two, (dof_id_type) subdomain_two_couplings.size() );
+    CPPUNIT_ASSERT_EQUAL( dof_id_type(2*n_elems_subdomain_two), (dof_id_type) subdomain_two_couplings.size() );
   }
 
   void run_partitioner_test(unsigned int n_refinements)
   {
+#ifdef LIBMESH_ENABLE_AMR
     if( n_refinements > 0 )
       {
         MeshRefinement refine(*_mesh);
         refine.uniformly_refine(n_refinements);
         _es->reinit();
       }
+#endif // LIBMESH_ENABLE_AMR
 
     System & system = _es->get_system("SimpleSystem");
 
@@ -593,6 +585,7 @@ private:
         // A little extra unit testing on the range iterator
         CPPUNIT_ASSERT_EQUAL(2, (int)elem->subdomain_id());
 
+        subdomain_one_context.get_element_fe(u_var)->get_nothing(); // for this unit test
         const std::vector<libMesh::Point> & qpoints = subdomain_two_context.get_element_fe(u_var)->get_xyz();
 
         // Setup the context for the current element
@@ -709,7 +702,12 @@ private:
     DenseMatrix<Number> K12, K21;
 
     FEMContext subdomain_one_context(system);
+    subdomain_one_context.get_element_fe(u_var)->get_nothing();
+    subdomain_one_context.get_element_fe(v_var)->get_nothing();
+
     FEMContext subdomain_two_context(system);
+    subdomain_two_context.get_element_fe(u_var)->get_xyz();
+    subdomain_two_context.get_element_fe(v_var)->get_nothing();
 
     // Add normally coupled parts of the matrix
     for (const auto & elem : _mesh->active_local_subdomain_elements_ptr_range(1))

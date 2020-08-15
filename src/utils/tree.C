@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -141,6 +141,18 @@ Tree<N>::find_element (const Point & p,
                        Real relative_tol) const
 {
   return root.find_element(p, allowed_subdomains, relative_tol);
+}
+
+
+
+template <unsigned int N>
+void
+Tree<N>::find_elements (const Point & p,
+                        std::set<const Elem *> & candidate_elements,
+                        const std::set<subdomain_id_type> * allowed_subdomains,
+                        Real relative_tol) const
+{
+  return root.find_elements(p, candidate_elements, allowed_subdomains, relative_tol);
 }
 
 

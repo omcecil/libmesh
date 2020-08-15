@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -43,6 +43,25 @@ FEType::default_quadrature_rule (const unsigned int dim,
     return libmesh_make_unique<QGauss>(dim, static_cast<Order>(1 + extraorder));
 
   return libmesh_make_unique<QGauss>(dim, static_cast<Order>(this->default_quadrature_order() + extraorder));
+}
+
+
+std::unique_ptr<QBase>
+FEType::unweighted_quadrature_rule (const unsigned int dim,
+                                    const int extraorder) const
+{
+  // Clough elements have at least piecewise cubic functions
+  if (family == CLOUGH)
+    {
+      Order o = static_cast<Order>(std::max(static_cast<unsigned int>(this->unweighted_quadrature_order()),
+                                            static_cast<unsigned int>(3 + extraorder)));
+      return libmesh_make_unique<QClough>(dim, o);
+    }
+
+  if (family == SUBDIVISION)
+    return libmesh_make_unique<QGauss>(dim, static_cast<Order>(1 + extraorder));
+
+  return libmesh_make_unique<QGauss>(dim, static_cast<Order>(this->unweighted_quadrature_order() + extraorder));
 }
 
 } // namespace libMesh

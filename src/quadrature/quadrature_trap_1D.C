@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,13 +23,8 @@
 namespace libMesh
 {
 
-
-
-void QTrap::init_1D(const ElemType,
-                    unsigned int)
+void QTrap::init_1D(const ElemType, unsigned int)
 {
-  //----------------------------------------------------------------------
-  // 1D quadrature rules
   _points.resize(2);
   _weights.resize(2);
 
@@ -38,8 +33,6 @@ void QTrap::init_1D(const ElemType,
 
   _weights[0] = 1.;
   _weights[1] = 1.;
-
-  return;
 }
 
 } // namespace libMesh

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -39,7 +39,9 @@ std::unique_ptr<FETransformationBase<OutputShape>> FETransformationBase<OutputSh
     case SUBDIVISION:
     case LAGRANGE_VEC:
     case MONOMIAL: // PB: Shouldn't this be L2 conforming?
+    case MONOMIAL_VEC: // PB: Shouldn't this be L2 conforming?
     case XYZ: // PB: Shouldn't this be L2 conforming?
+    case RATIONAL_BERNSTEIN:
     case L2_HIERARCHIC: // PB: Shouldn't this be L2 conforming?
     case L2_LAGRANGE: // PB: Shouldn't this be L2 conforming?
     case JACOBI_20_00: // PB: For infinite elements...

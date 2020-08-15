@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,7 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/parameter_accessor.h"
 #include "libmesh/parsed_function.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 namespace libMesh
 {
@@ -85,8 +86,7 @@ public:
    * \returns A new copy of the accessor.
    */
   virtual std::unique_ptr<ParameterAccessor<T>> clone() const {
-    return std::unique_ptr<ParameterAccessor<T>>
-      (new ParsedFunctionParameter<T>(_func, _name));
+    return libmesh_make_unique<ParsedFunctionParameter<T>>(_func, _name);
   }
 
 private:

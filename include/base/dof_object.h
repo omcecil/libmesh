@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 
 // Local includes
 #include "libmesh/id_types.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh_config.h"
 #include "libmesh/libmesh_common.h"
 #include "libmesh/libmesh.h" // libMesh::invalid_uint
@@ -29,6 +30,7 @@
 
 // C++ includes
 #include <cstddef>
+#include <cstring>
 #include <vector>
 
 namespace libMesh
@@ -144,9 +146,16 @@ public:
   unique_id_type unique_id () const;
 
   /**
-   * \returns The globally \p unique_id for this \p DofObject as a writable reference.
+   * \returns The globally \p unique_id for this \p DofObject as a
+   * writable reference.  Deprecated; use the API taking an input
+   * instead.
    */
   unique_id_type & set_unique_id ();
+
+  /**
+   * Sets the \p unique_id for this \p DofObject
+   */
+  void set_unique_id (unique_id_type new_id);
 
   /**
    * Sets the \p id for this \p DofObject
@@ -227,7 +236,26 @@ public:
    * with \p index, which should have been obtained via a call to \p
    * MeshBase::add_elem_integer or \p MeshBase::add_node_integer
    */
-  dof_id_type get_extra_integer (const unsigned int index);
+  dof_id_type get_extra_integer (const unsigned int index) const;
+
+  /**
+   * Sets the value on this object of the extra datum associated
+   * with \p index, which should have been obtained via a call to \p
+   * MeshBase::add_elem_datum or \p MeshBase::add_node_datum using
+   * the same type T.
+   */
+  template <typename T>
+  void set_extra_datum (const unsigned int index, const T value);
+
+  /**
+   * Gets the value on this object of the extra datum associated
+   * with \p index, which should have been obtained via a call to \p
+   * MeshBase::add_elem_datum or \p MeshBase::add_node_datum using
+   * the same type T.
+   */
+  template <typename T>
+  T get_extra_datum (const unsigned int index) const;
+
 
   /**
    * Adds an additional system to the \p DofObject
@@ -374,11 +402,18 @@ public:
    * Assigns a set of extra integers to this \p DofObject.  There will
    * now be \p n_integers associated; this *replaces*, not augments,
    * any previous count.
+   *
+   * If non-integer data is in the set, each datum of type T should be
+   * counted sizeof(T)/sizeof(dof_id_type) times in \p n_integers.
    */
   void add_extra_integers (const unsigned int n_integers);
 
   /**
    * Returns how many extra integers are associated to the \p DofObject
+   *
+   * If non-integer data has been associated, each datum of type T
+   * counts for sizeof(T)/sizeof(dof_id_type) times in the return
+   * value.
    */
   unsigned int n_extra_integers () const;
 
@@ -440,12 +475,9 @@ public:
    */
   void print_dof_info() const;
 
-  // Deep copy (or almost-copy) of DofObjects is now deprecated in
-  // derived classes; we keep these methods around solely for a couple
+  // Deep copy (or almost-copy) of DofObjects is solely for a couple
   // tricky internal uses.
-#ifndef LIBMESH_ENABLE_DEPRECATED
 private:
-#endif
 
   /**
    * "Copy"-constructor.  Does not copy old_dof_object, but leaves it
@@ -457,8 +489,6 @@ private:
    * Deep-copying assignment operator
    */
   DofObject & operator= (const DofObject & dof_obj);
-
-private:
 
   /**
    * Utility function - for variable \p var in system \p s, figure out what
@@ -661,17 +691,18 @@ DofObject::~DofObject ()
 inline
 void DofObject::invalidate_dofs (const unsigned int sys_num)
 {
+  const unsigned int n_sys = this->n_systems();
   // If the user does not specify the system number...
-  if (sys_num >= this->n_systems())
+  if (sys_num >= n_sys)
     {
-      for (unsigned int s=0; s<this->n_systems(); s++)
-        for (unsigned int vg=0; vg<this->n_var_groups(s); vg++)
+      for (auto s : make_range(n_sys))
+        for (auto vg : make_range(this->n_var_groups(s)))
           if (this->n_comp_group(s,vg))
             this->set_vg_dof_base(s,vg,invalid_id);
     }
   // ...otherwise invalidate the dofs for all systems
   else
-    for (unsigned int vg=0; vg<this->n_var_groups(sys_num); vg++)
+    for (auto vg : make_range(this->n_var_groups(sys_num)))
       if (this->n_comp_group(sys_num,vg))
         this->set_vg_dof_base(sys_num,vg,invalid_id);
 }
@@ -722,7 +753,7 @@ unsigned int DofObject::n_dofs (const unsigned int s,
 
   // Count all variables
   if (var == libMesh::invalid_uint)
-    for (unsigned int v=0; v<this->n_vars(s); v++)
+    for (auto v : make_range(this->n_vars(s)))
       num += this->n_comp(s,v);
 
   // Only count specified variable
@@ -768,8 +799,22 @@ inline
 unique_id_type & DofObject::set_unique_id ()
 {
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
+  libmesh_deprecated();
   return _unique_id;
 #else
+  libmesh_not_implemented();
+#endif
+}
+
+
+
+inline
+void DofObject::set_unique_id (unique_id_type new_id)
+{
+#ifdef LIBMESH_ENABLE_UNIQUE_ID
+  _unique_id = new_id;
+#else
+  libmesh_ignore(new_id);
   libmesh_not_implemented();
 #endif
 }
@@ -994,7 +1039,7 @@ DofObject::set_extra_integer(const unsigned int index,
 
 inline
 dof_id_type
-DofObject::get_extra_integer (const unsigned int index)
+DofObject::get_extra_integer (const unsigned int index) const
 {
   libmesh_assert_less(index, this->n_extra_integers());
   libmesh_assert_less(this->n_systems(), _idx_buf.size());
@@ -1003,6 +1048,47 @@ DofObject::get_extra_integer (const unsigned int index)
 
   libmesh_assert_less(start_idx_i+index, _idx_buf.size());
   return _idx_buf[start_idx_i+index];
+}
+
+
+
+template <typename T>
+inline
+void
+DofObject::set_extra_datum(const unsigned int index,
+                           const T value)
+{
+#ifndef NDEBUG
+  const unsigned int n_more_integers = (sizeof(T)-1)/sizeof(dof_id_type);
+#endif
+  libmesh_assert_less(index+n_more_integers, this->n_extra_integers());
+  libmesh_assert_less(this->n_pseudo_systems(), _idx_buf.size());
+
+  const unsigned int start_idx_i = this->start_idx_ints();
+
+  libmesh_assert_less(start_idx_i+index+n_more_integers, _idx_buf.size());
+  std::memcpy(&_idx_buf[start_idx_i+index], &value, sizeof(T));
+}
+
+
+
+template <typename T>
+inline
+T
+DofObject::get_extra_datum (const unsigned int index) const
+{
+#ifndef NDEBUG
+  const unsigned int n_more_integers = (sizeof(T)-1)/sizeof(dof_id_type);
+#endif
+  libmesh_assert_less(index+n_more_integers, this->n_extra_integers());
+  libmesh_assert_less(this->n_systems(), _idx_buf.size());
+
+  const unsigned int start_idx_i = this->start_idx_ints();
+
+  libmesh_assert_less(start_idx_i+index+n_more_integers, _idx_buf.size());
+  T returnval;
+  std::memcpy(&returnval, &_idx_buf[start_idx_i+index], sizeof(T));
+  return returnval;
 }
 
 
@@ -1069,7 +1155,7 @@ bool DofObject::has_dofs (const unsigned int sys) const
 {
   if (sys == libMesh::invalid_uint)
     {
-      for (unsigned int s=0; s<this->n_systems(); s++)
+      for (auto s : make_range(this->n_systems()))
         if (this->n_vars(s))
           return true;
     }
@@ -1169,8 +1255,8 @@ dof_id_type DofObject::vg_dof_base(const unsigned int s,
 
   // #ifdef DEBUG
   //   std::cout << " [ ";
-  //   for (std:size_t i=0; i<_idx_buf.size(); i++)
-  //     std::cout << _idx_buf[i] << " ";
+  //   for (auto i : _idx_buf)
+  //     std::cout << i << " ";
   //   std::cout << "]\n";
   // #endif
 

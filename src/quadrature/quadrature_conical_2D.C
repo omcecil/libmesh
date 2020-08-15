@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -18,28 +18,30 @@
 
 // Local includes
 #include "libmesh/quadrature_conical.h"
+#include "libmesh/enum_to_string.h"
 
 namespace libMesh
 {
 
 
 
-void QConical::init_2D(const ElemType type_in,
-                       unsigned int p)
+void QConical::init_2D(const ElemType, unsigned int)
 {
-  switch (type_in)
+  switch (_type)
     {
     case TRI3:
+    case TRISHELL3:
+    case TRI3SUBDIVISION:
     case TRI6:
       {
-        this->conical_product_tri(p);
+        this->conical_product_tri();
         return;
       } // end case TRI3, TRI6
 
       //---------------------------------------------
       // Unsupported element type
     default:
-      libmesh_error_msg("ERROR: Unsupported element type: " << type_in);
+      libmesh_error_msg("ERROR: Unsupported element type: " << Utility::enum_to_string(_type));
     } // end switch (type_in)
 }
 

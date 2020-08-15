@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -47,6 +47,10 @@ void MeshRefinement::flag_elements_by_error_fraction (const ErrorVector & error_
                                                       const unsigned int max_l)
 {
   parallel_object_only();
+
+  // Verify that our error vector is consistent, using std::vector to
+  // avoid confusing this->comm().verify
+  libmesh_assert(this->comm().verify(dynamic_cast<const std::vector<ErrorVectorReal> &>(error_per_cell)));
 
   // The function arguments are currently just there for
   // backwards_compatibility
@@ -167,6 +171,10 @@ void MeshRefinement::flag_elements_by_error_tolerance (const ErrorVector & error
 {
   parallel_object_only();
 
+  // Verify that our error vector is consistent, using std::vector to
+  // avoid confusing this->comm().verify
+  libmesh_assert(this->comm().verify(dynamic_cast<const std::vector<ErrorVectorReal> &>(error_per_cell_in)));
+
   libmesh_assert_greater (_coarsen_threshold, 0);
 
   // Check for valid fractions..
@@ -230,6 +238,10 @@ bool MeshRefinement::flag_elements_by_nelem_target (const ErrorVector & error_pe
 {
   parallel_object_only();
 
+  // Verify that our error vector is consistent, using std::vector to
+  // avoid confusing this->comm().verify
+  libmesh_assert(this->comm().verify(dynamic_cast<const std::vector<ErrorVectorReal> &>(error_per_cell)));
+
   // Check for valid fractions..
   // The fraction values must be in [0,1]
   libmesh_assert_greater_equal (_refine_fraction, 0);
@@ -279,8 +291,7 @@ bool MeshRefinement::flag_elements_by_nelem_target (const ErrorVector & error_pe
         const dof_id_type eid = elem->id();
         is_active[eid] = true;
         libmesh_assert_less (eid, error_per_cell.size());
-        sorted_error.push_back
-          (std::make_pair(error_per_cell[eid], eid));
+        sorted_error.emplace_back(error_per_cell[eid], eid);
       }
 
     this->comm().max(is_active);
@@ -307,7 +318,7 @@ bool MeshRefinement::flag_elements_by_nelem_target (const ErrorVector & error_pe
   // non-coarsenable parents to -1.  Get rid of them.
   for (auto i : index_range(error_per_parent))
     if (error_per_parent[i] != -1)
-      sorted_parent_error.push_back(std::make_pair(error_per_parent[i], i));
+      sorted_parent_error.emplace_back(error_per_parent[i], i);
 
   std::sort (sorted_parent_error.begin(), sorted_parent_error.end());
 
@@ -437,6 +448,10 @@ void MeshRefinement::flag_elements_by_elem_fraction (const ErrorVector & error_p
                                                      const unsigned int max_l)
 {
   parallel_object_only();
+
+  // Verify that our error vector is consistent, using std::vector to
+  // avoid confusing this->comm().verify
+  libmesh_assert(this->comm().verify(dynamic_cast<const std::vector<ErrorVectorReal> &>(error_per_cell)));
 
   // The function arguments are currently just there for
   // backwards_compatibility
@@ -570,6 +585,10 @@ void MeshRefinement::flag_elements_by_mean_stddev (const ErrorVector & error_per
                                                    const Real coarsen_frac,
                                                    const unsigned int max_l)
 {
+  // Verify that our error vector is consistent, using std::vector to
+  // avoid confusing this->comm().verify
+  libmesh_assert(this->comm().verify(dynamic_cast<const std::vector<ErrorVectorReal> &>(error_per_cell)));
+
   // The function arguments are currently just there for
   // backwards_compatibility
   if (!_use_member_parameters)

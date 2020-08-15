@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -293,21 +293,6 @@ public:
   typedef std::map<std::pair<const char *,
                              const char *>,
                    PerfData> log_type;
-  /**
-   * \returns the raw underlying data structure for the entire performance log.
-   *
-   * \deprecated because encapsulation is good.
-   *
-   * Also probably broken by the switch from string to const char *,
-   * though users who are liberal with "auto" might be safe.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  const log_type & get_log_raw() const
-  {
-    libmesh_deprecated();
-    return log;
-  }
-#endif
 
 private:
 

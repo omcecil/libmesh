@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,7 +21,6 @@
 #define LIBMESH_JUMP_ERROR_ESTIMATOR_H
 
 // Local Includes
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/dense_vector.h"
 #include "libmesh/error_estimator.h"
 #include "libmesh/fem_context.h"
@@ -56,6 +55,7 @@ public:
   JumpErrorEstimator()
     : ErrorEstimator(),
       scale_by_n_flux_faces(false),
+      use_unweighted_quadrature_rules(false),
       integrate_boundary_sides(false),
       fine_context(),
       coarse_context(),
@@ -97,6 +97,20 @@ public:
    * want to use the feature.
    */
   bool scale_by_n_flux_faces;
+
+  /**
+   * This boolean flag allows you to use "unweighted" quadrature rules
+   * (sized to exactly integrate unweighted shape functions in master
+   * element space) rather than "default" quadrature rules (sized to
+   * exactly integrate polynomials of one higher degree than mass
+   * matrix terms).  The results with the former, lower-order rules
+   * will be somewhat less accurate in many cases but will be much
+   * cheaper to compute.
+   *
+   * The value is initialized to false, simply set it to true if you
+   * want to use the feature.
+   */
+  bool use_unweighted_quadrature_rules;
 
 protected:
   /**

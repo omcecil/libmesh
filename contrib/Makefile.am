@@ -180,7 +180,7 @@ endif
 endif
 
 if LIBMESH_ENABLE_PARMETIS
-if BUILD_METIS
+if BUILD_PARMETIS
   SUBDIRS    += parmetis
   opt_libs   += parmetis/libopt.la
   dbg_libs   += parmetis/libdbg.la
@@ -219,6 +219,13 @@ if LIBMESH_ENABLE_METAPHYSICL
   SUBDIRS += metaphysicl
   # header-only library for the parts we use - no library dependencies
 endif
+
+SUBDIRS += timpi
+opt_libs   += timpi/src/libtimpi_opt.la
+dbg_libs   += timpi/src/libtimpi_dbg.la
+devel_libs += timpi/src/libtimpi_devel.la
+prof_libs  += timpi/src/libtimpi_prof.la
+oprof_libs += timpi/src/libtimpi_oprof.la
 
 
 

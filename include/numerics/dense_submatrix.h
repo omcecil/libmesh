@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,6 +24,7 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_subvector.h"
+#include "libmesh/int_range.h"
 
 // C++ includes
 
@@ -190,8 +191,8 @@ template<typename T>
 inline
 void DenseSubMatrix<T>::zero()
 {
-  for (unsigned int i=0; i<this->m(); i++)
-    for (unsigned int j=0; j<this->n(); j++)
+  for (auto i : make_range(this->m()))
+    for (auto j : make_range(this->n()))
       _parent_matrix(i + this->i_off(),
                      j + this->j_off()) = 0.;
 }

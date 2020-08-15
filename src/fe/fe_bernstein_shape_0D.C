@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,9 +23,11 @@
 #include "libmesh/elem.h"
 
 
-
 namespace libMesh
 {
+
+
+LIBMESH_DEFAULT_VECTORIZED_FE(0,BERNSTEIN)
 
 
 template <>
@@ -44,7 +46,19 @@ template <>
 Real FE<0,BERNSTEIN>::shape(const Elem *,
                             const Order,
                             const unsigned int libmesh_dbg_var(i),
-                            const Point &)
+                            const Point &,
+                            const bool)
+{
+  libmesh_assert_less (i, 1);
+  return 1.;
+}
+
+template <>
+Real FE<0,BERNSTEIN>::shape(const FEType,
+                            const Elem *,
+                            const unsigned int libmesh_dbg_var(i),
+                            const Point &,
+                            const bool)
 {
   libmesh_assert_less (i, 1);
   return 1.;
@@ -70,12 +84,24 @@ Real FE<0,BERNSTEIN>::shape_deriv(const Elem *,
                                   const Order,
                                   const unsigned int,
                                   const unsigned int,
-                                  const Point &)
+                                  const Point &,
+                                  const bool)
 {
   libmesh_error_msg("No spatial derivatives in 0D!");
   return 0.;
 }
 
+template <>
+Real FE<0,BERNSTEIN>::shape_deriv(const FEType,
+                                  const Elem *,
+                                  const unsigned int,
+                                  const unsigned int,
+                                  const Point &,
+                                  const bool)
+{
+  libmesh_error_msg("No spatial derivatives in 0D!");
+  return 0.;
+}
 
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
@@ -98,12 +124,25 @@ Real FE<0,BERNSTEIN>::shape_second_deriv(const Elem *,
                                          const Order,
                                          const unsigned int,
                                          const unsigned int,
-                                         const Point &)
+                                         const Point &,
+                                         const bool)
 {
   libmesh_error_msg("No spatial derivatives in 0D!");
   return 0.;
 }
 
+
+template <>
+Real FE<0,BERNSTEIN>::shape_second_deriv(const FEType,
+                                         const Elem *,
+                                         const unsigned int,
+                                         const unsigned int,
+                                         const Point &,
+                                         const bool)
+{
+  libmesh_error_msg("No spatial derivatives in 0D!");
+  return 0.;
+}
 #endif
 
 } // namespace libMesh

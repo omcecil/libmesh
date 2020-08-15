@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -88,6 +88,11 @@ int main (int argc, char ** argv)
 
   // Skip this 2D example if libMesh was compiled as 1D-only.
   libmesh_example_requires(2 <= LIBMESH_DIM, "2D support");
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // This example NaNs with the Eigen sparse linear solvers and
   // Trilinos solvers, but should work OK with either PETSc or
@@ -301,8 +306,7 @@ int main (int argc, char ** argv)
         } // end nonlinear loop
 
       // Don't keep going if we failed to converge.
-      if (!converged)
-        libmesh_error_msg("Error: Newton iterations failed to converge!");
+      libmesh_error_msg_if(!converged, "Error: Newton iterations failed to converge!");
 
 #ifdef LIBMESH_HAVE_EXODUS_API
       // Write out every nth timestep to file.
@@ -336,6 +340,7 @@ void assemble_stokes (EquationSystems & es,
   // the proper system.
   libmesh_assert_equal_to (system_name, "Navier-Stokes");
 
+#if LIBMESH_DIM > 1
   // Get a constant reference to the mesh object.
   const MeshBase & mesh = es.get_mesh();
 
@@ -641,12 +646,16 @@ void assemble_stokes (EquationSystems & es,
   // We can set the mean of the pressure by setting Falpha.  Typically
   // a value of zero is chosen, but the value should be arbitrary.
   navier_stokes_system.rhs->add(navier_stokes_system.rhs->size()-1, 10.);
+#else
+  libmesh_ignore(es);
+#endif
 }
 
 
 
 void set_lid_driven_bcs(TransientLinearImplicitSystem & system)
 {
+#ifdef LIBMESH_ENABLE_DIRICHLET
   unsigned short int
     u_var = system.variable_number("vel_x"),
     v_var = system.variable_number("vel_y");
@@ -693,4 +702,7 @@ void set_lid_driven_bcs(TransientLinearImplicitSystem & system)
                                                      variables,
                                                      ZeroFunction<Number>()));
   }
+#else
+  libmesh_ignore(system);
+#endif
 }

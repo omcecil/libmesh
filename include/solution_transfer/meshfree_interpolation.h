@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,6 @@
 // Local includes
 #include "libmesh/libmesh_config.h"
 #include "libmesh/libmesh_common.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/point.h"
 #include "libmesh/parallel_object.h"
 #ifdef LIBMESH_HAVE_NANOFLANN
@@ -260,7 +259,7 @@ protected:
      */
     inline coord_t kdtree_get_pt(const size_t idx, int dim) const
     {
-      libmesh_assert_less (dim, (int) PLDim);
+      libmesh_assert_less (dim, PLDim);
       libmesh_assert_less (idx, _pts.size());
       libmesh_assert_less (dim, 3);
 

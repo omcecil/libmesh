@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 
 // Local includes
 #include "libmesh/fe_base.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh.h"
 
 // C++ includes
@@ -58,13 +59,19 @@ struct FEOutputType
 template<>
 struct FEOutputType<LAGRANGE_VEC>
 {
-  typedef RealGradient type;
+  typedef RealVectorValue type;
 };
 
 template<>
 struct FEOutputType<NEDELEC_ONE>
 {
-  typedef RealGradient type;
+  typedef RealVectorValue type;
+};
+
+template<>
+struct FEOutputType<MONOMIAL_VEC>
+{
+  typedef RealVectorValue type;
 };
 
 
@@ -119,12 +126,65 @@ public:
    * element type, and order directly.  This allows the method to
    * be static.
    *
-   * On a p-refined element, \p o should be the base order of the element.
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
    */
   static OutputShape shape(const Elem * elem,
                            const Order o,
                            const unsigned int i,
-                           const Point & p);
+                           const Point & p,
+                           const bool add_p_level = true);
+
+  /**
+   * \returns The value of the \f$ i^{th} \f$ shape function at
+   * point \p p.  This method allows you to specify the dimension and
+   * element type directly. The order is given by the FEType.
+   * This allows the method to be static.
+   *
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
+   */
+   static OutputShape shape(const FEType fet,
+                            const Elem * elem,
+                            const unsigned int i,
+                            const Point & p,
+                            const bool add_p_level = true);
+
+  /**
+   * Fills \p v with the values of the \f$ i^{th} \f$
+   * shape function, evaluated at all points p.  You must specify
+   * element order directly.  \p v should already be the appropriate
+   * size.
+   *
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
+   */
+  static void shapes(const Elem * elem,
+                     const Order o,
+                     const unsigned int i,
+                     const std::vector<Point> & p,
+                     std::vector<OutputShape> & v,
+                     const bool add_p_level = true);
+
+
+  /**
+   * Fills \p v[i][qp] with the values of the \f$ i^{th} \f$
+   * shape functions, evaluated at points qp in p.  You must specify
+   * element order directly.  \p v should already be the appropriate
+   * size.
+   *
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
+   */
+  static void all_shapes(const Elem * elem,
+                         const Order o,
+                         const std::vector<Point> & p,
+                         std::vector<std::vector<OutputShape> > & v,
+                         const bool add_p_level = true);
 
   /**
    * \returns The \f$ j^{th} \f$ derivative of the \f$ i^{th} \f$
@@ -143,14 +203,53 @@ public:
    * \returns The \f$ j^{th} \f$ derivative of the \f$ i^{th} \f$
    * shape function.  You must specify element type, and order directly.
    *
-   * On a p-refined element, \p o should be the base order of the element.
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
    */
   static OutputShape shape_deriv(const Elem * elem,
                                  const Order o,
                                  const unsigned int i,
                                  const unsigned int j,
-                                 const Point & p);
+                                 const Point & p,
+                                 const bool add_p_level = true);
 
+  /**
+   * \returns The \f$ j^{th} \f$ derivative of the \f$ i^{th} \f$
+   * shape function.  You must specify element type, and order (via
+   * FEType) directly.
+   *
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
+   */
+  static OutputShape shape_deriv(const FEType fet,
+                                 const Elem * elem,
+                                 const unsigned int i,
+                                 const unsigned int j,
+                                 const Point & p,
+                                 const bool add_p_level = true);
+
+  /**
+   * Fills \p v with the \f$ j^{th} \f$ derivative of the \f$ i^{th} \f$
+   * shape function, evaluated at all points p.  You must specify
+   * element order directly.  \p v should already be the appropriate
+   * size.
+   *
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
+   */
+  static void shape_derivs(const Elem * elem,
+                           const Order o,
+                           const unsigned int i,
+                           const unsigned int j,
+                           const std::vector<Point> & p,
+                           std::vector<OutputShape> & v,
+                           const bool add_p_level = true);
+
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
   /**
    * \returns The second \f$ j^{th} \f$ derivative of the \f$ i^{th} \f$
    * shape function at the point \p p.
@@ -195,14 +294,45 @@ public:
    * All other element types return an error when asked for second
    * derivatives.
    *
-   * On a p-refined element, \p o should be the base order of the element.
+   * On a p-refined element, \p o should be the base order of the
+   * element if \p add_p_level is left \p true, or can be the base
+   * order of the element if \p add_p_level is set to \p false.
    */
   static OutputShape shape_second_deriv(const Elem * elem,
                                         const Order o,
                                         const unsigned int i,
                                         const unsigned int j,
-                                        const Point & p);
+                                        const Point & p,
+                                        const bool add_p_level = true);
 
+  /**
+   * \returns The second \f$ j^{th} \f$ derivative of the \f$ i^{th} \f$
+   * shape function at the point \p p.
+   *
+   * \note Cross-derivatives are indexed according to:
+   * j = 0 ==> d^2 phi / dxi^2
+   * j = 1 ==> d^2 phi / dxi deta
+   * j = 2 ==> d^2 phi / deta^2
+   * j = 3 ==> d^2 phi / dxi dzeta
+   * j = 4 ==> d^2 phi / deta dzeta
+   * j = 5 ==> d^2 phi / dzeta^2
+   *
+   * \note Computing second derivatives is not currently supported for
+   * all element types: \f$ C^1 \f$ (Clough, Hermite and Subdivision),
+   * Lagrange, Hierarchic, L2_Hierarchic, and Monomial are supported.
+   * All other element types return an error when asked for second
+   * derivatives.
+   *
+   * On a p-refined element, \p o should be the total order of the element.
+   */
+  static OutputShape shape_second_deriv(const FEType fet,
+                                        const Elem * elem,
+                                        const unsigned int i,
+                                        const unsigned int j,
+                                        const Point & p,
+                                        const bool add_p_level = true);
+
+#endif //LIBMESH_ENABLE_SECOND_DERIVATIVES
   /**
    * Build the nodal soln from the element soln.
    * This is the solution that will be plotted.
@@ -289,39 +419,23 @@ public:
                            unsigned int e,
                            std::vector<unsigned int> & di);
 
-  /**
-   * \returns The location (on the reference element) of the
-   * point \p p located in physical space.  This function requires
-   * inverting the (possibly nonlinear) transformation map, so
-   * it is not trivial. The optional parameter \p tolerance defines
-   * how close is "good enough."  The map inversion iteration
-   * computes the sequence \f$ \{ p_n \} \f$, and the iteration is
-   * terminated when \f$ \|p - p_n\| < \mbox{\texttt{tolerance}} \f$
-   * The parameter secure (always assumed false in non-debug mode)
-   * switches on integrity-checks on the mapped points.
-   */
   static Point inverse_map (const Elem * elem,
                             const Point & p,
                             const Real tolerance = TOLERANCE,
-                            const bool secure = true);
+                            const bool secure = true) {
+    // libmesh_deprecated(); // soon
+    return FEMap::inverse_map(Dim, elem, p, tolerance, secure, secure);
+  }
 
-  /**
-   * Takes a number points in physical space (in the \p
-   * physical_points vector) and finds their location on the reference
-   * element for the input element \p elem.  The values on the
-   * reference element are returned in the vector \p
-   * reference_points. The optional parameter \p tolerance defines how
-   * close is "good enough."  The map inversion iteration computes the
-   * sequence \f$ \{ p_n \} \f$, and the iteration is terminated when
-   * \f$ \|p - p_n\| < \mbox{\texttt{tolerance}} \f$
-   * The parameter secure (always assumed false in non-debug mode)
-   * switches on integrity-checks on the mapped points.
-   */
   static void inverse_map (const Elem * elem,
                            const std::vector<Point> & physical_points,
                            std::vector<Point> &       reference_points,
                            const Real tolerance = TOLERANCE,
-                           const bool secure = true);
+                           const bool secure = true) {
+    // libmesh_deprecated(); // soon
+    FEMap::inverse_map(Dim, elem, physical_points, reference_points,
+                       tolerance, secure, secure);
+  }
 
   /**
    * This is at the core of this class. Use this for each
@@ -412,33 +526,29 @@ public:
    */
   virtual bool shapes_need_reinit() const override;
 
-  /**
-   * \returns The location (in physical space) of the point
-   * \p p located on the reference element.
-   */
   static Point map (const Elem * elem,
-                    const Point & reference_point);
+                    const Point & reference_point) {
+    // libmesh_deprecated(); // soon
+    return FEMap::map(Dim, elem, reference_point);
+  }
 
-  /**
-   * \returns d(xyz)/dxi (in physical space) of the point
-   * \p p located on the reference element.
-   */
   static Point map_xi (const Elem * elem,
-                       const Point & reference_point);
+                       const Point & reference_point) {
+    // libmesh_deprecated(); // soon
+    return FEMap::map_deriv(Dim, elem, 0, reference_point);
+  }
 
-  /**
-   * \returns d(xyz)/deta (in physical space) of the point
-   * \p p located on the reference element.
-   */
   static Point map_eta (const Elem * elem,
-                        const Point & reference_point);
+                        const Point & reference_point) {
+    // libmesh_deprecated(); // soon
+    return FEMap::map_deriv(Dim, elem, 1, reference_point);
+  }
 
-  /**
-   * \returns d(xyz)/dzeta (in physical space) of the point
-   * \p p located on the reference element.
-   */
   static Point map_zeta (const Elem * elem,
-                         const Point & reference_point);
+                         const Point & reference_point) {
+    // libmesh_deprecated(); // soon
+    return FEMap::map_deriv(Dim, elem, 2, reference_point);
+  }
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   /**
@@ -461,6 +571,11 @@ protected:
   virtual void init_shape_functions(const std::vector<Point> & qp,
                                     const Elem * e);
 
+  /**
+   * Init \p dual_phi and potentially \p dual_dphi, \p dual_d2phi
+   */
+  void init_dual_shape_functions(unsigned int n_shapes, unsigned int n_qp);
+
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 
   /**
@@ -471,6 +586,53 @@ protected:
                                          const Elem * e) override;
 
 #endif
+
+  /**
+   * A default implementation for shapes
+   */
+  static void default_shapes (const Elem * elem,
+                              const Order o,
+                              const unsigned int i,
+                              const std::vector<Point> & p,
+                              std::vector<OutputShape> & v,
+                              const bool add_p_level = true)
+    {
+      libmesh_assert_equal_to(p.size(), v.size());
+      for (auto vi : index_range(v))
+        v[vi] = FE<Dim,T>::shape (elem, o, i, p[vi], add_p_level);
+    }
+
+  /**
+   * A default implementation for all_shapes
+   */
+  static void default_all_shapes (const Elem * elem,
+                                  const Order o,
+                                  const std::vector<Point> & p,
+                                  std::vector<std::vector<OutputShape>> & v,
+                                  const bool add_p_level = true)
+    {
+      for (auto i : index_range(v))
+        {
+          libmesh_assert_equal_to ( p.size(), v[i].size() );
+          FE<Dim,T>::shapes (elem, o, i, p, v[i], add_p_level);
+        }
+    }
+
+  /**
+   * A default implementation for shape_derivs
+   */
+  static void default_shape_derivs (const Elem * elem,
+                                    const Order o,
+                                    const unsigned int i,
+                                    const unsigned int j,
+                                    const std::vector<Point> & p,
+                                    std::vector<OutputShape> & v,
+                                    const bool add_p_level = true)
+    {
+      libmesh_assert_equal_to(p.size(), v.size());
+      for (auto vi : index_range(v))
+        v[vi] = FE<Dim,T>::shape_deriv (elem, o, i, j, p[vi], add_p_level);
+    }
 
   /**
    * An array of the node locations on the last
@@ -533,11 +695,13 @@ public:
     FE<Dim,HERMITE> (fet)
   {}
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
   /**
    * 1D hermite functions on unit interval
    */
   static Real hermite_raw_shape_second_deriv(const unsigned int basis_num,
                                              const Real xi);
+#endif
   static Real hermite_raw_shape_deriv(const unsigned int basis_num,
                                       const Real xi);
   static Real hermite_raw_shape(const unsigned int basis_num,
@@ -556,22 +720,27 @@ template <>
 Real FE<2,SUBDIVISION>::shape(const Elem * elem,
                               const Order order,
                               const unsigned int i,
-                              const Point & p);
+                              const Point & p,
+                              const bool add_p_level);
 
 template <>
 Real FE<2,SUBDIVISION>::shape_deriv(const Elem * elem,
                                     const Order order,
                                     const unsigned int i,
                                     const unsigned int j,
-                                    const Point & p);
+                                    const Point & p,
+                                    const bool add_p_level);
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 template <>
 Real FE<2,SUBDIVISION>::shape_second_deriv(const Elem * elem,
                                            const Order order,
                                            const unsigned int i,
                                            const unsigned int j,
-                                           const Point & p);
+                                           const Point & p,
+                                           const bool add_p_level);
 
+#endif
 
 class FESubdivision : public FE<2,SUBDIVISION>
 {
@@ -647,6 +816,7 @@ public:
                                   const Real v,
                                   const Real w);
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
   /**
    * \returns The second \f$ j^{th} \f$ derivative of the
    * \f$ i^{th} \f$ of the 12 quartic box splines interpolating
@@ -659,6 +829,7 @@ public:
                                          const Real w);
 
 
+#endif // LIBMESH_ENABLE_SECOND_DERIVATIVE
   /**
    * Fills the vector \p weights with the weight coefficients
    * of the Loop subdivision mask for evaluating the limit surface
@@ -938,6 +1109,27 @@ public:
   {}
 };
 
+/**
+ * FEMonomialVec objects are used for working with vector-valued
+ * discontinuous finite elements
+ *
+ * \author Alex D. Lindsay
+ * \date 2019
+ */
+template <unsigned int Dim>
+class FEMonomialVec : public FE<Dim,MONOMIAL_VEC>
+{
+public:
+
+  /**
+   * Constructor. Creates a vector Monomial finite element
+   * to be used in dimension \p Dim.
+   */
+  explicit
+  FEMonomialVec(const FEType & fet) :
+    FE<Dim,MONOMIAL_VEC> (fet)
+  {}
+};
 
 
 
@@ -1049,5 +1241,46 @@ typedef FE<3,MONOMIAL> FEMonomial3D;
 }
 
 } // namespace libMesh
+
+#define LIBMESH_DEFAULT_VECTORIZED_FE(MyDim, MyType) \
+template<>                                           \
+void FE<MyDim,MyType>::all_shapes                    \
+  (const Elem * elem,                                \
+   const Order o,                                    \
+   const std::vector<Point> & p,                     \
+   std::vector<std::vector<OutputShape>> & v,        \
+   const bool add_p_level)                           \
+{                                                    \
+  FE<MyDim,MyType>::default_all_shapes               \
+    (elem,o,p,v,add_p_level);                        \
+}                                                    \
+                                                     \
+template<>                                           \
+void FE<MyDim,MyType>::shapes                        \
+  (const Elem * elem,                                \
+   const Order o,                                    \
+   const unsigned int i,                             \
+   const std::vector<Point> & p,                     \
+   std::vector<OutputShape> & v,                     \
+   const bool add_p_level)                           \
+{                                                    \
+  FE<MyDim,MyType>::default_shapes                   \
+    (elem,o,i,p,v,add_p_level);                      \
+}                                                    \
+                                                     \
+template<>                                           \
+void FE<MyDim,MyType>::shape_derivs                  \
+  (const Elem * elem,                                \
+   const Order o,                                    \
+   const unsigned int i,                             \
+   const unsigned int j,                             \
+   const std::vector<Point> & p,                     \
+   std::vector<OutputShape> & v,                     \
+   const bool add_p_level)                           \
+{                                                    \
+  FE<MyDim,MyType>::default_shape_derivs             \
+    (elem,o,i,j,p,v,add_p_level);                    \
+}
+
 
 #endif // LIBMESH_FE_H

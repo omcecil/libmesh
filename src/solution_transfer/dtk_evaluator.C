@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -61,7 +61,7 @@ DTKEvaluator::evaluate(const Teuchos::ArrayRCP<int> & elements,
       for (unsigned int j=0; j<dim; j++)
         p(j) = coords[(j*num_values)+i];
 
-      const Point mapped_point(FEInterface::inverse_map(dim, dof_map.variable_type(0), elem, p));
+      const Point mapped_point(FEMap::inverse_map(dim, elem, p));
 
       FEComputeData data (es, mapped_point);
       FEInterface::compute_data (dim, fe_type, elem, data);
@@ -71,7 +71,7 @@ DTKEvaluator::evaluate(const Teuchos::ArrayRCP<int> & elements,
 
       Number value = 0;
 
-      for (std::size_t j=0; j<dof_indices.size(); j++)
+      for (auto j : index_range(dof_indices))
         value += current_local_solution(dof_indices[j]) * data.shape[j];
 
       values[i] = value;

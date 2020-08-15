@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -58,18 +58,6 @@ public:
   ParameterMultiPointer(T * param_ptr) : _ptrs(1, param_ptr) {}
 
   /**
-   * A simple reseater won't work with a multipointer
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual ParameterAccessor<T> &
-  operator= (T * /* new_ptr */) override
-  {
-    libmesh_error();
-    return *this;
-  }
-#endif
-
-  /**
    * Setter: change the value of the parameter we access.
    */
   virtual void set (const T & new_value) override
@@ -79,12 +67,12 @@ public:
     // Compare other values to the last one we'll change
     const T & val = *_ptrs.back();
 #endif
-    for (std::size_t i=0; i != _ptrs.size(); ++i)
+    for (auto & ptr : _ptrs)
       {
         // If you're already using inconsistent parameters we can't
         // help you.
-        libmesh_assert_equal_to(*_ptrs[i], val);
-        *_ptrs[i] = new_value;
+        libmesh_assert_equal_to(*ptr, val);
+        *ptr = new_value;
       }
   }
 
@@ -98,8 +86,8 @@ public:
 #ifndef NDEBUG
     // If you're already using inconsistent parameters we can't help
     // you.
-    for (std::size_t i=1; i < _ptrs.size(); ++i)
-      libmesh_assert_equal_to(*_ptrs[i], val);
+    for (auto ptr : _ptrs)
+      libmesh_assert_equal_to(*ptr, val);
 #endif
     return val;
   }

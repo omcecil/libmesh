@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,6 +19,7 @@
 
 // Local Includes
 #include "libmesh/elem.h"
+#include "libmesh/libmesh_logging.h"
 #include "libmesh/location_maps.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/node.h"
@@ -86,7 +87,7 @@ void LocationMap<T>::init(MeshBase & mesh)
 template <typename T>
 void LocationMap<T>::insert(T & t)
 {
-  this->_map.insert(std::make_pair(this->key(this->point_of(t)), &t));
+  this->_map.emplace(this->key(this->point_of(t)), &t);
 }
 
 

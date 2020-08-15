@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,8 +24,10 @@
 
 // Local Includes
 #include "libmesh/fem_function_base.h"
+#include "libmesh/int_range.h"
 #include "libmesh/point.h"
 #include "libmesh/system.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 #ifdef LIBMESH_HAVE_FPARSER
 // FParser includes
@@ -337,7 +339,7 @@ ParsedFEMFunction<Output>::reparse (const std::string & expression)
   unsigned int offset = LIBMESH_DIM + 1 + _n_requested_vars +
     _n_requested_grad_components + _n_requested_hess_components;
 
-  for (std::size_t i=0; i < _additional_vars.size(); ++i)
+  for (auto i : index_range(_additional_vars))
     {
       variables += "," + _additional_vars[i];
       // Initialize extra variables to the vector passed in or zero
@@ -386,8 +388,8 @@ inline
 std::unique_ptr<FEMFunctionBase<Output>>
 ParsedFEMFunction<Output>::clone () const
 {
-  return std::unique_ptr<FEMFunctionBase<Output>>
-    (new ParsedFEMFunction(_sys, _expression, &_additional_vars, &_initial_vals));
+  return libmesh_make_unique<ParsedFEMFunction>
+    (_sys, _expression, &_additional_vars, &_initial_vals);
 }
 
 template <typename Output>
@@ -449,9 +451,8 @@ ParsedFEMFunction<Output>::get_inline_value(const std::string & inline_var_name)
 #endif
   Output old_var_value(0.);
 
-  for (std::size_t s=0; s != _subexpressions.size(); ++s)
+  for (const std::string & subexpression : _subexpressions)
     {
-      const std::string & subexpression = _subexpressions[s];
       const std::size_t varname_i =
         find_name(inline_var_name, subexpression);
       if (varname_i == std::string::npos)
@@ -482,10 +483,10 @@ ParsedFEMFunction<Output>::get_inline_value(const std::string & inline_var_name)
       fp.AddConstant("NaN", std::numeric_limits<Real>::quiet_NaN());
       fp.AddConstant("pi", std::acos(Real(-1)));
       fp.AddConstant("e", std::exp(Real(1)));
-      if (fp.Parse(new_subexpression, variables) != -1) // -1 for success
-        libmesh_error_msg
-          ("ERROR: FunctionParser is unable to parse modified expression: "
-           << new_subexpression << '\n' << fp.ErrorMsg());
+      libmesh_error_msg_if
+        (fp.Parse(new_subexpression, variables) != -1, // -1 for success
+         "ERROR: FunctionParser is unable to parse modified expression: "
+         << new_subexpression << '\n' << fp.ErrorMsg());
 
       Output new_var_value = this->eval(fp, new_subexpression, 0);
 #ifdef NDEBUG
@@ -522,7 +523,7 @@ ParsedFEMFunction<Output>::set_inline_value (const std::string & inline_var_name
 #ifndef NDEBUG
   bool found_var_name = false;
 #endif
-  for (std::size_t s=0; s != _subexpressions.size(); ++s)
+  for (auto s : index_range(_subexpressions))
     {
       const std::string & subexpression = _subexpressions[s];
       const std::size_t varname_i =
@@ -566,10 +567,10 @@ ParsedFEMFunction<Output>::set_inline_value (const std::string & inline_var_name
 
   std::string new_expression;
 
-  for (std::size_t s=0; s != _subexpressions.size(); ++s)
+  for (const auto & subexpression : _subexpressions)
     {
       new_expression += '{';
-      new_expression += _subexpressions[s];
+      new_expression += subexpression;
       new_expression += '}';
     }
 
@@ -613,8 +614,8 @@ ParsedFEMFunction<Output>::partial_reparse (const std::string & expression)
                            std::string::npos : end - nextstart));
 
       // fparser can crash on empty expressions
-      if (_subexpressions.back().empty())
-        libmesh_error_msg("ERROR: FunctionParser is unable to parse empty expression.\n");
+      libmesh_error_msg_if(_subexpressions.back().empty(),
+                           "ERROR: FunctionParser is unable to parse empty expression.\n");
 
 
 #ifdef LIBMESH_HAVE_FPARSER
@@ -624,10 +625,10 @@ ParsedFEMFunction<Output>::partial_reparse (const std::string & expression)
       fp.AddConstant("NaN", std::numeric_limits<Real>::quiet_NaN());
       fp.AddConstant("pi", std::acos(Real(-1)));
       fp.AddConstant("e", std::exp(Real(1)));
-      if (fp.Parse(_subexpressions.back(), variables) != -1) // -1 for success
-        libmesh_error_msg
-          ("ERROR: FunctionParser is unable to parse expression: "
-           << _subexpressions.back() << '\n' << fp.ErrorMsg());
+      libmesh_error_msg_if
+        (fp.Parse(_subexpressions.back(), variables) != -1, // -1 for success
+         "ERROR: FunctionParser is unable to parse expression: "
+         << _subexpressions.back() << '\n' << fp.ErrorMsg());
       fp.Optimize();
       parsers.push_back(fp);
 #else
@@ -769,7 +770,7 @@ ParsedFEMFunction<Output>::eval_args (const FEMContext & c,
 #ifndef NDEBUG
       bool at_quadrature_point = false;
 #endif
-      for (std::size_t qp = 0; qp != normals.size(); ++qp)
+      for (auto qp : index_range(normals))
         {
           if (p == xyz[qp])
             {
@@ -813,8 +814,8 @@ ParsedFEMFunction<Output>::eval (FunctionParserBase<Output> & parser,
                    << " of expression '"
                    << function_name
                    << "' with arguments:\n";
-      for (std::size_t j=0; j<_spacetime.size(); ++j)
-        libMesh::err << '\t' << _spacetime[j] << '\n';
+      for (const auto & st : _spacetime)
+        libMesh::err << '\t' << st << '\n';
       libMesh::err << '\n';
 
       // Currently no API to report error messages, we'll do it manually

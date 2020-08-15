@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,7 @@
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/parallel.h"
 #include "libmesh/parallel_algebra.h"
-
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 namespace libMesh
 {
@@ -80,12 +80,12 @@ void MeshfreeInterpolation::add_field_data (const std::vector<std::string> & fie
   // that means the names and ordering better be identical!
   if (!_names.empty())
     {
-      if (_names.size() != field_names.size())
-        libmesh_error_msg("ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
+      libmesh_error_msg_if(_names.size() != field_names.size(),
+                           "ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
 
       for (std::size_t v=0; v<_names.size(); v++)
-        if (_names[v] != field_names[v])
-          libmesh_error_msg("ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
+        libmesh_error_msg_if(_names[v] != field_names[v],
+                             "ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
     }
 
   // otherwise copy the names
@@ -159,9 +159,10 @@ void InverseDistanceInterpolation<KDDim>::construct_kd_tree ()
 
   // Initialize underlying KD tree
   if (_kd_tree.get() == nullptr)
-    _kd_tree.reset (new kd_tree_t (KDDim,
-                                   _point_list_adaptor,
-                                   nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */)));
+    _kd_tree = libmesh_make_unique<kd_tree_t>
+      (KDDim,
+       _point_list_adaptor,
+       nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
 
   libmesh_assert (_kd_tree.get() != nullptr);
 
@@ -205,12 +206,12 @@ void InverseDistanceInterpolation<KDDim>::interpolate_field_data (const std::vec
 
   // If we already have field variables, we assume we are appending.
   // that means the names and ordering better be identical!
-  if (_names.size() != field_names.size())
-    libmesh_error_msg("ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
+  libmesh_error_msg_if(_names.size() != field_names.size(),
+                       "ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
 
   for (std::size_t v=0; v<_names.size(); v++)
-    if (_names[v] != field_names[v])
-      libmesh_error_msg("ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
+    libmesh_error_msg_if(_names[v] != field_names[v],
+                         "ERROR:  when adding field data to an existing list the \nvariable list must be the same!");
 
   tgt_vals.resize (tgt_pts.size()*this->n_field_variables());
 
@@ -262,14 +263,12 @@ void InverseDistanceInterpolation<KDDim>::interpolate (const Point              
   if (!src_dist_sqr.empty())
     {
       Real min_dist = src_dist_sqr.front();
-      std::vector<Real>::const_iterator it = src_dist_sqr.begin();
 
-      for (++it; it!= src_dist_sqr.end(); ++it)
+      for (auto i : src_dist_sqr)
         {
-          if (*it < min_dist)
-            libmesh_error_msg(*it << " was less than min_dist = " << min_dist);
+          libmesh_error_msg_if(i < min_dist, i << " was less than min_dist = " << min_dist);
 
-          min_dist = *it;
+          min_dist = i;
         }
     }
 #endif

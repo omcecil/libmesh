@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -50,12 +50,17 @@ public:
   /**
    * Function to store a solution, pure virtual
    */
-  virtual void store() = 0;
+  virtual void store(bool is_adjoint_solve, Real time) = 0;
 
   /**
    * Function to retrieve a solution, pure virtual
    */
-  virtual void retrieve() = 0;
+  virtual void retrieve(bool is_adjoint_solve, Real time) = 0;
+
+  /**
+   * Function to erase solution at a given time, pure virtual
+   */
+  virtual void erase(Real time) = 0;
 
   /**
    * Cloning function for a std::unique_ptr, pure virtual, used in the

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -30,6 +30,10 @@
 #include "libmesh/ignore_warnings.h"
 #include <Eigen/Core>
 #include "libmesh/restore_warnings.h"
+#endif
+
+#ifdef LIBMESH_HAVE_METAPHYSICL
+#include "metaphysicl/raw_type.h"
 #endif
 
 // C++ includes
@@ -275,7 +279,7 @@ private:
 template<typename T>
 inline
 DenseVector<T>::DenseVector(const unsigned int n) :
-  _val (n, T(0.))
+  _val (n, T{})
 {
 }
 
@@ -380,7 +384,7 @@ void DenseVector<T>::zero()
 {
   std::fill (_val.begin(),
              _val.end(),
-             T(0.));
+             T{});
 }
 
 
@@ -681,5 +685,25 @@ void DenseVector<T>::get_principal_subvector (unsigned int sub_n,
 }
 
 } // namespace libMesh
+
+#ifdef LIBMESH_HAVE_METAPHYSICL
+namespace MetaPhysicL
+{
+template <typename T>
+struct RawType<libMesh::DenseVector<T>>
+{
+  typedef libMesh::DenseVector<typename RawType<T>::value_type> value_type;
+
+  static value_type value (const libMesh::DenseVector<T> & in)
+    {
+      value_type ret(in.size());
+      for (unsigned int i = 0; i < in.size(); ++i)
+          ret(i) = raw_value(in(i));
+
+      return ret;
+    }
+};
+}
+#endif
 
 #endif // LIBMESH_DENSE_VECTOR_H

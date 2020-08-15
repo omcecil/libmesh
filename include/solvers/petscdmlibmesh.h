@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,10 +22,14 @@
 // developer-facing only?)
 
 #include "libmesh/petsc_macro.h"
-// This only works with petsc-3.3 and above.
-#if !PETSC_VERSION_LESS_THAN(3,3,0)
 
+#ifdef I
+# define LIBMESH_SAW_I
+#endif
 #include <petscdm.h>
+#ifndef LIBMESH_SAW_I
+# undef I // Avoid complex.h contamination
+#endif
 #include "libmesh/nonlinear_implicit_system.h"
 
 /**
@@ -45,5 +49,4 @@ EXTERN_C_BEGIN
 PETSC_EXTERN PetscErrorCode DMCreate_libMesh(DM);
 EXTERN_C_END
 
-#endif // #if !PETSC_VERSION_LESS_THAN(3,3,0)
 #endif // #ifdef PETSCDMLIBEMSH_H

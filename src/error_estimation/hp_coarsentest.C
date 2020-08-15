@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -60,9 +60,6 @@ void HPCoarsenTest::add_projection(const System & system,
   // The DofMap for this system
   const DofMap & dof_map = system.get_dof_map();
 
-  // The type of finite element to use for this variable
-  const FEType & fe_type = dof_map.variable_type (var);
-
   const FEContinuity cont = fe->get_continuity();
 
   fe->reinit(elem);
@@ -72,8 +69,8 @@ void HPCoarsenTest::add_projection(const System & system,
   const unsigned int n_dofs =
     cast_int<unsigned int>(dof_indices.size());
 
-  FEInterface::inverse_map (system.get_mesh().mesh_dimension(),
-                            fe_type, coarse, *xyz_values, coarse_qpoints);
+  FEMap::inverse_map (system.get_mesh().mesh_dimension(), coarse,
+                      *xyz_values, coarse_qpoints);
 
   fe_coarse->reinit(coarse, &coarse_qpoints);
 
@@ -92,7 +89,7 @@ void HPCoarsenTest::add_projection(const System & system,
   libmesh_assert_equal_to (Uc.size(), phi_coarse->size());
 
   // Loop over the quadrature points
-  for (unsigned int qp=0; qp<qrule->n_points(); qp++)
+  for (auto qp : make_range(qrule->n_points()))
     {
       // The solution value at the quadrature point
       Number val = libMesh::zero;
@@ -111,7 +108,7 @@ void HPCoarsenTest::add_projection(const System & system,
         }
 
       // The projection matrix and vector
-      for (unsigned int i=0; i != Fe.size(); ++i)
+      for (auto i : index_range(Fe))
         {
           Fe(i) += (*JxW)[qp] *
             (*phi_coarse)[i][qp]*val;
@@ -122,7 +119,7 @@ void HPCoarsenTest::add_projection(const System & system,
             Fe(i) += (*JxW)[qp] *
               hess.contract((*d2phi_coarse)[i][qp]);
 
-          for (unsigned int j=0; j != Fe.size(); ++j)
+          for (auto j : index_range(Fe))
             {
               Ke(i,j) += (*JxW)[qp] *
                 (*phi_coarse)[i][qp]*(*phi_coarse)[j][qp];
@@ -159,12 +156,12 @@ void HPCoarsenTest::select_refinement (System & system)
   // Check for a valid component_scale
   if (!component_scale.empty())
     {
-      if (component_scale.size() != n_vars)
-        libmesh_error_msg("ERROR: component_scale is the wrong size:\n" \
-                          << " component_scale.size()=" \
-                          << component_scale.size()     \
-                          << "\n n_vars=" \
-                          << n_vars);
+      libmesh_error_msg_if(component_scale.size() != n_vars,
+                           "ERROR: component_scale is the wrong size:\n"
+                           << " component_scale.size()="
+                           << component_scale.size()
+                           << "\n n_vars="
+                           << n_vars);
     }
   else
     {
@@ -321,7 +318,7 @@ void HPCoarsenTest::select_refinement (System & system)
               Fe.zero();
 
               // Loop over the quadrature points
-              for (unsigned int qp=0; qp<qrule->n_points(); qp++)
+              for (auto qp : make_range(qrule->n_points()))
                 {
                   // The solution value at the quadrature point
                   Number val = libMesh::zero;
@@ -340,7 +337,7 @@ void HPCoarsenTest::select_refinement (System & system)
                     }
 
                   // The projection matrix and vector
-                  for (unsigned int i=0; i != Fe.size(); ++i)
+                  for (auto i : index_range(Fe))
                     {
                       Fe(i) += (*JxW)[qp] *
                         (*phi_coarse)[i][qp]*val;
@@ -351,7 +348,7 @@ void HPCoarsenTest::select_refinement (System & system)
                         Fe(i) += (*JxW)[qp] *
                           hess.contract((*d2phi_coarse)[i][qp]);
 
-                      for (unsigned int j=0; j != Fe.size(); ++j)
+                      for (auto j : index_range(Fe))
                         {
                           Ke(i,j) += (*JxW)[qp] *
                             (*phi_coarse)[i][qp]*(*phi_coarse)[j][qp];
@@ -391,7 +388,7 @@ void HPCoarsenTest::select_refinement (System & system)
                 }
               else
                 {
-                  for (unsigned int i=0; i<Up.size(); i++)
+                  for (auto i : index_range(Up))
                     {
                       value_error -= (*phi_coarse)[i][qp] * Up(i);
                       if (cont == C_ZERO || cont == C_ONE)
@@ -425,8 +422,8 @@ void HPCoarsenTest::select_refinement (System & system)
             }
           else
             {
-              FEInterface::inverse_map (dim, fe_type, coarse,
-                                        *xyz_values, coarse_qpoints);
+              FEMap::inverse_map (dim, coarse, *xyz_values,
+                                  coarse_qpoints);
 
               unsigned int old_parent_level = coarse->p_level();
               coarse->hack_p_level(elem->p_level());
@@ -508,16 +505,14 @@ void HPCoarsenTest::select_refinement (System & system)
 
           // FIXME: we're overestimating the number of DOFs added by h
           // refinement
-          FEType elem_fe_type = fe_type;
-          elem_fe_type.order =
-            static_cast<Order>(fe_type.order + elem->p_level());
-          dofs_per_elem +=
-            FEInterface::n_dofs(dim, elem_fe_type, elem->type());
 
-          elem_fe_type.order =
-            static_cast<Order>(fe_type.order + elem->p_level() + 1);
+          // Compute number of DOFs for elem at current p_level()
+          dofs_per_elem +=
+            FEInterface::n_dofs(fe_type, elem);
+
+          // Compute number of DOFs for elem at current p_level() + 1
           dofs_per_p_elem +=
-            FEInterface::n_dofs(dim, elem_fe_type, elem->type());
+            FEInterface::n_dofs(fe_type, elem->p_level() + 1, elem);
         }
 
       const unsigned int new_h_dofs = dofs_per_elem *

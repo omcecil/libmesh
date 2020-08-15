@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -64,10 +64,10 @@ void FroIO::write (const std::string & fname)
                  << the_mesh.get_boundary_info().n_boundary_ids()  << " 1\n";
 
       // Write the nodes -- 1-based!
-      for (unsigned int n=0; n<the_mesh.n_nodes(); n++)
+      for (auto n : make_range(the_mesh.n_nodes()))
         out_stream << n+1 << " \t"
                    << std::scientific
-                   << std::setprecision(12)
+                   << std::setprecision(this->ascii_precision())
                    << the_mesh.point(n)(0) << " \t"
                    << the_mesh.point(n)(1) << " \t"
                    << 0. << '\n';
@@ -77,14 +77,14 @@ void FroIO::write (const std::string & fname)
       for (const auto & elem : the_mesh.active_element_ptr_range())
         {
           // .fro likes TRI3's
-          if (elem->type() != TRI3)
-            libmesh_error_msg("ERROR:  .fro format only valid for triangles!\n" \
-                              << "  writing of " << fname << " aborted.");
+          libmesh_error_msg_if(elem->type() != TRI3,
+                               "ERROR:  .fro format only valid for triangles!\n"
+                               << "  writing of " << fname << " aborted.");
 
           out_stream << ++e << " \t";
 
-          for (unsigned int n=0; n<elem->n_nodes(); n++)
-            out_stream << elem->node_id(n)+1 << " \t";
+          for (const Node & node : elem->node_ref_range())
+            out_stream << node.id()+1 << " \t";
 
           //   // LHS -> RHS Mapping, for inverted triangles
           //   out_stream << elem->node_id(0)+1 << " \t";
@@ -139,10 +139,10 @@ void FroIO::write (const std::string & fname)
                     n1 = side->node_id(1);
 
                   // insert into forward-edge set
-                  forward_edges.insert (std::make_pair(n0, n1));
+                  forward_edges.emplace(n0, n1);
 
                   // insert into backward-edge set
-                  backward_edges.insert (std::make_pair(n1, n0));
+                  backward_edges.emplace(n1, n0);
 
                   // go ahead and add one edge to the list -- this will give us the beginning of a
                   // chain to work from!

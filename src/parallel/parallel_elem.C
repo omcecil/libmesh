@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,7 +24,7 @@
 #include "libmesh/distributed_mesh.h"
 #include "libmesh/elem.h"
 #include "libmesh/mesh_base.h"
-#include "libmesh/parallel.h"
+#include "libmesh/parallel_elem.h"
 #include "libmesh/parallel_mesh.h"
 #include "libmesh/remote_elem.h"
 
@@ -53,7 +53,6 @@ namespace libMesh
 namespace Parallel
 {
 
-template <>
 template <>
 unsigned int
 Packing<const Elem *>::packed_size (std::vector<largest_id_type>::const_iterator in)
@@ -84,7 +83,7 @@ Packing<const Elem *>::packed_size (std::vector<largest_id_type>::const_iterator
     Elem::type_to_n_edges_map[type];
 
   const unsigned int pre_indexing_size =
-    header_size + n_nodes + n_sides;
+    header_size + n_nodes + n_sides*2;
 
   const unsigned int indexing_size =
     DofObject::unpackable_indexing_size(in+pre_indexing_size);
@@ -130,7 +129,6 @@ Packing<const Elem *>::packed_size (std::vector<largest_id_type>::const_iterator
 
 
 template <>
-template <>
 unsigned int
 Packing<const Elem *>::packed_size (std::vector<largest_id_type>::iterator in)
 {
@@ -139,7 +137,6 @@ Packing<const Elem *>::packed_size (std::vector<largest_id_type>::iterator in)
 
 
 
-template <>
 template <>
 unsigned int
 Packing<const Elem *>::packable_size (const Elem * const & elem,
@@ -171,13 +168,12 @@ Packing<const Elem *>::packable_size (const Elem * const & elem,
 #ifndef NDEBUG
     1 + // add an int for the magic header when testing
 #endif
-    header_size + elem->n_nodes() + n_sides +
+    header_size + elem->n_nodes() + n_sides*2 +
     elem->packed_indexing_size() + total_packed_bcs;
 }
 
 
 
-template <>
 template <>
 unsigned int
 Packing<const Elem *>::packable_size (const Elem * const & elem,
@@ -189,7 +185,6 @@ Packing<const Elem *>::packable_size (const Elem * const & elem,
 
 
 template <>
-template <>
 unsigned int
 Packing<const Elem *>::packable_size (const Elem * const & elem,
                                       const ParallelMesh * mesh)
@@ -199,7 +194,6 @@ Packing<const Elem *>::packable_size (const Elem * const & elem,
 
 
 
-template <>
 template <>
 void
 Packing<const Elem *>::pack (const Elem * const & elem,
@@ -270,15 +264,25 @@ Packing<const Elem *>::pack (const Elem * const & elem,
   else
     *data_out++ =(DofObject::invalid_id);
 
-  for (unsigned int n=0; n<elem->n_nodes(); n++)
-    *data_out++ = (elem->node_id(n));
+  for (const Node & node : elem->node_ref_range())
+    *data_out++ = node.id();
 
+  // Add the id of and the side for any return link from each neighbor
   for (auto neigh : elem->neighbor_ptr_range())
     {
       if (neigh)
+      {
         *data_out++ = (neigh->id());
+        if (neigh == remote_elem)
+          *data_out++ = (DofObject::invalid_id);
+        else
+          *data_out++ = neigh->which_neighbor_am_i(elem);
+      }
       else
+      {
         *data_out++ = (DofObject::invalid_id);
+        *data_out++ = (DofObject::invalid_id);
+      }
     }
 
   // Add any DofObject indices
@@ -324,7 +328,6 @@ Packing<const Elem *>::pack (const Elem * const & elem,
 
 
 template <>
-template <>
 void
 Packing<const Elem *>::pack (const Elem * const & elem,
                              std::back_insert_iterator<std::vector<largest_id_type>> data_out,
@@ -335,7 +338,6 @@ Packing<const Elem *>::pack (const Elem * const & elem,
 
 
 
-template <>
 template <>
 void
 Packing<const Elem *>::pack (const Elem * const & elem,
@@ -348,7 +350,6 @@ Packing<const Elem *>::pack (const Elem * const & elem,
 
 
 // FIXME - this needs serious work to be 64-bit compatible
-template <>
 template <>
 Elem *
 Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
@@ -558,6 +559,9 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
             const dof_id_type neighbor_id =
               cast_int<dof_id_type>(*in++);
 
+            const dof_id_type neighbor_side =
+              cast_int<dof_id_type>(*in++);
+
             // If the sending processor sees a domain boundary here,
             // we'd better agree.
             if (neighbor_id == DofObject::invalid_id)
@@ -601,8 +605,11 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
               {
                 elem->set_neighbor(n, neigh);
 
-                elem->make_links_to_me_local(n);
+                elem->make_links_to_me_local(n, neighbor_side);
               }
+            else
+              libmesh_assert(neigh->level() < elem->level() ||
+                             neigh->neighbor_ptr(neighbor_side) == elem);
           }
 
       // Our p level and refinement flags should be "close to" correct
@@ -684,7 +691,7 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
       elem->processor_id()  = processor_id;
       elem->set_id()        = id;
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-      elem->set_unique_id() = unique_id;
+      elem->set_unique_id(unique_id);
 #endif
 
       // Assign the connectivity
@@ -725,6 +732,9 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
           const dof_id_type neighbor_id =
             cast_int<dof_id_type>(*in++);
 
+            const dof_id_type neighbor_side =
+              cast_int<dof_id_type>(*in++);
+
           if (neighbor_id == DofObject::invalid_id)
             continue;
 
@@ -749,11 +759,11 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
             }
 
           // If we have the neighbor element, then link to it, and
-          // make sure the appropriate parts of its family link back
+          // make sure any appropriate parts of its family link back
           // to us.
           elem->set_neighbor(n, neigh);
 
-          elem->make_links_to_me_local(n);
+          elem->make_links_to_me_local(n, neighbor_side);
         }
 
       elem->unpack_indexing(in);
@@ -803,7 +813,6 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
 
 
 template <>
-template <>
 Elem *
 Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
                          DistributedMesh * mesh)
@@ -813,7 +822,6 @@ Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,
 
 
 
-template <>
 template <>
 Elem *
 Packing<Elem *>::unpack (std::vector<largest_id_type>::const_iterator in,

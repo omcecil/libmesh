@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,8 +26,8 @@
 #include "libmesh/mesh_input.h"
 #include "libmesh/mesh_output.h"
 #include "libmesh/parallel_object.h"
-
-// C++ includes
+#include "libmesh/boundary_info.h" // BoundaryInfo::BCTuple
+#include "libmesh/exodus_header_info.h"
 
 namespace libMesh
 {
@@ -78,6 +78,25 @@ public:
   virtual void read (const std::string & name) override;
 
   /**
+   * Read only the header information, instead of the entire
+   * mesh. After the header is read, the file is closed and the
+   * MeshBase object remains unchanged. This capability is useful if
+   * you only need to know the mesh "metadata" and should be faster
+   * than reading in all the nodes and elems.
+   *
+   * The header information currently includes:
+   * .) Title string
+   * .) Mesh spatial dimension
+   * .) Number of nodes
+   * .) Number of elements
+   * .) Number of element blocks
+   * .) Number of node sets
+   * .) Number of side sets
+   * .) Number of edge blocks/edges
+   */
+  ExodusHeaderInfo read_header (const std::string & name);
+
+  /**
    * This method implements writing a mesh to a specified file.
    */
   virtual void write (const std::string & fname) override;
@@ -86,6 +105,13 @@ public:
    * Set the flag indicating if we should be verbose.
    */
   void verbose (bool set_verbosity);
+
+  /**
+   * Set the flag indicating whether the complex modulus should be
+   * written when complex numbers are enabled. By default this flag
+   * is set to true.
+   */
+  void write_complex_magnitude (bool val);
 
   /**
    * \returns An array containing the timesteps in the file.
@@ -104,17 +130,6 @@ public:
   int get_num_time_steps();
 
   /**
-   * Backward compatibility version of function that takes a single variable name.
-   *
-   * \deprecated Use the version of copy_nodal_solution() that takes two names.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  void copy_nodal_solution(System & system,
-                           std::string var_name,
-                           unsigned int timestep=1);
-#endif
-
-  /**
    * If we read in a nodal solution while reading in a mesh, we can attempt
    * to copy that nodal solution into an EquationSystems object.
    */
@@ -131,6 +146,14 @@ public:
                                std::string system_var_name,
                                std::string exodus_var_name,
                                unsigned int timestep=1);
+
+  /**
+   * Copy global variables into scalar variables of a System object.
+   */
+  void copy_scalar_solution(System & system,
+                            std::vector<std::string> system_var_names,
+                            std::vector<std::string> exodus_var_names,
+                            unsigned int timestep=1);
 
   /**
    * Given an elemental variable and a time step, returns a mapping from the
@@ -258,6 +281,45 @@ public:
                        const std::set<std::string> * system_names=nullptr);
 
   /**
+   * The Exodus format can also store values on sidesets. This can be
+   * thought of as an alternative to defining an elemental variable
+   * field on lower-dimensional elements making up a part of the
+   * boundary. The inputs to the function are:
+   * .) var_names[i] is the name of the ith sideset variable to be written to file.
+   * .) side_ids[i] is a set of side_ids where var_names[i] is active.
+   * .) bc_vals[i] is a map from (elem,side,id) BCTuple objects to the
+   *    corresponding real-valued data.
+   *
+   * \note You must have already written the mesh by calling
+   * e.g. write() before calling this function, because it uses the
+   * existing ordering of the Exodus sidesets.
+   */
+  void
+  write_sideset_data (int timestep,
+                      const std::vector<std::string> & var_names,
+                      const std::vector<std::set<boundary_id_type>> & side_ids,
+                      const std::vector<std::map<BoundaryInfo::BCTuple, Real>> & bc_vals);
+
+  /**
+   * Similar to write_sideset_data(), this function is used to read
+   * the data at a particular timestep. TODO: currently _all_ the
+   * sideset variables are read, but we might want to change this to
+   * only read the requested ones.
+   */
+  void
+  read_sideset_data (int timestep,
+                     std::vector<std::string> & var_names,
+                     std::vector<std::set<boundary_id_type>> & side_ids,
+                     std::vector<std::map<BoundaryInfo::BCTuple, Real>> & bc_vals);
+
+  /**
+   * Set the elemental variables in the Exodus file to be read into extra
+   * element integers. The names of these elemental variables will be used to
+   * name the extra element integers.
+   */
+  void set_extra_integer_vars(const std::vector<std::string> & extra_integer_vars);
+
+  /**
    * Sets the list of variable names to be included in the output.
    * This is _optional_.  If this is never called then all variables
    * will be present. If this is called and an empty vector is supplied
@@ -325,6 +387,11 @@ public:
    */
   const std::vector<std::string> & get_nodal_var_names();
 
+  /**
+   * Return list of the global variable names
+   */
+  const std::vector<std::string> & get_global_var_names();
+
 #ifdef LIBMESH_HAVE_EXODUS_API
   /**
    * Return a reference to the ExodusII_IO_Helper object.
@@ -368,18 +435,38 @@ private:
 #endif
 
   /**
+   * An optional list of variables in the EXODUS file that are
+   * to be used to set extra integers when loading the file into a mesh.
+   * The variable names will be used to name the extra integers.
+   */
+  std::vector<std::string> _extra_integer_vars;
+
+  /**
    * The names of the variables to be output.
    * If this is empty then all variables are output.
    */
   std::vector<std::string> _output_variables;
 
   /**
-   * If true, _output_variables is allowed to remain empty.
-   * If false, if _output_variables is empty it will be populated with a complete list of all variables
-   * By default, calling set_output_variables() sets this flag to true, but it provides an override.
+   * Flag which controls the behavior of _output_variables:
+   * .) If true, _output_variables is allowed to remain empty.
+   * .) If false, if _output_variables is empty it will be populated
+   *    with a complete list of all variables.
+   * .) By default, calling set_output_variables() sets this flag to
+   *    true, but it provides an override.
    */
   bool _allow_empty_variables;
 
+  /**
+   * By default, when complex numbers are enabled, for each variable
+   * we write out three values: the real part, "r_u" the imaginary
+   * part, "i_u", and the complex modulus, a_u := sqrt(r_u*r_u +
+   * i_u*i_u), which is also the value returned by
+   * std::abs(std::complex).  Since the modulus is not an independent
+   * quantity, we can set this flag to false and save some file space
+   * by not writing out.
+   */
+  bool _write_complex_abs;
 };
 
 

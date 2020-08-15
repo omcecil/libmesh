@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,7 +21,6 @@
 #include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
 #include <cmath>    // for sqrt
 
-
 // Local Includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/jump_error_estimator.h"
@@ -38,6 +37,7 @@
 #include "libmesh/dense_vector.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/int_range.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 namespace libMesh
 {
@@ -46,6 +46,8 @@ namespace libMesh
 // JumpErrorEstimator implementations
 void JumpErrorEstimator::init_context (FEMContext &)
 {
+  // Derived classes are *supposed* to rederive this
+  libmesh_deprecated();
 }
 
 
@@ -139,8 +141,13 @@ void JumpErrorEstimator::estimate_error (const System & system,
       sys.update();
     }
 
-  fine_context.reset(new FEMContext(system));
-  coarse_context.reset(new FEMContext(system));
+  fine_context = libmesh_make_unique<FEMContext>(system);
+  coarse_context = libmesh_make_unique<FEMContext>(system);
+
+  // Don't overintegrate - we're evaluating differences of FE values,
+  // not products of them.
+  if (this->use_unweighted_quadrature_rules)
+    fine_context->use_unweighted_quadrature_rules(system.extra_quadrature_order);
 
   // Loop over all the variables we've been requested to find jumps in, to
   // pre-request
@@ -440,9 +447,9 @@ JumpErrorEstimator::reinit_sides ()
 
   std::vector<Point> qp_coarse;
 
-  FEInterface::inverse_map
-    (coarse_context->get_elem().dim(), fe_coarse->get_fe_type(),
-     &coarse_context->get_elem(), qface_point, qp_coarse);
+  FEMap::inverse_map (coarse_context->get_elem().dim(),
+                      &coarse_context->get_elem(), qface_point,
+                      qp_coarse);
 
   // The number of variables in the system
   const unsigned int n_vars = fine_context->n_vars();

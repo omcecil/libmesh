@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -143,6 +143,12 @@ Quad8::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
+std::vector<unsigned>
+Quad8::nodes_on_edge(const unsigned int e) const
+{
+  return nodes_on_side(e);
+}
+
 bool Quad8::has_affine_map() const
 {
   // make sure corners form a parallelogram
@@ -203,7 +209,7 @@ dof_id_type Quad8::key (const unsigned int s) const
 
 
 
-unsigned int Quad8::which_node_am_i(unsigned int side,
+unsigned int Quad8::local_side_node(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
@@ -217,22 +223,7 @@ unsigned int Quad8::which_node_am_i(unsigned int side,
 std::unique_ptr<Elem> Quad8::build_side_ptr (const unsigned int i,
                                              bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Edge3,Quad8>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> edge = libmesh_make_unique<Edge3>();
-      edge->subdomain_id() = this->subdomain_id();
-
-      // Set the nodes
-      for (unsigned n=0; n<edge->n_nodes(); ++n)
-        edge->set_node(n) = this->node_ptr(Quad8::side_nodes_map[i][n]);
-
-      return edge;
-    }
+  return this->simple_build_side_ptr<Edge3, Quad8>(i, proxy);
 }
 
 
@@ -426,6 +417,10 @@ BoundingBox Quad8::loose_bounding_box () const
 
 Real Quad8::volume () const
 {
+  // This specialization is good for Lagrange mappings only
+  if (this->mapping_type() != LAGRANGE_MAP)
+    return this->Elem::volume();
+
   // Make copies of our points.  It makes the subsequent calculations a bit
   // shorter and avoids dereferencing the same pointer multiple times.
   Point

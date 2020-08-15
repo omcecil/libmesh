@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,12 +27,11 @@ namespace libMesh
 
 
 
-void QGauss::init_1D(const ElemType,
-                     unsigned int p_level)
+void QGauss::init_1D(const ElemType, unsigned int)
 {
   //----------------------------------------------------------------------
   // 1D quadrature rules
-  switch(_order + 2*p_level)
+  switch(get_order())
     {
     case CONSTANT:
     case FIRST:

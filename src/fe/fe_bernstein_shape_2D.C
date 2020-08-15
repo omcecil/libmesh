@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -30,29 +30,22 @@ namespace libMesh
 {
 
 
-template <>
-Real FE<2,BERNSTEIN>::shape(const ElemType,
-                            const Order,
-                            const unsigned int,
-                            const Point &)
-{
-  libmesh_error_msg("Bernstein polynomials require the element type \nbecause edge orientation is needed.");
-  return 0.;
-}
-
+LIBMESH_DEFAULT_VECTORIZED_FE(2,BERNSTEIN)
 
 
 template <>
 Real FE<2,BERNSTEIN>::shape(const Elem * elem,
                             const Order order,
                             const unsigned int i,
-                            const Point & p)
+                            const Point & p,
+                            const bool add_p_level)
 {
   libmesh_assert(elem);
 
   const ElemType type = elem->type();
 
-  const Order totalorder = static_cast<Order>(order + elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order + add_p_level * elem->p_level());
 
   // Declare that we are using our own special power function
   // from the Utility namespace.  This saves typing later.
@@ -381,16 +374,25 @@ Real FE<2,BERNSTEIN>::shape(const Elem * elem,
 }
 
 
-
 template <>
-Real FE<2,BERNSTEIN>::shape_deriv(const ElemType,
-                                  const Order,
-                                  const unsigned int,
-                                  const unsigned int,
-                                  const Point &)
+Real FE<2,BERNSTEIN>::shape(const ElemType,
+                            const Order,
+                            const unsigned int,
+                            const Point &)
 {
   libmesh_error_msg("Bernstein polynomials require the element type \nbecause edge orientation is needed.");
   return 0.;
+}
+
+
+template <>
+Real FE<2,BERNSTEIN>::shape(const FEType fet,
+                            const Elem * elem,
+                            const unsigned int i,
+                            const Point & p,
+                            const bool add_p_level)
+{
+  return FE<2,BERNSTEIN>::shape(elem, fet.order, i, p, add_p_level);
 }
 
 
@@ -400,13 +402,15 @@ Real FE<2,BERNSTEIN>::shape_deriv(const Elem * elem,
                                   const Order order,
                                   const unsigned int i,
                                   const unsigned int j,
-                                  const Point & p)
+                                  const Point & p,
+                                  const bool add_p_level)
 {
   libmesh_assert(elem);
 
   const ElemType type = elem->type();
 
-  const Order totalorder = static_cast<Order>(order + elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order + add_p_level * elem->p_level());
 
   switch (type)
     {
@@ -522,7 +526,7 @@ Real FE<2,BERNSTEIN>::shape_deriv(const Elem * elem,
       {
         // I have been lazy here and am using finite differences
         // to compute the derivatives!
-        const Real eps = 1.e-6;
+        const Real eps = 1.e-4;
 
         switch (j)
           {
@@ -559,7 +563,179 @@ Real FE<2,BERNSTEIN>::shape_deriv(const Elem * elem,
 
 
 
+
+template <>
+Real FE<2,BERNSTEIN>::shape_deriv(const ElemType,
+                                  const Order,
+                                  const unsigned int,
+                                  const unsigned int,
+                                  const Point &)
+{
+  libmesh_error_msg("Bernstein polynomials require the element type \nbecause edge orientation is needed.");
+  return 0.;
+}
+
+template <>
+Real FE<2,BERNSTEIN>::shape_deriv(const FEType fet,
+                                  const Elem * elem,
+                                  const unsigned int i,
+                                  const unsigned int j,
+                                  const Point & p,
+                                  const bool add_p_level)
+{
+  return FE<2,BERNSTEIN>::shape_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
+
+
+
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+
+
+
+template <>
+Real FE<2,BERNSTEIN>::shape_second_deriv(const Elem * elem,
+                                         const Order order,
+                                         const unsigned int i,
+                                         const unsigned int j,
+                                         const Point & p,
+                                         const bool add_p_level)
+{
+  libmesh_assert(elem);
+
+  const ElemType type = elem->type();
+
+  const Order totalorder =
+    static_cast<Order>(order + add_p_level * elem->p_level());
+
+  switch (type)
+    {
+      // Hierarchic shape functions on the quadrilateral.
+    case QUAD4:
+    case QUAD9:
+      {
+        // Compute quad shape functions as a tensor-product
+        const Real xi  = p(0);
+        const Real eta = p(1);
+
+        libmesh_assert_less (i, (totalorder+1u)*(totalorder+1u));
+
+        unsigned int i0, i1;
+
+        // Vertex DoFs
+        if (i == 0)
+          { i0 = 0; i1 = 0; }
+        else if (i == 1)
+          { i0 = 1; i1 = 0; }
+        else if (i == 2)
+          { i0 = 1; i1 = 1; }
+        else if (i == 3)
+          { i0 = 0; i1 = 1; }
+
+
+        // Edge DoFs
+        else if (i < totalorder + 3u)
+          { i0 = i - 2; i1 = 0; }
+        else if (i < 2u*totalorder + 2)
+          { i0 = 1; i1 = i - totalorder - 1; }
+        else if (i < 3u*totalorder + 1)
+          { i0 = i - 2u*totalorder; i1 = 1; }
+        else if (i < 4u*totalorder)
+          { i0 = 0; i1 = i - 3u*totalorder + 1; }
+        // Interior DoFs
+        else
+          {
+            unsigned int basisnum = i - 4*totalorder;
+            i0 = square_number_column[basisnum] + 2;
+            i1 = square_number_row[basisnum] + 2;
+          }
+
+
+        // Flip odd degree of freedom values if necessary
+        // to keep continuity on sides
+        if      ((i>= 4                 && i<= 4+  totalorder-2u) && elem->point(0) > elem->point(1)) i0=totalorder+2-i0;
+        else if ((i>= 4+  totalorder-1u && i<= 4+2*totalorder-3u) && elem->point(1) > elem->point(2)) i1=totalorder+2-i1;
+        else if ((i>= 4+2*totalorder-2u && i<= 4+3*totalorder-4u) && elem->point(3) > elem->point(2)) i0=totalorder+2-i0;
+        else if ((i>= 4+3*totalorder-3u && i<= 4+4*totalorder-5u) && elem->point(0) > elem->point(3)) i1=totalorder+2-i1;
+
+        switch (j)
+          {
+            // d^2() / dxi^2
+          case 0:
+            return (FE<1,BERNSTEIN>::shape_second_deriv(EDGE3, totalorder, i0, 0, xi)*
+                    FE<1,BERNSTEIN>::shape             (EDGE3, totalorder, i1,    eta));
+
+            // d^2() / dxi deta
+          case 1:
+            return (FE<1,BERNSTEIN>::shape_deriv(EDGE3, totalorder, i0, 0, xi)*
+                    FE<1,BERNSTEIN>::shape_deriv(EDGE3, totalorder, i1, 0, eta));
+
+            // d^2() / deta^2
+          case 2:
+            return (FE<1,BERNSTEIN>::shape             (EDGE3, totalorder, i0,    xi)*
+                    FE<1,BERNSTEIN>::shape_second_deriv(EDGE3, totalorder, i1, 0, eta));
+
+          default:
+            libmesh_error_msg("Invalid shape function derivative j = " << j);
+          }
+      }
+
+      // Going to be lazy again about the hard cases.
+    case TRI3:
+    case TRISHELL3:
+      libmesh_assert_less (totalorder, 2);
+      libmesh_fallthrough();
+    case QUAD8:
+    case QUADSHELL8:
+    case TRI6:
+      {
+        // I have been lazy here and am using finite differences
+        // to compute the derivatives!
+        const Real eps = 1.e-4;
+
+        switch (j)
+          {
+            //  d^2() / dxi^2
+          case 0:
+            {
+              const Point pp(p(0)+eps, p(1));
+              const Point pm(p(0)-eps, p(1));
+
+              return (FE<2,BERNSTEIN>::shape_deriv(elem, totalorder, i, 0, pp) -
+                      FE<2,BERNSTEIN>::shape_deriv(elem, totalorder, i, 0, pm))/2./eps;
+            }
+
+            // d^2() / dxi deta
+          case 1:
+            {
+              const Point pp(p(0), p(1)+eps);
+              const Point pm(p(0), p(1)-eps);
+
+              return (FE<2,BERNSTEIN>::shape_deriv(elem, totalorder, i, 0, pp) -
+                      FE<2,BERNSTEIN>::shape_deriv(elem, totalorder, i, 0, pm))/2./eps;
+            }
+
+            // d^2() / deta^2
+          case 2:
+            {
+              const Point pp(p(0), p(1)+eps);
+              const Point pm(p(0), p(1)-eps);
+
+              return (FE<2,BERNSTEIN>::shape_deriv(elem, totalorder, i, 1, pp) -
+                      FE<2,BERNSTEIN>::shape_deriv(elem, totalorder, i, 1, pm))/2./eps;
+            }
+
+          default:
+            libmesh_error_msg("Invalid shape function derivative j = " << j);
+          }
+      }
+
+    default:
+      libmesh_error_msg("ERROR: Unsupported element type = " << type);
+    }
+}
+
+
 template <>
 Real FE<2,BERNSTEIN>::shape_second_deriv(const ElemType,
                                          const Order,
@@ -567,36 +743,24 @@ Real FE<2,BERNSTEIN>::shape_second_deriv(const ElemType,
                                          const unsigned int,
                                          const Point &)
 {
-  static bool warning_given = false;
-
-  if (!warning_given)
-    libMesh::err << "Second derivatives for Bernstein elements "
-                 << "are not yet implemented!"
-                 << std::endl;
-
-  warning_given = true;
+  libmesh_error_msg("Bernstein polynomials require the element type \nbecause edge orientation is needed.");
   return 0.;
 }
-
 
 
 template <>
-Real FE<2,BERNSTEIN>::shape_second_deriv(const Elem *,
-                                         const Order,
-                                         const unsigned int,
-                                         const unsigned int,
-                                         const Point &)
+Real FE<2,BERNSTEIN>::shape_second_deriv(const FEType fet,
+                                         const Elem * elem,
+                                         const unsigned int i,
+                                         const unsigned int j,
+                                         const Point & p,
+                                         const bool add_p_level)
 {
-  static bool warning_given = false;
-
-  if (!warning_given)
-    libMesh::err << "Second derivatives for Bernstein elements "
-                 << "are not yet implemented!"
-                 << std::endl;
-
-  warning_given = true;
-  return 0.;
+  libmesh_assert(elem);
+  return FE<2,BERNSTEIN>::shape_second_deriv(elem, fet.order, i, j, p, add_p_level);
 }
+
+
 
 #endif
 

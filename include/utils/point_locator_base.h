@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,6 @@
 // Local Includes
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh_common.h"
-#include "libmesh/auto_ptr.h" // deprecated
 
 #ifdef LIBMESH_FORWARD_DECLARE_ENUMS
 namespace libMesh
@@ -36,8 +35,9 @@ enum PointLocatorType : int;
 
 // C++ includes
 #include <cstddef>
-#include <vector>
 #include <memory>
+#include <set>
+#include <vector>
 
 namespace libMesh
 {
@@ -156,6 +156,11 @@ public:
   virtual void disable_out_of_mesh_mode () = 0;
 
   /**
+   * Get the close-to-point tolerance.
+   */
+  Real get_close_to_point_tol() const;
+
+  /**
    * Set a tolerance to use when determining
    * if a point is contained within the mesh.
    */
@@ -166,6 +171,24 @@ public:
    * determine if a point is contained within the mesh.
    */
   virtual void unset_close_to_point_tol();
+
+  /**
+   * Set a tolerance to use when checking
+   * if a point is within an element in the mesh.
+   */
+  virtual void set_contains_point_tol(Real contains_point_tol);
+
+  /**
+   * Specify that we do not want to use a user-specified tolerance to
+   * determine if a point is inside an element in the mesh.
+   */
+  virtual void unset_contains_point_tol();
+
+  /**
+   * Get the tolerance for determining element containment
+   * in the point locator.
+   */
+  virtual Real get_contains_point_tol() const;
 
   /**
    * Get a const reference to this PointLocator's mesh.
@@ -197,7 +220,7 @@ protected:
 
   /**
    * \p true if we will use a user-specified tolerance for locating
-   * the element.
+   * the element in an exhaustive search.
    */
   bool _use_close_to_point_tol;
 
@@ -205,6 +228,17 @@ protected:
    * The tolerance to use.
    */
   Real _close_to_point_tol;
+
+  /**
+   * \p true if we will use a user-specified tolerance for locating
+   * the element.
+   */
+  bool _use_contains_point_tol;
+
+  /**
+   * The tolerance to use when locating an element in the tree.
+   */
+  Real _contains_point_tol;
 };
 
 } // namespace libMesh

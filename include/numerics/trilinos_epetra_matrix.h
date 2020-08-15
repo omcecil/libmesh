@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -118,11 +118,15 @@ public:
                      const numeric_index_type noz=10,
                      const numeric_index_type blocksize=1) override;
 
-  virtual void init () override;
+  virtual void init (ParallelType = PARALLEL) override;
 
   virtual void clear () override;
 
   virtual void zero () override;
+
+  virtual std::unique_ptr<SparseMatrix<T>> zero_clone () const override;
+
+  virtual std::unique_ptr<SparseMatrix<T>> clone () const override;
 
   virtual void close () override;
 

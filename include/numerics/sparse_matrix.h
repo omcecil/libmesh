@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,10 +24,10 @@
 // Local includes
 #include "libmesh/libmesh.h"
 #include "libmesh/libmesh_common.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/id_types.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/parallel_object.h"
+#include "libmesh/enum_parallel_type.h"
 
 // C++ includes
 #include <cstddef>
@@ -150,8 +150,9 @@ public:
 
   /**
    * Initialize this matrix using the sparsity structure computed by \p dof_map.
+   * @param type The serial/parallel/ghosted type of the matrix
    */
-  virtual void init () = 0;
+  virtual void init (ParallelType type = PARALLEL) = 0;
 
   /**
    * Restores the \p SparseMatrix<T> to a pristine state.
@@ -162,6 +163,21 @@ public:
    * Set all entries to 0.
    */
   virtual void zero () = 0;
+
+  /**
+   * \returns A smart pointer to a copy of this matrix with the same
+   * type, size, and partitioning, but with all zero entries.
+   *
+   * \note This must be overridden in the derived classes.
+   */
+  virtual std::unique_ptr<SparseMatrix<T>> zero_clone () const = 0;
+
+  /**
+   * \returns A smart pointer to a copy of this matrix.
+   *
+   * \note This must be overridden in the derived classes.
+   */
+  virtual std::unique_ptr<SparseMatrix<T>> clone () const = 0;
 
   /**
    * Sets all row entries to 0 then puts \p diag_value in the diagonal entry.
@@ -185,6 +201,11 @@ public:
    * \returns The row-dimension of the matrix.
    */
   virtual numeric_index_type m () const = 0;
+
+  /**
+   * Get the number of rows owned by this process
+   */
+  virtual numeric_index_type local_m () const { return row_stop() - row_start(); }
 
   /**
    * \returns The column-dimension of the matrix.
@@ -258,6 +279,22 @@ public:
    * Compute \f$ A \leftarrow A + a*X \f$ for scalar \p a, matrix \p X.
    */
   virtual void add (const T a, const SparseMatrix<T> & X) = 0;
+
+  /**
+   * Compute Y = A*X for matrix \p X.
+   */
+  virtual void matrix_matrix_mult (SparseMatrix<T> & /*X*/, SparseMatrix<T> & /*Y*/)
+  { libmesh_not_implemented(); }
+
+  /**
+   * Add \p scalar* \p spm to the rows and cols of this matrix (A):
+   * A(rows[i], cols[j]) += scalar * spm(i,j)
+   */
+  virtual void add_sparse_matrix (const SparseMatrix<T> & /*spm*/,
+                                  const std::map<numeric_index_type, numeric_index_type> & /*rows*/,
+                                  const std::map<numeric_index_type, numeric_index_type> & /*cols*/,
+                                  const T /*scalar*/)
+  { libmesh_not_implemented(); }
 
   /**
    * \returns A copy of matrix entry \p (i,j).
@@ -401,6 +438,20 @@ public:
    * *this.
    */
   virtual void get_transpose (SparseMatrix<T> & dest) const = 0;
+
+  /**
+   * Get a row from the matrix
+   * @param i The matrix row to get
+   * @param indices A container that will be filled with the column indices
+   *                corresponding to (possibly) non-zero values
+   * @param values A container holding the column values
+   */
+  virtual void get_row(numeric_index_type /*i*/,
+                       std::vector<numeric_index_type> & /*indices*/,
+                       std::vector<T> & /*values*/) const
+  {
+    libmesh_not_implemented();
+  }
 
 protected:
 

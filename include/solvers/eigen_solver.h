@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -29,7 +29,6 @@
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h"
 #include "libmesh/parallel_object.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/enum_solver_package.h" // SLEPC_SOLVERS
 
 #ifdef LIBMESH_FORWARD_DECLARE_ENUMS
@@ -185,6 +184,33 @@ public:
                                                                 const double tol,
                                                                 const unsigned int m_its) = 0;
 
+   /**
+    * Solves the standard eigenproblem involving the ShellMatrix \p matrix_A and
+    * the preconditioning matrix \p precond.
+    *
+    * \returns The number of converged eigenpairs and the number of
+    * iterations.
+    */
+   virtual std::pair<unsigned int, unsigned int> solve_standard (ShellMatrix<T> & matrix_A,
+                                                                 SparseMatrix<T> & precond,
+                                                                 int nev,
+                                                                 int ncv,
+                                                                 const double tol,
+                                                                 const unsigned int m_its) = 0;
+
+   /**
+    * Solves the standard eigenproblem involving the ShellMatrix \p matrix_A and
+    * the shell preconditioning matrix \p precond.
+    *
+    * \returns The number of converged eigenpairs and the number of
+    * iterations.
+    */
+   virtual std::pair<unsigned int, unsigned int> solve_standard (ShellMatrix<T> & matrix_A,
+                                                                 ShellMatrix<T> & precond,
+                                                                 int nev,
+                                                                 int ncv,
+                                                                 const double tol,
+                                                                 const unsigned int m_its) = 0;
 
   /**
    * Solves the generalized eigenproblem involving SparseMatrices \p matrix_A
@@ -237,6 +263,36 @@ public:
    */
   virtual std::pair<unsigned int, unsigned int> solve_generalized (ShellMatrix<T> & matrix_A,
                                                                    ShellMatrix<T> & matrix_B,
+                                                                   int nev,
+                                                                   int ncv,
+                                                                   const double tol,
+                                                                   const unsigned int m_its) = 0;
+
+   /**
+    * Solves the generalized eigenproblem involving ShellMatrices \p
+    * matrix_A, \p matrix_B and the SparseMatrix precond.
+    *
+    * \returns The number of converged eigenpairs and the number of
+    * iterations.
+    */
+   virtual std::pair<unsigned int, unsigned int> solve_generalized (ShellMatrix<T> & matrix_A,
+                                                                    ShellMatrix<T> & matrix_B,
+                                                                    SparseMatrix<T> & precond,
+                                                                    int nev,
+                                                                    int ncv,
+                                                                    const double tol,
+                                                                    const unsigned int m_its) = 0;
+
+  /**
+   * Solves the generalized eigenproblem involving ShellMatrices \p
+   * matrix_A, \p matrix_B and the shell preconditioning matrix.
+   *
+   * \returns The number of converged eigenpairs and the number of
+   * iterations.
+   */
+  virtual std::pair<unsigned int, unsigned int> solve_generalized (ShellMatrix<T> & matrix_A,
+                                                                   ShellMatrix<T> & matrix_B,
+                                                                   ShellMatrix<T> & precond,
                                                                    int nev,
                                                                    int ncv,
                                                                    const double tol,

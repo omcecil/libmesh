@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,6 +20,7 @@
 #include "libmesh/fe.h"
 #include "libmesh/elem.h"
 #include "libmesh/utility.h"
+
 
 // Anonymous namespace for functions shared by HIERARCHIC and
 // L2_HIERARCHIC implementations. Implementations appear at the bottom
@@ -56,6 +57,11 @@ Real fe_hierarchic_1D_shape_second_deriv(const ElemType,
 namespace libMesh
 {
 
+
+LIBMESH_DEFAULT_VECTORIZED_FE(1,HIERARCHIC)
+LIBMESH_DEFAULT_VECTORIZED_FE(1,L2_HIERARCHIC)
+
+
 template <>
 Real FE<1,HIERARCHIC>::shape(const ElemType elem_type,
                              const Order order,
@@ -82,12 +88,28 @@ template <>
 Real FE<1,HIERARCHIC>::shape(const Elem * elem,
                              const Order order,
                              const unsigned int i,
-                             const Point & p)
+                             const Point & p,
+                             const bool add_p_level)
 {
   libmesh_assert(elem);
 
-  return fe_hierarchic_1D_shape(elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  return fe_hierarchic_1D_shape(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
 }
+
+
+
+template <>
+Real FE<1,HIERARCHIC>::shape(const FEType fet,
+                             const Elem * elem,
+                             const unsigned int i,
+                             const Point & p,
+                             const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_hierarchic_1D_shape(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, p);
+}
+
+
 
 
 
@@ -95,13 +117,24 @@ template <>
 Real FE<1,L2_HIERARCHIC>::shape(const Elem * elem,
                                 const Order order,
                                 const unsigned int i,
-                                const Point & p)
+                                const Point & p,
+                                const bool add_p_level)
 {
   libmesh_assert(elem);
 
-  return fe_hierarchic_1D_shape(elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  return fe_hierarchic_1D_shape(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
 }
 
+template <>
+Real FE<1,L2_HIERARCHIC>::shape(const FEType fet,
+                                const Elem * elem,
+                                const unsigned int i,
+                                const Point & p,
+                                const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_hierarchic_1D_shape(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, p);
+}
 
 
 template <>
@@ -133,13 +166,30 @@ Real FE<1,HIERARCHIC>::shape_deriv(const Elem * elem,
                                    const Order order,
                                    const unsigned int i,
                                    const unsigned int j,
-                                   const Point & p)
+                                   const Point & p,
+                                   const bool add_p_level)
 {
   libmesh_assert(elem);
 
   return fe_hierarchic_1D_shape_deriv(elem->type(),
-                                      static_cast<Order>(order + elem->p_level()), i, j, p);
+                                      static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
+
+
+
+template <>
+Real FE<1,HIERARCHIC>::shape_deriv(const FEType fet,
+                                   const Elem * elem,
+                                   const unsigned int i,
+                                   const unsigned int j,
+                                   const Point & p,
+                                   const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_hierarchic_1D_shape_deriv(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
+
+
 
 
 template <>
@@ -147,14 +197,28 @@ Real FE<1,L2_HIERARCHIC>::shape_deriv(const Elem * elem,
                                       const Order order,
                                       const unsigned int i,
                                       const unsigned int j,
-                                      const Point & p)
+                                      const Point & p,
+                                      const bool add_p_level)
 {
   libmesh_assert(elem);
 
   return fe_hierarchic_1D_shape_deriv(elem->type(),
-                                      static_cast<Order>(order + elem->p_level()), i, j, p);
+                                      static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
 
+
+
+template <>
+Real FE<1,L2_HIERARCHIC>::shape_deriv(const FEType fet,
+                                      const Elem * elem,
+                                      const unsigned int i,
+                                      const unsigned int j,
+                                      const Point & p,
+                                      const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_hierarchic_1D_shape_deriv(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
 
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
@@ -188,14 +252,29 @@ Real FE<1,HIERARCHIC>::shape_second_deriv(const Elem * elem,
                                           const Order order,
                                           const unsigned int i,
                                           const unsigned int j,
-                                          const Point & p)
+                                          const Point & p,
+                                          const bool add_p_level)
 {
   libmesh_assert(elem);
 
   return fe_hierarchic_1D_shape_second_deriv(elem->type(),
-                                             static_cast<Order>(order + elem->p_level()), i, j, p);
+                                             static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
 
+
+
+template <>
+Real FE<1,HIERARCHIC>::shape_second_deriv(const FEType fet,
+                                          const Elem * elem,
+                                          const unsigned int i,
+                                          const unsigned int j,
+                                          const Point & p,
+                                          const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_hierarchic_1D_shape_second_deriv(elem->type(),
+                                             static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
 
 
 template <>
@@ -203,12 +282,27 @@ Real FE<1,L2_HIERARCHIC>::shape_second_deriv(const Elem * elem,
                                              const Order order,
                                              const unsigned int i,
                                              const unsigned int j,
-                                             const Point & p)
+                                             const Point & p,
+                                             const bool add_p_level)
 {
   libmesh_assert(elem);
 
   return fe_hierarchic_1D_shape_second_deriv(elem->type(),
-                                             static_cast<Order>(order + elem->p_level()), i, j, p);
+                                             static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
+}
+
+
+template <>
+Real FE<1,L2_HIERARCHIC>::shape_second_deriv(const FEType fet,
+                                             const Elem * elem,
+                                             const unsigned int i,
+                                             const unsigned int j,
+                                             const Point & p,
+                                             const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_hierarchic_1D_shape_second_deriv(elem->type(),
+                                             static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
 }
 
 #endif

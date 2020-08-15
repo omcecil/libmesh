@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,7 @@
 // libMesh includes
 #include "libmesh/dense_vector.h"
 #include "libmesh/fem_function_base.h"
+#include "libmesh/int_range.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // C++ includes
@@ -68,7 +69,7 @@ public:
                            const Real,
                            DenseVector<Output> & output)
   {
-    for (unsigned int i = 0; i < output.size(); i++)
+    for (auto i : index_range(output))
       output(i) = _c;
   }
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -63,6 +63,7 @@ void LaplaceSystem::init_data ()
 
 void LaplaceSystem::init_dirichlet_bcs()
 {
+#ifdef LIBMESH_ENABLE_DIRICHLET
   const boundary_id_type all_ids[6] = {0, 1, 2, 3, 4, 5};
   std::set<boundary_id_type> boundary_ids(all_ids, all_ids+6);
 
@@ -81,6 +82,7 @@ void LaplaceSystem::init_dirichlet_bcs()
   // and local- orderings are the same.
   this->get_dof_map().add_dirichlet_boundary
     (libMesh::DirichletBoundary(boundary_ids, vars, func));
+#endif // LIBMESH_ENABLE_DIRICHLET
 }
 
 void LaplaceSystem::init_context(DiffContext & context)

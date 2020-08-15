@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <array>
 
 // Local includes
 #include "libmesh/boundary_info.h"
@@ -37,7 +38,7 @@
 #include "libmesh/mesh_tools.h"
 #include "libmesh/parallel.h"
 #include "libmesh/remote_elem.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/unstructured_mesh.h"
 
 namespace
@@ -104,7 +105,7 @@ void MeshTools::Modification::distort (MeshBase & mesh,
     // then we should not move it.
     // [Note: Testing for (in)equality might be wrong
     // (different types, namely float and double)]
-    for (unsigned int n=0; n<mesh.max_node_id(); n++)
+    for (auto n : make_range(mesh.max_node_id()))
       if ((perturb_boundary || !boundary_node_ids.count(n)) && hmin[n] < 1.e20)
         {
           // the direction, random but unit normalized
@@ -113,10 +114,14 @@ void MeshTools::Modification::distort (MeshBase & mesh,
                      ((mesh.mesh_dimension() == 3) ? static_cast<Real>(std::rand())/static_cast<Real>(RAND_MAX) : 0.));
 
           dir(0) = (dir(0)-.5)*2.;
+#if LIBMESH_DIM > 1
           if (mesh.mesh_dimension() > 1)
             dir(1) = (dir(1)-.5)*2.;
+#endif
+#if LIBMESH_DIM > 2
           if (mesh.mesh_dimension() == 3)
             dir(2) = (dir(2)-.5)*2.;
+#endif
 
           dir = dir.unit();
 
@@ -125,10 +130,14 @@ void MeshTools::Modification::distort (MeshBase & mesh,
             continue;
 
           (*node)(0) += dir(0)*factor*hmin[n];
+#if LIBMESH_DIM > 1
           if (mesh.mesh_dimension() > 1)
             (*node)(1) += dir(1)*factor*hmin[n];
+#endif
+#if LIBMESH_DIM > 2
           if (mesh.mesh_dimension() == 3)
             (*node)(2) += dir(2)*factor*hmin[n];
+#endif
         }
   }
 }
@@ -226,6 +235,7 @@ void MeshTools::Modification::rotate (MeshBase & mesh,
                     ( sp*st)*x          + (-cp*st)*y          + (ct)*z   );
     }
 #else
+  libmesh_ignore(mesh, phi, theta, psi);
   libmesh_error_msg("MeshTools::Modification::rotate() requires libMesh to be compiled with LIBMESH_DIM==3");
 #endif
 }
@@ -270,6 +280,8 @@ void MeshTools::Modification::scale (MeshBase & mesh,
 
 void MeshTools::Modification::all_tri (MeshBase & mesh)
 {
+  libmesh_assert(mesh.is_prepared() || mesh.is_replicated());
+
   // The number of elements in the original mesh before any additions
   // or deletions.
   const dof_id_type n_orig_elem = mesh.n_elem();
@@ -279,7 +291,7 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
   // until they are ready to be added to the mesh.  This is because
   // adding new elements on the fly can cause reallocation and invalidation
   // of existing mesh element_iterators.
-  std::vector<Elem *> new_elements;
+  std::vector<std::unique_ptr<Elem>> new_elements;
 
   unsigned int max_subelems = 1;  // in 1D nothing needs to change
   if (mesh.mesh_dimension() == 2) // in 2D quads can split into 2 tris
@@ -330,17 +342,14 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
 
         // The new elements we will split the quad into.
         // In 3D we may need as many as 6 tets per hex
-        Elem * subelem[6];
-
-        for (unsigned int i = 0; i != max_subelems; ++i)
-          subelem[i] = nullptr;
+        std::array<std::unique_ptr<Elem>, 6> subelem {};
 
         switch (etype)
           {
           case QUAD4:
             {
-              subelem[0] = new Tri3;
-              subelem[1] = new Tri3;
+              subelem[0] = Elem::build(TRI3);
+              subelem[1] = Elem::build(TRI3);
 
               // Check for possible edge swap
               if ((elem->point(0) - elem->point(2)).norm() <
@@ -375,8 +384,8 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
               if (elem->processor_id() != mesh.processor_id())
                 added_new_ghost_point = true;
 
-              subelem[0] = new Tri6;
-              subelem[1] = new Tri6;
+              subelem[0] = Elem::build(TRI6);
+              subelem[1] = Elem::build(TRI6);
 
               // Add a new node at the center (vertex average) of the element.
               Node * new_node = mesh.add_point((mesh.point(elem->node_id(0)) +
@@ -428,8 +437,8 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
 
           case QUAD9:
             {
-              subelem[0] = new Tri6;
-              subelem[1] = new Tri6;
+              subelem[0] = Elem::build(TRI6);
+              subelem[1] = Elem::build(TRI6);
 
               // Check for possible edge swap
               if ((elem->point(0) - elem->point(2)).norm() <
@@ -473,9 +482,9 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
           case PRISM6:
             {
               // Prisms all split into three tetrahedra
-              subelem[0] = new Tet4;
-              subelem[1] = new Tet4;
-              subelem[2] = new Tet4;
+              subelem[0] = Elem::build(TET4);
+              subelem[1] = Elem::build(TET4);
+              subelem[2] = Elem::build(TET4);
 
               // Triangular faces are not split.
 
@@ -633,9 +642,9 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
 
           case PRISM18:
             {
-              subelem[0] = new Tet10;
-              subelem[1] = new Tet10;
-              subelem[2] = new Tet10;
+              subelem[0] = Elem::build(TET10);
+              subelem[1] = Elem::build(TET10);
+              subelem[2] = Elem::build(TET10);
 
               // Split on 0-4 diagonal
               if (split_first_diagonal(elem, 0,4, 1,3))
@@ -946,7 +955,7 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
         // remote_elem links to the new elements.
         bool mesh_is_serial = mesh.is_serial();
 
-        if (mesh_has_boundary_data || mesh_is_serial)
+        if (mesh_has_boundary_data || !mesh_is_serial)
           {
             // Container to key boundary IDs handed back by the BoundaryInfo object.
             std::vector<boundary_id_type> bc_ids;
@@ -954,60 +963,59 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
             for (auto sn : elem->side_index_range())
               {
                 mesh.get_boundary_info().boundary_ids(elem, sn, bc_ids);
-                for (const auto & b_id : bc_ids)
-                  {
-                    if (mesh_is_serial && b_id == BoundaryInfo::invalid_id)
-                      continue;
 
-                    // Make a sorted list of node ids for elem->side(sn)
-                    std::unique_ptr<Elem> elem_side = elem->build_side_ptr(sn);
-                    std::vector<dof_id_type> elem_side_nodes(elem_side->n_nodes());
-                    for (unsigned int esn=0,
-                         n_esn = cast_int<unsigned int>(elem_side_nodes.size());
-                         esn != n_esn; ++esn)
-                      elem_side_nodes[esn] = elem_side->node_id(esn);
-                    std::sort(elem_side_nodes.begin(), elem_side_nodes.end());
+                if (bc_ids.empty() && elem->neighbor_ptr(sn) != remote_elem)
+                  continue;
 
-                    for (unsigned int i=0; i != max_subelems; ++i)
-                      if (subelem[i])
+                // Make a sorted list of node ids for elem->side(sn)
+                std::unique_ptr<Elem> elem_side = elem->build_side_ptr(sn);
+                std::vector<dof_id_type> elem_side_nodes(elem_side->n_nodes());
+                for (unsigned int esn=0,
+                     n_esn = cast_int<unsigned int>(elem_side_nodes.size());
+                     esn != n_esn; ++esn)
+                  elem_side_nodes[esn] = elem_side->node_id(esn);
+                std::sort(elem_side_nodes.begin(), elem_side_nodes.end());
+
+                for (unsigned int i=0; i != max_subelems; ++i)
+                  if (subelem[i])
+                    {
+                      for (auto subside : subelem[i]->side_index_range())
                         {
-                          for (auto subside : subelem[i]->side_index_range())
+                          std::unique_ptr<Elem> subside_elem = subelem[i]->build_side_ptr(subside);
+
+                          // Make a list of *vertex* node ids for this subside, see if they are all present
+                          // in elem->side(sn).  Note 1: we can't just compare elem->key(sn) to
+                          // subelem[i]->key(subside) in the Prism cases, since the new side is
+                          // a different type.  Note 2: we only use vertex nodes since, in the future,
+                          // a Hex20 or Prism15's QUAD8 face may be split into two Tri6 faces, and the
+                          // original face will not contain the mid-edge node.
+                          std::vector<dof_id_type> subside_nodes(subside_elem->n_vertices());
+                          for (unsigned int ssn=0,
+                               n_ssn = cast_int<unsigned int>(subside_nodes.size());
+                               ssn != n_ssn; ++ssn)
+                            subside_nodes[ssn] = subside_elem->node_id(ssn);
+                          std::sort(subside_nodes.begin(), subside_nodes.end());
+
+                          // std::includes returns true if every element of the second sorted range is
+                          // contained in the first sorted range.
+                          if (std::includes(elem_side_nodes.begin(), elem_side_nodes.end(),
+                                            subside_nodes.begin(), subside_nodes.end()))
                             {
-                              std::unique_ptr<Elem> subside_elem = subelem[i]->build_side_ptr(subside);
+                              for (const auto & b_id : bc_ids)
+                                if (b_id != BoundaryInfo::invalid_id)
+                                  {
+                                    new_bndry_ids.push_back(b_id);
+                                    new_bndry_elements.push_back(subelem[i].get());
+                                    new_bndry_sides.push_back(subside);
+                                  }
 
-                              // Make a list of *vertex* node ids for this subside, see if they are all present
-                              // in elem->side(sn).  Note 1: we can't just compare elem->key(sn) to
-                              // subelem[i]->key(subside) in the Prism cases, since the new side is
-                              // a different type.  Note 2: we only use vertex nodes since, in the future,
-                              // a Hex20 or Prism15's QUAD8 face may be split into two Tri6 faces, and the
-                              // original face will not contain the mid-edge node.
-                              std::vector<dof_id_type> subside_nodes(subside_elem->n_vertices());
-                              for (unsigned int ssn=0,
-                                   n_ssn = cast_int<unsigned int>(subside_nodes.size());
-                                   ssn != n_ssn; ++ssn)
-                                subside_nodes[ssn] = subside_elem->node_id(ssn);
-                              std::sort(subside_nodes.begin(), subside_nodes.end());
-
-                              // std::includes returns true if every element of the second sorted range is
-                              // contained in the first sorted range.
-                              if (std::includes(elem_side_nodes.begin(), elem_side_nodes.end(),
-                                                subside_nodes.begin(), subside_nodes.end()))
-                                {
-                                  if (b_id != BoundaryInfo::invalid_id)
-                                    {
-                                      new_bndry_ids.push_back(b_id);
-                                      new_bndry_elements.push_back(subelem[i]);
-                                      new_bndry_sides.push_back(subside);
-                                    }
-
-                                  // If the original element had a RemoteElem neighbor on side 'sn',
-                                  // then the subelem has one on side 'subside'.
-                                  if (elem->neighbor_ptr(sn) == remote_elem)
-                                    subelem[i]->set_neighbor(subside, const_cast<RemoteElem*>(remote_elem));
-                                }
+                              // If the original element had a RemoteElem neighbor on side 'sn',
+                              // then the subelem has one on side 'subside'.
+                              if (elem->neighbor_ptr(sn) == remote_elem)
+                                subelem[i]->set_neighbor(subside, const_cast<RemoteElem*>(remote_elem));
                             }
                         }
-                  } // end for loop over boundary IDs
+                    } // end for loop over subelem
               } // end for loop over sides
 
             // Remove the original element from the BoundaryInfo structure.
@@ -1029,11 +1037,11 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
               subelem[i]->set_id( max_orig_id + 6*elem->id() + i );
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-              subelem[i]->set_unique_id() = max_unique_id + 2*elem->unique_id() + i;
+              subelem[i]->set_unique_id(max_unique_id + max_subelems*elem->unique_id() + i);
 #endif
 
               // Prepare to add the newly-created simplices
-              new_elements.push_back(subelem[i]);
+              new_elements.push_back(std::move(subelem[i]));
             }
 
         // Delete the original element
@@ -1045,7 +1053,7 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
   // Now, iterate over the new elements vector, and add them each to
   // the Mesh.
   for (auto & elem : new_elements)
-    mesh.add_elem(elem);
+    mesh.add_elem(std::move(elem));
 
   if (mesh_has_boundary_data)
     {
@@ -1093,7 +1101,7 @@ void MeshTools::Modification::all_tri (MeshBase & mesh)
 
 
   // Prepare the newly created mesh for use.
-  mesh.prepare_for_use(/*skip_renumber =*/ false);
+  mesh.prepare_for_use();
 
   // Let the new_elements and new_bndry_elements vectors go out of scope.
 }
@@ -1220,7 +1228,7 @@ void MeshTools::Modification::smooth (MeshBase & mesh,
             /*
              * finally reposition the vertex nodes
              */
-            for (unsigned int nid=0; nid<mesh.n_nodes(); ++nid)
+            for (auto nid : make_range(mesh.n_nodes()))
               if (!boundary_node_ids.count(nid) && weight[nid] > 0.)
                 mesh.node_ref(nid) = new_positions[nid]/weight[nid];
           }
@@ -1255,6 +1263,8 @@ void MeshTools::Modification::smooth (MeshBase & mesh,
 #ifdef LIBMESH_ENABLE_AMR
 void MeshTools::Modification::flatten(MeshBase & mesh)
 {
+  libmesh_assert(mesh.is_prepared() || mesh.is_replicated());
+
   // Algorithm:
   // .) For each active element in the mesh: construct a
   //    copy which is the same in every way *except* it is
@@ -1265,7 +1275,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
   // .) Add the level-0 copies back to the mesh
 
   // Temporary storage for new element pointers
-  std::vector<Elem *> new_elements;
+  std::vector<std::unique_ptr<Elem>> new_elements;
 
   // BoundaryInfo Storage for element ids, sides, and BC ids
   std::vector<Elem *>              saved_boundary_elements;
@@ -1284,7 +1294,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
   for (auto & elem : mesh.active_element_ptr_range())
     {
       // Make a new element of the same type
-      Elem * copy = Elem::build(elem->type()).release();
+      auto copy = Elem::build(elem->type());
 
       // Set node pointers (they still point to nodes in the original mesh)
       for (auto n : elem->node_index_range())
@@ -1298,7 +1308,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
       // the Mesh may try to create them for you...
       copy->set_id( elem->id() );
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-      copy->set_unique_id() = elem->unique_id();
+      copy->set_unique_id(elem->unique_id());
 #endif
 
       // This element could have boundary info or DistributedMesh
@@ -1313,7 +1323,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
           for (const auto & bc_id : bc_ids)
             if (bc_id != BoundaryInfo::invalid_id)
               {
-                saved_boundary_elements.push_back(copy);
+                saved_boundary_elements.push_back(copy.get());
                 saved_bc_ids.push_back(bc_id);
                 saved_bc_sides.push_back(s);
               }
@@ -1324,7 +1334,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
       mesh.delete_elem(elem);
 
       // But save the copy
-      new_elements.push_back(copy);
+      new_elements.push_back(std::move(copy));
     }
 
   // Make sure we saved the same number of boundary conditions
@@ -1343,7 +1353,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
       // change new_elem's id!
       dof_id_type orig_id = new_elem->id();
 
-      Elem * added_elem = mesh.add_elem(new_elem);
+      Elem * added_elem = mesh.add_elem(std::move(new_elem));
 
       // If the Elem, as it was re-added to the mesh, now has a
       // different ID (this is unlikely, so it's just an assert)
@@ -1361,7 +1371,7 @@ void MeshTools::Modification::flatten(MeshBase & mesh)
                                       saved_bc_ids[e]);
 
   // Trim unused and renumber nodes and elements
-  mesh.prepare_for_use(/*skip_renumber =*/ false);
+  mesh.prepare_for_use();
 }
 #endif // #ifdef LIBMESH_ENABLE_AMR
 

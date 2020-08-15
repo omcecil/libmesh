@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,6 +27,7 @@
 #include "libmesh/elem.h"
 #include "libmesh/enum_elem_type.h"
 #include "libmesh/int_range.h"
+#include "libmesh/utility.h" // map_find
 
 // C++ includes
 #include <sstream>
@@ -202,8 +203,8 @@ void EnsightIO::write_geometry_ascii()
     {
       ensight_parts_map[elem->type()].push_back(elem);
 
-      for (unsigned int i = 0; i < elem->n_nodes(); i++)
-        mesh_nodes_map[elem->node_id(i)] = elem->point(i);
+      for (const Node & node : elem->node_ref_range())
+        mesh_nodes_map[node.id()] = node;
     }
 
   // Write number of local points
@@ -230,12 +231,10 @@ void EnsightIO::write_geometry_ascii()
   for (const auto & pr : ensight_parts_map)
     {
       // Look up this ElemType in the map, error if not present.
-      auto name_it = _element_map.find(pr.first);
-      if (name_it == _element_map.end())
-        libmesh_error_msg("Error: Unsupported ElemType " << pr.first << " for EnsightIO.");
+      std::string name = libmesh_map_find(_element_map, pr.first);
 
       // Write element type
-      mesh_stream << "\n" << name_it->second << "\n";
+      mesh_stream << "\n" << name << "\n";
 
       const std::vector<const Elem *> & elem_ref = pr.second;
 
@@ -392,7 +391,7 @@ void EnsightIO::write_scalar_ascii(const std::string & sys,
       libmesh_error_msg("Complex-valued Ensight output not yet supported");
 #endif
 
-      for (unsigned int n=0; n<elem->n_nodes(); n++)
+      for (auto n : elem->node_index_range())
         local_soln[elem->node_id(n)] = libmesh_real(nodal_soln[n]);
     }
 

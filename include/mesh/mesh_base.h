@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,9 +21,8 @@
 #define LIBMESH_MESH_BASE_H
 
 // Local Includes
-#include "libmesh/auto_ptr.h" // deprecated
-#include "libmesh/boundary_info.h"
 #include "libmesh/dof_object.h" // for invalid_processor_id
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh_common.h"
 #include "libmesh/multi_predicates.h"
 #include "libmesh/point_locator_base.h"
@@ -35,6 +34,7 @@
 namespace libMesh
 {
 enum ElemType : int;
+enum ElemMappingType : unsigned char;
 }
 #else
 #include "libmesh/enum_elem_type.h"
@@ -54,6 +54,7 @@ class GhostingFunctor;
 class Node;
 class Point;
 class Partitioner;
+class BoundaryInfo;
 
 template <class MT>
 class MeshInput;
@@ -136,7 +137,11 @@ public:
   BoundaryInfo & get_boundary_info() { return *boundary_info; }
 
   /**
-   * Deletes all the data that are currently stored.
+   * Deletes all the element and node data that is currently stored.
+   *
+   * elem and node extra_integer data is nevertheless *retained* here,
+   * for better compatibility between that feature and older code's
+   * use of MeshBase::clear()
    */
   virtual void clear ();
 
@@ -219,6 +224,18 @@ public:
    */
   const std::set<unsigned char> & elem_dimensions() const
   { return _elem_dims; }
+
+  /**
+   * Most of the time you should not need to call this, as the element
+   * dimensions will be set automatically by a call to cache_elem_dims(),
+   * therefore only call this if you know what you're doing.
+   *
+   * In some specialized situations, for example when adding a single
+   * Elem on all procs, it can be faster to skip calling cache_elem_dims()
+   * and simply specify the element dimensions manually, which is why this
+   * setter exists.
+   */
+  void set_elem_dimensions(const std::set<unsigned char> & elem_dims);
 
   /**
    * \returns The "spatial dimension" of the mesh.
@@ -305,9 +322,15 @@ public:
   unique_id_type next_unique_id() { return _next_unique_id; }
 
   /**
-   * Sets the next unique id to be used.
+   * Sets the next available unique id to be used.  On a
+   * ReplicatedMesh, or when adding unpartitioned objects to a
+   * DistributedMesh, this must be kept in sync on all processors.
+   *
+   * On a DistributedMesh, other unique_id values (larger than this
+   * one) may be chosen next, to allow unique_id assignment without
+   * communication.
    */
-  void set_next_unique_id(unique_id_type id) { _next_unique_id = id; }
+  virtual void set_next_unique_id(unique_id_type id) = 0;
 #endif
 
   /**
@@ -444,35 +467,6 @@ public:
   }
 
   /**
-   * \returns A constant reference (for reading only) to the
-   * \f$ i^{th} \f$ node, which should be present in this processor's
-   * subset of the mesh data structure.
-   *
-   * \deprecated Use the less confusingly-named node_ref() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual const Node & node (const dof_id_type i) const
-  {
-    libmesh_deprecated();
-    return *this->node_ptr(i);
-  }
-#endif
-
-  /**
-   * \returns A reference to the \f$ i^{th} \f$ node, which should be
-   * present in this processor's subset of the mesh data structure.
-   *
-   * \deprecated Use the less confusingly-named node_ref() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual Node & node (const dof_id_type i)
-  {
-    libmesh_deprecated();
-    return *this->node_ptr(i);
-  }
-#endif
-
-  /**
    * \returns A pointer to the \f$ i^{th} \f$ node, which should be
    * present in this processor's subset of the mesh data structure.
    */
@@ -528,35 +522,6 @@ public:
   virtual Elem * elem_ptr (const dof_id_type i) = 0;
 
   /**
-   * \returns A pointer to the \f$ i^{th} \f$ element, which should be
-   * present in this processor's subset of the mesh data structure.
-   *
-   * \deprecated Use the less confusingly-named elem_ptr() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual const Elem * elem (const dof_id_type i) const
-  {
-    libmesh_deprecated();
-    return this->elem_ptr(i);
-  }
-#endif
-
-  /**
-   * \returns A writable pointer to the \f$ i^{th} \f$ element, which
-   * should be present in this processor's subset of the mesh data
-   * structure.
-   *
-   * \deprecated Use the less confusingly-named elem_ptr() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual Elem * elem (const dof_id_type i)
-  {
-    libmesh_deprecated();
-    return this->elem_ptr(i);
-  }
-#endif
-
-  /**
    * \returns A pointer to the \f$ i^{th} \f$ element, or nullptr if no
    * such element exists in this processor's mesh data structure.
    */
@@ -567,34 +532,6 @@ public:
    * if no such element exists in this processor's mesh data structure.
    */
   virtual Elem * query_elem_ptr (const dof_id_type i) = 0;
-
-  /**
-   * \returns A pointer to the \f$ i^{th} \f$ element, or nullptr if no
-   * such element exists in this processor's mesh data structure.
-   *
-   * \deprecated Use the less confusingly-named query_elem_ptr() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual const Elem * query_elem (const dof_id_type i) const
-  {
-    libmesh_deprecated();
-    return this->query_elem_ptr(i);
-  }
-#endif
-
-  /**
-   * \returns A writable pointer to the \f$ i^{th} \f$ element, or nullptr
-   * if no such element exists in this processor's mesh data structure.
-   *
-   * \deprecated Use the less confusingly-named query_elem_ptr() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual Elem * query_elem (const dof_id_type i)
-  {
-    libmesh_deprecated();
-    return this->query_elem_ptr(i);
-  }
-#endif
 
   /**
    * Add a new \p Node at \p Point \p p to the end of the vertex array,
@@ -617,6 +554,16 @@ public:
   virtual Node * add_node (Node * n) = 0;
 
   /**
+   * Version of add_node() taking a std::unique_ptr by value. The version
+   * taking a dumb pointer will eventually be deprecated in favor of this
+   * version. This API is intended to indicate that ownership of the Node
+   * is transferred to the Mesh when this function is called, and it should
+   * play more nicely with the Node::build() API which has always returned
+   * a std::unique_ptr.
+   */
+  virtual Node * add_node (std::unique_ptr<Node> n) = 0;
+
+  /**
    * Insert \p Node \p n into the Mesh at a location consistent with
    * n->id(), allocating extra storage if necessary.  Will error
    * rather than overwriting an existing Node.  Primarily intended for
@@ -624,6 +571,16 @@ public:
    * you are doing...
    */
   virtual Node * insert_node(Node * n) = 0;
+
+  /**
+   * Version of insert_node() taking a std::unique_ptr by value. The version
+   * taking a dumb pointer will eventually be deprecated in favor of this
+   * version. This API is intended to indicate that ownership of the Node
+   * is transferred to the Mesh when this function is called, and it should
+   * play more nicely with the Node::build() API which has always returned
+   * a std::unique_ptr.
+   */
+  virtual Node * insert_node(std::unique_ptr<Node> n) = 0;
 
   /**
    * Removes the Node n from the mesh.
@@ -657,6 +614,16 @@ public:
   virtual Elem * add_elem (Elem * e) = 0;
 
   /**
+   * Version of add_elem() taking a std::unique_ptr by value. The version
+   * taking a dumb pointer will eventually be deprecated in favor of this
+   * version. This API is intended to indicate that ownership of the Elem
+   * is transferred to the Mesh when this function is called, and it should
+   * play more nicely with the Elem::build() API which has always returned
+   * a std::unique_ptr.
+   */
+  virtual Elem * add_elem (std::unique_ptr<Elem> e) = 0;
+
+  /**
    * Insert elem \p e to the element array, preserving its id
    * and replacing/deleting any existing element with the same id.
    *
@@ -664,6 +631,16 @@ public:
    * added to and/or deleted from the mesh.
    */
   virtual Elem * insert_elem (Elem * e) = 0;
+
+  /**
+   * Version of insert_elem() taking a std::unique_ptr by value. The version
+   * taking a dumb pointer will eventually be deprecated in favor of this
+   * version. This API is intended to indicate that ownership of the Elem
+   * is transferred to the Mesh when this function is called, and it should
+   * play more nicely with the Elem::build() API which has always returned
+   * a std::unique_ptr.
+   */
+  virtual Elem * insert_elem (std::unique_ptr<Elem> e) = 0;
 
   /**
    * Removes element \p e from the mesh. This method must be
@@ -685,6 +662,38 @@ public:
   virtual void renumber_elem (dof_id_type old_id, dof_id_type new_id) = 0;
 
   /**
+   * Returns the default master space to physical space mapping basis
+   * functions to be used on newly added elements.
+   */
+  ElemMappingType default_mapping_type () const {
+    return _default_mapping_type;
+  }
+
+  /**
+   * Set the default master space to physical space mapping basis
+   * functions to be used on newly added elements.
+   */
+  void set_default_mapping_type (const ElemMappingType type) {
+    _default_mapping_type = type;
+  }
+
+  /**
+   * Returns any default data value used by the master space to
+   * physical space mapping.
+   */
+  unsigned char default_mapping_data () const {
+    return _default_mapping_data;
+  }
+
+  /**
+   * Set the default master space to physical space mapping basis
+   * functions to be used on newly added elements.
+   */
+  void set_default_mapping_data (const unsigned char data) {
+    _default_mapping_data = data;
+  }
+
+  /**
    * Locate element face (edge in 2D) neighbors.  This is done with the help
    * of a \p std::map that functions like a hash table.
    * After this routine is called all the elements with a \p nullptr neighbor
@@ -698,6 +707,12 @@ public:
    */
   virtual void find_neighbors (const bool reset_remote_elements = false,
                                const bool reset_current_list    = true) = 0;
+
+  /**
+   * Removes any orphaned nodes, nodes not connected to any elements.
+   * Typically done automatically in prepare_for_use
+   */
+  void remove_orphaned_nodes ();
 
   /**
    * After partitioning a mesh it is useful to renumber the nodes and elements
@@ -728,10 +743,28 @@ public:
    * Register an integer datum (of type dof_id_type) to be added to
    * each element in the mesh.
    *
+   * If the mesh already has elements, data by default is allocated in
+   * each of them.  This may be expensive to do repeatedly; use
+   * add_elem_integers instead.
+   *
    * \returns The index number for the new datum, or for the existing
    * datum if one by the same name has already been added.
    */
-  unsigned int add_elem_integer(const std::string & name);
+  unsigned int add_elem_integer(const std::string & name,
+                                bool allocate_data = true);
+
+  /**
+   * Register integer data (of type dof_id_type) to be added to
+   * each element in the mesh, one string name for each new integer.
+   *
+   * If the mesh already has elements, data by default is allocated in
+   * each of them.
+   *
+   * \returns The index numbers for the new data, and/or for existing
+   * data if data by some of the same names has already been added.
+   */
+  std::vector<unsigned int> add_elem_integers(const std::vector<std::string> & names,
+                                              bool allocate_data = true);
 
   /*
    * \returns The index number for the named extra element integer
@@ -739,20 +772,166 @@ public:
    */
   unsigned int get_elem_integer_index(const std::string & name) const;
 
+  /*
+   * \returns Whether or not the mesh has an element integer with its name.
+   */
+  bool has_elem_integer(const std::string & name) const;
+
+  /*
+   * \returns The name for the indexed extra element integer
+   * datum, which must have already been added.
+   */
+  const std::string & get_elem_integer_name(unsigned int i) const
+  { return _elem_integer_names[i]; }
+
+  /*
+   * \returns The number of extra element integers for which space is
+   * being reserved on this mesh.
+   *
+   * If non-integer data has been associated, each datum of type T
+   * counts for sizeof(T)/sizeof(dof_id_type) times in the return
+   * value.
+   */
+  unsigned int n_elem_integers() const { return _elem_integer_names.size(); }
+
+  /**
+   * Register a datum (of type T) to be added to each element in the
+   * mesh.
+   *
+   * If the mesh already has elements, data by default is allocated in
+   * each of them.  This may be expensive to do repeatedly; use
+   * add_elem_data instead.
+   *
+   * \returns The index numbers for the new data, and/or for existing
+   * data if data by some of the same names has already been added.
+   *
+   * If type T is larger than dof_id_type, its data will end up
+   * spanning multiple index values, but will be queried with the
+   * starting index number.
+   *
+   * No type checking is done with this function!  If you add data of
+   * type T, don't try to access it with a call specifying type U.
+   */
+  template <typename T>
+  unsigned int add_elem_datum(const std::string & name,
+                              bool allocate_data = true);
+
+  /**
+   * Register data (of type T) to be added to each element in the
+   * mesh.
+   *
+   * If the mesh already has elements, data is allocated in each.
+   *
+   * \returns The starting index number for the new data, or for the
+   * existing data if one by the same name has already been added.
+   *
+   * If type T is larger than dof_id_type, each datum will end up
+   * spanning multiple index values, but will be queried with the
+   * starting index number.
+   *
+   * No type checking is done with this function!  If you add data of
+   * type T, don't try to access it with a call specifying type U.
+   */
+  template <typename T>
+  std::vector<unsigned int> add_elem_data(const std::vector<std::string> & names,
+                                          bool allocate_data = true);
+
   /**
    * Register an integer datum (of type dof_id_type) to be added to
    * each node in the mesh.
    *
+   * If the mesh already has nodes, data by default is allocated in
+   * each of them.  This may be expensive to do repeatedly; use
+   * add_node_integers instead.
+   *
    * \returns The index number for the new datum, or for the existing
    * datum if one by the same name has already been added.
    */
-  unsigned int add_node_integer(const std::string & name);
+  unsigned int add_node_integer(const std::string & name,
+                                bool allocate_data = true);
+
+  /**
+   * Register integer data (of type dof_id_type) to be added to
+   * each node in the mesh.
+   *
+   * If the mesh already has nodes, data by default is allocated in
+   * each.
+   *
+   * \returns The index numbers for the new data, and/or for existing
+   * data if data by some of the same names has already been added.
+   */
+  std::vector<unsigned int> add_node_integers(const std::vector<std::string> & names,
+                                              bool allocate_data = true);
 
   /*
    * \returns The index number for the named extra node integer
    * datum, which must have already been added.
    */
   unsigned int get_node_integer_index(const std::string & name) const;
+
+  /*
+   * \returns Whether or not the mesh has a node integer with its name.
+   */
+  bool has_node_integer(const std::string & name) const;
+
+  /*
+   * \returns The name for the indexed extra node integer
+   * datum, which must have already been added.
+   */
+  const std::string & get_node_integer_name(unsigned int i) const
+  { return _node_integer_names[i]; }
+
+  /*
+   * \returns The number of extra node integers for which space is
+   * being reserved on this mesh.
+   *
+   * If non-integer data has been associated, each datum of type T
+   * counts for sizeof(T)/sizeof(dof_id_type) times in the return
+   * value.
+   */
+  unsigned int n_node_integers() const { return _node_integer_names.size(); }
+
+  /**
+   * Register a datum (of type T) to be added to each node in the
+   * mesh.
+   *
+   * If the mesh already has nodes, data by default is allocated in
+   * each of them.  This may be expensive to do repeatedly; use
+   * add_node_data instead.
+   *
+   * \returns The starting index number for the new datum, or for the
+   * existing datum if one by the same name has already been added.
+   *
+   * If type T is larger than dof_id_type, its data will end up
+   * spanning multiple index values, but will be queried with the
+   * starting index number.
+   *
+   * No type checking is done with this function!  If you add data of
+   * type T, don't try to access it with a call specifying type U.
+   */
+  template <typename T>
+  unsigned int add_node_datum(const std::string & name,
+                              bool allocate_data = true);
+
+  /**
+   * Register data (of type T) to be added to each node in the
+   * mesh.
+   *
+   * If the mesh already has nodes, data by default is allocated in each.
+   *
+   * \returns The starting index number for the new data, or for the
+   * existing data if one by the same name has already been added.
+   *
+   * If type T is larger than dof_id_type, its data will end up
+   * spanning multiple index values, but will be queried with the
+   * starting index number.
+   *
+   * No type checking is done with this function!  If you add data of
+   * type T, don't try to access it with a call specifying type U.
+   */
+  template <typename T>
+  std::vector<unsigned int> add_node_data(const std::vector<std::string> & name,
+                                          bool allocate_data = true);
 
   /**
    * Prepare a newly ecreated (or read) mesh for use.
@@ -763,13 +942,17 @@ public:
    *  4.) call \p cache_elem_dims()
    *
    * The argument to skip renumbering is now deprecated - to prevent a
-   * mesh from being renumbered, set allow_renumbering(false).
+   * mesh from being renumbered, set allow_renumbering(false). The argument to skip
+   * finding neighbors is also deprecated. To prevent find_neighbors, set
+   * allow_find_neighbors(false)
    *
    * If this is a distributed mesh, local copies of remote elements
    * will be deleted here - to keep those elements replicated during
    * preparation, set allow_remote_element_removal(false).
    */
-  void prepare_for_use (const bool skip_renumber_nodes_and_elements=false, const bool skip_find_neighbors=false);
+  void prepare_for_use (const bool skip_renumber_nodes_and_elements, const bool skip_find_neighbors);
+  void prepare_for_use (const bool skip_renumber_nodes_and_elements);
+  void prepare_for_use ();
 
   /**
    * Call the default partitioner (currently \p metis_partition()).
@@ -811,6 +994,13 @@ public:
    */
   void allow_renumbering(bool allow) { _skip_renumber_nodes_and_elements = !allow; }
   bool allow_renumbering() const { return !_skip_renumber_nodes_and_elements; }
+
+  /**
+   * If \p false is passed then this mesh will no longer work to find element
+   * neighbors when being prepared for use
+   */
+  void allow_find_neighbors(bool allow) { _skip_find_neighbors = !allow; }
+  bool allow_find_neighbors() const { return !_skip_find_neighbors; }
 
   /**
    * If false is passed in then this mesh will no longer have remote
@@ -875,6 +1065,18 @@ public:
    */
   void add_ghosting_functor(GhostingFunctor & ghosting_functor)
   { _ghosting_functors.insert(&ghosting_functor); }
+
+  /**
+   * Adds a functor which can specify ghosting requirements for use on
+   * distributed meshes.  Multiple ghosting functors can be added; any
+   * element which is required by any functor will be ghosted.
+   *
+   * GhostingFunctor memory when using this method is managed by the
+   * shared_ptr mechanism.
+   */
+  void add_ghosting_functor(std::shared_ptr<GhostingFunctor> ghosting_functor)
+  { _shared_functors[ghosting_functor.get()] = ghosting_functor;
+    this->add_ghosting_functor(*ghosting_functor); }
 
   /**
    * Removes a functor which was previously added to the set of
@@ -1013,16 +1215,6 @@ public:
    * this function.
    */
   unsigned int recalculate_n_partitions();
-
-  /**
-   * \returns A pointer to a \p PointLocatorBase object for this
-   * mesh, constructing a master PointLocator first if necessary.
-   *
-   * \deprecated This should never be used in threaded or non-parallel_only code.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  const PointLocatorBase & point_locator () const;
-#endif
 
   /**
    * \returns A pointer to a subordinate \p PointLocatorBase object
@@ -1455,6 +1647,19 @@ protected:
   unsigned int _n_parts;
 
   /**
+   * The default mapping type (typically Lagrange) between master and
+   * physical space to assign to newly added elements.
+   */
+  ElemMappingType _default_mapping_type;
+
+  /**
+   * The default mapping data (unused with Lagrange, used for nodal
+   * weight lookup index with rational bases) to assign to newly added
+   * elements.
+   */
+  unsigned char _default_mapping_data;
+
+  /**
    * Flag indicating if the mesh has been prepared for use.
    */
   bool _is_prepared;
@@ -1508,6 +1713,11 @@ protected:
   bool _skip_renumber_nodes_and_elements;
 
   /**
+   * If this is \p true then we will skip \p find_neighbors in \p prepare_for_use
+   */
+  bool _skip_find_neighbors;
+
+  /**
    * If this is false then even on DistributedMesh remote elements
    * will not be deleted during mesh preparation.
    *
@@ -1548,6 +1758,25 @@ protected:
   std::vector<std::string> _node_integer_names;
 
   /**
+   * Size extra-integer arrays of all elements in the mesh
+   */
+  void size_elem_extra_integers();
+
+  /**
+   * Size extra-integer arrays of all nodes in the mesh
+   */
+  void size_node_extra_integers();
+
+  /**
+   * Merge extra-integer arrays from an \p other mesh.  Returns two
+   * mappings from index values in \p other to (possibly newly created)
+   * index values with the same string name in \p this mesh, the first
+   * for element integers and the second for node integers.
+   */
+  std::pair<std::vector<unsigned int>, std::vector<unsigned int>>
+    merge_extra_integer_names(const MeshBase & other);
+
+  /**
    * The default geometric GhostingFunctor, used to implement standard
    * libMesh element ghosting behavior.  We use a base class pointer
    * here to avoid dragging in more header dependencies.
@@ -1562,6 +1791,12 @@ protected:
    * MeshBase because the cost is trivial.
    */
   std::set<GhostingFunctor *> _ghosting_functors;
+
+  /**
+   * Hang on to references to any GhostingFunctor objects we were
+   * passed in shared_ptr form
+   */
+  std::map<GhostingFunctor *, std::shared_ptr<GhostingFunctor> > _shared_functors;
 
   /**
    * If nonzero, we will call PointLocatorBase::set_close_to_point_tol()
@@ -1586,6 +1821,12 @@ protected:
    * it can create and interact with \p BoundaryMesh.
    */
   friend class BoundaryInfo;
+
+  /**
+   * Make the \p MeshCommunication class a friend so that
+   * it can directly broadcast *_integer_names
+   */
+  friend class MeshCommunication;
 };
 
 
@@ -1697,6 +1938,83 @@ MeshBase::const_node_iterator : variant_filter_iterator<MeshBase::Predicate,
   const_node_iterator (const MeshBase::node_iterator & rhs) :
     variant_filter_iterator<Predicate, Node * const, Node * const &, Node * const *>(rhs) {}
 };
+
+
+template <typename T>
+inline
+unsigned int MeshBase::add_elem_datum(const std::string & name,
+                                      bool allocate_data)
+{
+  const std::size_t old_size = _elem_integer_names.size();
+
+  unsigned int start_idx = this->add_elem_integer(name, false);
+  unsigned int n_more_integers = (sizeof(T)-1)/sizeof(dof_id_type);
+  for (unsigned int i=0; i != n_more_integers; ++i)
+    this->add_elem_integer(name+"__"+std::to_string(i));
+
+  if (allocate_data && old_size != _elem_integer_names.size())
+    this->size_elem_extra_integers();
+
+  return start_idx;
+}
+
+
+template <typename T>
+inline
+std::vector<unsigned int> MeshBase::add_elem_data(const std::vector<std::string> & names,
+                                                  bool allocate_data)
+{
+  std::vector<unsigned int> returnval(names.size());
+
+  const std::size_t old_size = _elem_integer_names.size();
+
+  for (auto i : index_range(names))
+    returnval[i] = this->add_elem_datum<T>(names[i], false);
+
+  if (allocate_data && old_size != _elem_integer_names.size())
+    this->size_elem_extra_integers();
+
+  return returnval;
+}
+
+
+template <typename T>
+inline
+unsigned int MeshBase::add_node_datum(const std::string & name,
+                                      bool allocate_data)
+{
+  const std::size_t old_size = _node_integer_names.size();
+
+  unsigned int start_idx = this->add_node_integer(name, false);
+  unsigned int n_more_integers = (sizeof(T)-1)/sizeof(dof_id_type);
+  for (unsigned int i=0; i != n_more_integers; ++i)
+    this->add_node_integer(name+"__"+std::to_string(i), false);
+
+  if (allocate_data && old_size != _node_integer_names.size())
+    this->size_node_extra_integers();
+
+  return start_idx;
+}
+
+
+template <typename T>
+inline
+std::vector<unsigned int> MeshBase::add_node_data(const std::vector<std::string> & names,
+                                                  bool allocate_data)
+{
+  std::vector<unsigned int> returnval(names.size());
+
+  const std::size_t old_size = _node_integer_names.size();
+
+  for (auto i : index_range(names))
+    returnval[i] = this->add_node_datum<T>(names[i], false);
+
+  if (allocate_data && old_size != _node_integer_names.size())
+    this->size_node_extra_integers();
+
+  return returnval;
+}
+
 
 
 } // namespace libMesh

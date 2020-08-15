@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -95,7 +95,8 @@ void destroy(triangulateio & t, IO_Type);
  */
 void copy_tri_to_mesh(const triangulateio & triangle_data_input,
                       UnstructuredMesh & mesh_output,
-                      const ElemType type);
+                      const ElemType type,
+                      const triangulateio * voronoi = nullptr);
 } // namespace TriangleWrapper
 } // namespace libMesh
 

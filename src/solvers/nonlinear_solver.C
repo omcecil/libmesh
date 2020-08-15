@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -70,8 +70,7 @@ template <typename T>
 void
 NonlinearSolver<T>::attach_preconditioner(Preconditioner<T> * preconditioner)
 {
-  if (this->_is_initialized)
-    libmesh_error_msg("Preconditioner must be attached before the solver is initialized!");
+  libmesh_error_msg_if(this->_is_initialized, "Preconditioner must be attached before the solver is initialized!");
 
   _preconditioner = preconditioner;
 }

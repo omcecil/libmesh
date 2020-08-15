@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,6 +19,8 @@
 // Local includes
 #include "libmesh/fe.h"
 #include "libmesh/elem.h"
+#include "libmesh/fe_lagrange_shape_1D.h"
+
 
 // Anonymous namespace for functions shared by LAGRANGE and
 // L2_LAGRANGE implementations. Implementations appear at the bottom
@@ -53,6 +55,11 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
 namespace libMesh
 {
 
+
+LIBMESH_DEFAULT_VECTORIZED_FE(3,LAGRANGE)
+LIBMESH_DEFAULT_VECTORIZED_FE(3,L2_LAGRANGE)
+
+
 template <>
 Real FE<3,LAGRANGE>::shape(const ElemType type,
                            const Order order,
@@ -79,12 +86,13 @@ template <>
 Real FE<3,LAGRANGE>::shape(const Elem * elem,
                            const Order order,
                            const unsigned int i,
-                           const Point & p)
+                           const Point & p,
+                           const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // call the orientation-independent shape functions
-  return fe_lagrange_3D_shape(elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  return fe_lagrange_3D_shape(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
 }
 
 
@@ -93,15 +101,40 @@ template <>
 Real FE<3,L2_LAGRANGE>::shape(const Elem * elem,
                               const Order order,
                               const unsigned int i,
-                              const Point & p)
+                              const Point & p,
+                              const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // call the orientation-independent shape functions
-  return fe_lagrange_3D_shape(elem->type(), static_cast<Order>(order + elem->p_level()), i, p);
+  return fe_lagrange_3D_shape(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, p);
 }
 
 
+
+template <>
+Real FE<3,LAGRANGE>::shape(const FEType fet,
+                           const Elem * elem,
+                           const unsigned int i,
+                           const Point & p,
+                           const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_lagrange_3D_shape(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, p);
+}
+
+
+
+template <>
+Real FE<3,L2_LAGRANGE>::shape(const FEType fet,
+                              const Elem * elem,
+                              const unsigned int i,
+                              const Point & p,
+                              const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_lagrange_3D_shape(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, p);
+}
 
 template <>
 Real FE<3,LAGRANGE>::shape_deriv(const ElemType type,
@@ -132,12 +165,13 @@ Real FE<3,LAGRANGE>::shape_deriv(const Elem * elem,
                                  const Order order,
                                  const unsigned int i,
                                  const unsigned int j,
-                                 const Point & p)
+                                 const Point & p,
+                                 const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // call the orientation-independent shape function derivatives
-  return fe_lagrange_3D_shape_deriv(elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  return fe_lagrange_3D_shape_deriv(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
 
 
@@ -146,15 +180,40 @@ Real FE<3,L2_LAGRANGE>::shape_deriv(const Elem * elem,
                                     const Order order,
                                     const unsigned int i,
                                     const unsigned int j,
-                                    const Point & p)
+                                    const Point & p,
+                                    const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // call the orientation-independent shape function derivatives
-  return fe_lagrange_3D_shape_deriv(elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+  return fe_lagrange_3D_shape_deriv(elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
 
 
+template <>
+Real FE<3,LAGRANGE>::shape_deriv(const FEType fet,
+                                 const Elem * elem,
+                                 const unsigned int i,
+                                 const unsigned int j,
+                                 const Point & p,
+                                 const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_lagrange_3D_shape_deriv(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
+
+
+template <>
+Real FE<3,L2_LAGRANGE>::shape_deriv(const FEType fet,
+                                    const Elem * elem,
+                                    const unsigned int i,
+                                    const unsigned int j,
+                                    const Point & p,
+                                    const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_lagrange_3D_shape_deriv(elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -187,13 +246,14 @@ Real FE<3,LAGRANGE>::shape_second_deriv(const Elem * elem,
                                         const Order order,
                                         const unsigned int i,
                                         const unsigned int j,
-                                        const Point & p)
+                                        const Point & p,
+                                        const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // call the orientation-independent shape function derivatives
   return fe_lagrange_3D_shape_second_deriv
-    (elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+    (elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
 
 
@@ -203,14 +263,45 @@ Real FE<3,L2_LAGRANGE>::shape_second_deriv(const Elem * elem,
                                            const Order order,
                                            const unsigned int i,
                                            const unsigned int j,
-                                           const Point & p)
+                                           const Point & p,
+                                           const bool add_p_level)
 {
   libmesh_assert(elem);
 
   // call the orientation-independent shape function derivatives
   return fe_lagrange_3D_shape_second_deriv
-    (elem->type(), static_cast<Order>(order + elem->p_level()), i, j, p);
+    (elem->type(), static_cast<Order>(order + add_p_level * elem->p_level()), i, j, p);
 }
+
+
+template <>
+Real FE<3,LAGRANGE>::shape_second_deriv(const FEType fet,
+                                        const Elem * elem,
+                                        const unsigned int i,
+                                        const unsigned int j,
+                                        const Point & p,
+                                        const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_lagrange_3D_shape_second_deriv
+    (elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
+
+
+
+template <>
+Real FE<3,L2_LAGRANGE>::shape_second_deriv(const FEType fet,
+                                           const Elem * elem,
+                                           const unsigned int i,
+                                           const unsigned int j,
+                                           const Point & p,
+                                           const bool add_p_level)
+{
+  libmesh_assert(elem);
+  return fe_lagrange_3D_shape_second_deriv
+    (elem->type(), static_cast<Order>(fet.order + add_p_level * elem->p_level()), i, j, p);
+}
+
 
 #endif // LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -253,9 +344,9 @@ Real fe_lagrange_3D_shape(const ElemType type,
               static const unsigned int i1[] = {0, 0, 1, 1, 0, 0, 1, 1};
               static const unsigned int i2[] = {0, 0, 0, 0, 1, 1, 1, 1};
 
-              return (FE<1,LAGRANGE>::shape(EDGE2, FIRST, i0[i], xi)*
-                      FE<1,LAGRANGE>::shape(EDGE2, FIRST, i1[i], eta)*
-                      FE<1,LAGRANGE>::shape(EDGE2, FIRST, i2[i], zeta));
+              return (fe_lagrange_1D_linear_shape(i0[i], xi)*
+                      fe_lagrange_1D_linear_shape(i1[i], eta)*
+                      fe_lagrange_1D_linear_shape(i2[i], zeta));
             }
 
             // linear tetrahedral shape functions
@@ -300,14 +391,14 @@ Real fe_lagrange_3D_shape(const ElemType type,
               // of a triangle and an edge
 
               Point p2d(p(0),p(1));
-              Point p1d(p(2));
+              Real p1d = p(2);
 
               //                                0  1  2  3  4  5
               static const unsigned int i0[] = {0, 0, 0, 1, 1, 1};
               static const unsigned int i1[] = {0, 1, 2, 0, 1, 2};
 
               return (FE<2,LAGRANGE>::shape(TRI3,  FIRST, i1[i], p2d)*
-                      FE<1,LAGRANGE>::shape(EDGE2, FIRST, i0[i], p1d));
+                      fe_lagrange_1D_linear_shape(i0[i], p1d));
             }
 
             // linear pyramid shape functions
@@ -457,9 +548,9 @@ Real fe_lagrange_3D_shape(const ElemType type,
               static const unsigned int i1[] = {0, 0, 1, 1, 0, 0, 1, 1, 0, 2, 1, 2, 0, 0, 1, 1, 0, 2, 1, 2, 2, 0, 2, 1, 2, 2, 2};
               static const unsigned int i2[] = {0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2, 2, 1, 1, 1, 1, 0, 2, 2, 2, 2, 1, 2};
 
-              return (FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], xi)*
-                      FE<1,LAGRANGE>::shape(EDGE3, SECOND, i1[i], eta)*
-                      FE<1,LAGRANGE>::shape(EDGE3, SECOND, i2[i], zeta));
+              return (fe_lagrange_1D_quadratic_shape(i0[i], xi)*
+                      fe_lagrange_1D_quadratic_shape(i1[i], eta)*
+                      fe_lagrange_1D_quadratic_shape(i2[i], zeta));
             }
 
             // quadratic tetrahedral shape functions
@@ -580,14 +671,14 @@ Real fe_lagrange_3D_shape(const ElemType type,
               // of a triangle and an edge
 
               Point p2d(p(0),p(1));
-              Point p1d(p(2));
+              Real p1d = p(2);
 
               //                                0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17
               static const unsigned int i0[] = {0, 0, 0, 1, 1, 1, 0, 0, 0, 2, 2, 2, 1, 1, 1, 2, 2, 2};
               static const unsigned int i1[] = {0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 3, 4, 5};
 
               return (FE<2,LAGRANGE>::shape(TRI6,  SECOND, i1[i], p2d)*
-                      FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], p1d));
+                      fe_lagrange_1D_quadratic_shape(i0[i], p1d));
             }
 
             // G. Bedrosian, "Shape functions and integration formulas for
@@ -739,8 +830,9 @@ Real fe_lagrange_3D_shape(const ElemType type,
       libmesh_error_msg("ERROR: Unsupported 3D FE order!: " << order);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM != 3
+  libmesh_ignore(type, order, i, p);
+  libmesh_not_implemented();
 #endif
 }
 
@@ -782,19 +874,19 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
               switch(j)
                 {
                 case 0:
-                  return (FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i2[i], zeta));
+                  return (fe_lagrange_1D_linear_shape_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_linear_shape      (i1[i], eta)*
+                          fe_lagrange_1D_linear_shape      (i2[i], zeta));
 
                 case 1:
-                  return (FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i2[i], zeta));
+                  return (fe_lagrange_1D_linear_shape      (i0[i], xi)*
+                          fe_lagrange_1D_linear_shape_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_linear_shape      (i2[i], zeta));
 
                 case 2:
-                  return (FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_linear_shape      (i0[i], xi)*
+                          fe_lagrange_1D_linear_shape      (i1[i], eta)*
+                          fe_lagrange_1D_linear_shape_deriv(i2[i], 0, zeta));
 
                 default:
                   libmesh_error_msg("Invalid j = " << j);
@@ -907,7 +999,7 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
               // of a triangle and an edge
 
               Point p2d(p(0),p(1));
-              Point p1d(p(2));
+              Real p1d = p(2);
 
               //                                0  1  2  3  4  5
               static const unsigned int i0[] = {0, 0, 0, 1, 1, 1};
@@ -918,17 +1010,17 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
                   // d()/dxi
                 case 0:
                   return (FE<2,LAGRANGE>::shape_deriv(TRI3,  FIRST, i1[i], 0, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE2, FIRST, i0[i], p1d));
+                          fe_lagrange_1D_linear_shape(i0[i], p1d));
 
                   // d()/deta
                 case 1:
                   return (FE<2,LAGRANGE>::shape_deriv(TRI3,  FIRST, i1[i], 1, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE2, FIRST, i0[i], p1d));
+                          fe_lagrange_1D_linear_shape(i0[i], p1d));
 
                   // d()/dzeta
                 case 2:
                   return (FE<2,LAGRANGE>::shape(TRI3,  FIRST, i1[i], p2d)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i0[i], 0, p1d));
+                          fe_lagrange_1D_linear_shape_deriv(i0[i], 0, p1d));
 
                 default:
                   libmesh_error_msg("Invalid shape function derivative j = " << j);
@@ -1318,19 +1410,19 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
               switch(j)
                 {
                 case 0:
-                  return (FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i2[i], zeta));
+                  return (fe_lagrange_1D_quadratic_shape_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_quadratic_shape      (i1[i], eta)*
+                          fe_lagrange_1D_quadratic_shape      (i2[i], zeta));
 
                 case 1:
-                  return (FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i2[i], zeta));
+                  return (fe_lagrange_1D_quadratic_shape      (i0[i], xi)*
+                          fe_lagrange_1D_quadratic_shape_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_quadratic_shape      (i2[i], zeta));
 
                 case 2:
-                  return (FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_quadratic_shape      (i0[i], xi)*
+                          fe_lagrange_1D_quadratic_shape      (i1[i], eta)*
+                          fe_lagrange_1D_quadratic_shape_deriv(i2[i], 0, zeta));
 
                 default:
                   libmesh_error_msg("Invalid j = " << j);
@@ -1640,7 +1732,7 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
               // of a triangle and an edge
 
               Point p2d(p(0),p(1));
-              Point p1d(p(2));
+              Real p1d = p(2);
 
               //                                0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17
               static const unsigned int i0[] = {0, 0, 0, 1, 1, 1, 0, 0, 0, 2, 2, 2, 1, 1, 1, 2, 2, 2};
@@ -1651,17 +1743,17 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
                   // d()/dxi
                 case 0:
                   return (FE<2,LAGRANGE>::shape_deriv(TRI6,  SECOND, i1[i], 0, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], p1d));
+                          fe_lagrange_1D_quadratic_shape(i0[i], p1d));
 
                   // d()/deta
                 case 1:
                   return (FE<2,LAGRANGE>::shape_deriv(TRI6,  SECOND, i1[i], 1, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], p1d));
+                          fe_lagrange_1D_quadratic_shape(i0[i], p1d));
 
                   // d()/dzeta
                 case 2:
                   return (FE<2,LAGRANGE>::shape(TRI6,  SECOND, i1[i], p2d)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i0[i], 0, p1d));
+                          fe_lagrange_1D_quadratic_shape_deriv(i0[i], 0, p1d));
 
                 default:
                   libmesh_error_msg("Invalid shape function derivative j = " << j);
@@ -2079,8 +2171,9 @@ Real fe_lagrange_3D_shape_deriv(const ElemType type,
       libmesh_error_msg("ERROR: Unsupported 3D FE order!: " << order);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM != 3
+  libmesh_ignore(type, order, i, j, p);
+  libmesh_not_implemented();
 #endif
 }
 
@@ -2126,7 +2219,7 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
               // of a triangle and an edge
 
               Point p2d(p(0),p(1));
-              Point p1d(p(2));
+              Real p1d = p(2);
 
               //                                0  1  2  3  4  5
               static const unsigned int i0[] = {0, 0, 0, 1, 1, 1};
@@ -2145,11 +2238,11 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
 
                 case 3: // d^2()/dxidzeta
                   return (FE<2,LAGRANGE>::shape_deriv(TRI3,  FIRST, i1[i], 0, p2d)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i0[i], 0, p1d));
+                          fe_lagrange_1D_linear_shape_deriv(i0[i], 0, p1d));
 
                 case 4: // d^2()/detadzeta
                   return (FE<2,LAGRANGE>::shape_deriv(TRI3,  FIRST, i1[i], 1, p2d)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i0[i], 0, p1d));
+                          fe_lagrange_1D_linear_shape_deriv(i0[i], 0, p1d));
 
                 default:
                   libmesh_error_msg("Invalid j = " << j);
@@ -2280,19 +2373,19 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
                   }
 
                 case 1: // d^2()/dxideta
-                  return (FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i2[i], zeta));
+                  return (fe_lagrange_1D_linear_shape_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_linear_shape_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_linear_shape      (i2[i], zeta));
 
                 case 3: // d^2()/dxidzeta
-                  return (FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_linear_shape_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_linear_shape      (i1[i], eta)*
+                          fe_lagrange_1D_linear_shape_deriv(i2[i], 0, zeta));
 
                 case 4: // d^2()/detadzeta
-                  return (FE<1,LAGRANGE>::shape      (EDGE2, FIRST, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE2, FIRST, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_linear_shape      (i0[i], xi)*
+                          fe_lagrange_1D_linear_shape_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_linear_shape_deriv(i2[i], 0, zeta));
 
                 default:
                   libmesh_error_msg("Invalid j = " << j);
@@ -2602,39 +2695,39 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
                 {
                   // d^2()/dxi^2
                 case 0:
-                  return (FE<1,LAGRANGE>::shape_second_deriv(EDGE3, SECOND, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i2[i], zeta));
+                  return (fe_lagrange_1D_quadratic_shape_second_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_quadratic_shape             (i1[i], eta)*
+                          fe_lagrange_1D_quadratic_shape             (i2[i], zeta));
 
                   // d^2()/dxideta
                 case 1:
-                  return (FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i2[i], zeta));
+                  return (fe_lagrange_1D_quadratic_shape_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_quadratic_shape_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_quadratic_shape      (i2[i], zeta));
 
                   // d^2()/deta^2
                 case 2:
-                  return (FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape_second_deriv(EDGE3, SECOND, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i2[i], zeta));
+                  return (fe_lagrange_1D_quadratic_shape             (i0[i], xi)*
+                          fe_lagrange_1D_quadratic_shape_second_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_quadratic_shape             (i2[i], zeta));
 
                   // d^2()/dxidzeta
                 case 3:
-                  return (FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i0[i], 0, xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_quadratic_shape_deriv(i0[i], 0, xi)*
+                          fe_lagrange_1D_quadratic_shape      (i1[i], eta)*
+                          fe_lagrange_1D_quadratic_shape_deriv(i2[i], 0, zeta));
 
                   // d^2()/detadzeta
                 case 4:
-                  return (FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i1[i], 0, eta)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_quadratic_shape      (i0[i], xi)*
+                          fe_lagrange_1D_quadratic_shape_deriv(i1[i], 0, eta)*
+                          fe_lagrange_1D_quadratic_shape_deriv(i2[i], 0, zeta));
 
                   // d^2()/dzeta^2
                 case 5:
-                  return (FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i0[i], xi)*
-                          FE<1,LAGRANGE>::shape      (EDGE3, SECOND, i1[i], eta)*
-                          FE<1,LAGRANGE>::shape_second_deriv(EDGE3, SECOND, i2[i], 0, zeta));
+                  return (fe_lagrange_1D_quadratic_shape             (i0[i], xi)*
+                          fe_lagrange_1D_quadratic_shape             (i1[i], eta)*
+                          fe_lagrange_1D_quadratic_shape_second_deriv(i2[i], 0, zeta));
 
                 default:
                   libmesh_error_msg("Invalid j = " << j);
@@ -2936,7 +3029,7 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
               // of a triangle and an edge
 
               Point p2d(p(0),p(1));
-              Point p1d(p(2));
+              Real p1d = p(2);
 
               //                                0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17
               static const unsigned int i0[] = {0, 0, 0, 1, 1, 1, 0, 0, 0, 2, 2, 2, 1, 1, 1, 2, 2, 2};
@@ -2947,32 +3040,32 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
                   // d^2()/dxi^2
                 case 0:
                   return (FE<2,LAGRANGE>::shape_second_deriv(TRI6, SECOND, i1[i], 0, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], p1d));
+                          fe_lagrange_1D_quadratic_shape(i0[i], p1d));
 
                   // d^2()/dxideta
                 case 1:
                   return (FE<2,LAGRANGE>::shape_second_deriv(TRI6, SECOND, i1[i], 1, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], p1d));
+                          fe_lagrange_1D_quadratic_shape(i0[i], p1d));
 
                   // d^2()/deta^2
                 case 2:
                   return (FE<2,LAGRANGE>::shape_second_deriv(TRI6, SECOND, i1[i], 2, p2d)*
-                          FE<1,LAGRANGE>::shape(EDGE3, SECOND, i0[i], p1d));
+                          fe_lagrange_1D_quadratic_shape(i0[i], p1d));
 
                   // d^2()/dxidzeta
                 case 3:
                   return (FE<2,LAGRANGE>::shape_deriv(TRI6,  SECOND, i1[i], 0, p2d)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i0[i], 0, p1d));
+                          fe_lagrange_1D_quadratic_shape_deriv(i0[i], 0, p1d));
 
                   // d^2()/detadzeta
                 case 4:
                   return (FE<2,LAGRANGE>::shape_deriv(TRI6,  SECOND, i1[i], 1, p2d)*
-                          FE<1,LAGRANGE>::shape_deriv(EDGE3, SECOND, i0[i], 0, p1d));
+                          fe_lagrange_1D_quadratic_shape_deriv(i0[i], 0, p1d));
 
                   // d^2()/dzeta^2
                 case 5:
                   return (FE<2,LAGRANGE>::shape(TRI6,  SECOND, i1[i], p2d)*
-                          FE<1,LAGRANGE>::shape_second_deriv(EDGE3, SECOND, i0[i], 0, p1d));
+                          fe_lagrange_1D_quadratic_shape_second_deriv(i0[i], 0, p1d));
 
                 default:
                   libmesh_error_msg("Invalid shape function derivative j = " << j);
@@ -3796,8 +3889,9 @@ Real fe_lagrange_3D_shape_second_deriv(const ElemType type,
       libmesh_error_msg("ERROR: Unsupported 3D FE order!: " << order);
     }
 
-#else
-  return 0.;
+#else // LIBMESH_DIM != 3
+  libmesh_ignore(type, order, i, j, p);
+  libmesh_not_implemented();
 #endif
 }
 

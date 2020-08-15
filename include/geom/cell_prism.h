@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -125,8 +125,14 @@ public:
   /**
    * \returns \p Prism6::side_nodes_map[side][side_node] after doing some range checking.
    */
-  virtual unsigned int which_node_am_i(unsigned int side,
+  virtual unsigned int local_side_node(unsigned int side,
                                        unsigned int side_node) const override;
+
+  /**
+   * \returns \p Prism6::edge_nodes_map[edge][edge_node] after doing some range checking.
+   */
+  virtual unsigned int local_edge_node(unsigned int edge,
+                                       unsigned int edge_node) const override;
 
   /**
    * \returns A primitive triangle or quad for face i.
@@ -137,6 +143,8 @@ public:
    * Rebuilds a primitive triangle or quad for face i.
    */
   virtual void side_ptr (std::unique_ptr<Elem> & side, const unsigned int i) override final;
+
+  virtual std::vector<unsigned int> sides_on_edge(const unsigned int e) const override final;
 
 protected:
 

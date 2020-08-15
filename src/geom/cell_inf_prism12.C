@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -60,6 +60,16 @@ const unsigned int InfPrism12::edge_nodes_map[InfPrism12::num_edges][InfPrism12:
     {2, 5, 99}  // Side 5
   };
 
+const unsigned int InfPrism12::edge_sides_map[InfPrism12::num_edges][2] =
+  {
+    {0, 1}, // Edge 0
+    {0, 2}, // Edge 1
+    {0, 3}, // Edge 2
+    {1, 3}, // Edge 3
+    {1, 2}, // Edge 4
+    {2, 3}  // Edge 5
+  };
+
 
 // ------------------------------------------------------------
 // InfPrism12 class member functions
@@ -103,6 +113,20 @@ InfPrism12::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
+std::vector<unsigned>
+InfPrism12::nodes_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_nodes_map[e]), std::end(edge_nodes_map[e])};
+}
+
+std::vector<unsigned>
+InfPrism12::sides_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_sides_map[e]), std::end(edge_sides_map[e])};
+}
+
 bool InfPrism12::is_node_on_edge(const unsigned int n,
                                  const unsigned int e) const
 {
@@ -117,15 +141,31 @@ Order InfPrism12::default_order() const
   return SECOND;
 }
 
-unsigned int InfPrism12::which_node_am_i(unsigned int side,
+unsigned int InfPrism12::local_side_node(unsigned int side,
                                          unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
 
   // Never more than 6 nodes per side.
-  libmesh_assert_less(side_node, 6);
+  libmesh_assert_less(side_node, InfPrism12::nodes_per_side);
 
   return InfPrism12::side_nodes_map[side][side_node];
+}
+
+
+
+unsigned int InfPrism12::local_edge_node(unsigned int edge,
+                                         unsigned int edge_node) const
+{
+  libmesh_assert_less (edge, this->n_edges());
+
+  // Never more than 3 nodes per edge.
+  libmesh_assert_less(edge_node, InfPrism12::nodes_per_edge);
+
+  // Some edges only have 2 nodes.
+  libmesh_assert(edge < 3 || edge_node < 2);
+
+  return InfPrism12::edge_nodes_map[edge][edge_node];
 }
 
 
@@ -135,19 +175,26 @@ std::unique_ptr<Elem> InfPrism12::build_side_ptr (const unsigned int i,
 {
   libmesh_assert_less (i, this->n_sides());
 
+  std::unique_ptr<Elem> face;
   if (proxy)
     {
       switch (i)
         {
           // base
         case 0:
-          return libmesh_make_unique<Side<Tri6,InfPrism12>>(this,i);
+          {
+            face = libmesh_make_unique<Side<Tri6,InfPrism12>>(this,i);
+            break;
+          }
 
           // ifem sides
         case 1:
         case 2:
         case 3:
-          return libmesh_make_unique<Side<InfQuad6,InfPrism12>>(this,i);
+          {
+            face = libmesh_make_unique<Side<InfQuad6,InfPrism12>>(this,i);
+            break;
+          }
 
         default:
           libmesh_error_msg("Invalid side i = " << i);
@@ -156,9 +203,6 @@ std::unique_ptr<Elem> InfPrism12::build_side_ptr (const unsigned int i,
 
   else
     {
-      // Return value
-      std::unique_ptr<Elem> face;
-
       switch (i)
         {
         case 0: // the triangular face at z=-1, base face
@@ -179,14 +223,18 @@ std::unique_ptr<Elem> InfPrism12::build_side_ptr (const unsigned int i,
           libmesh_error_msg("Invalid side i = " << i);
         }
 
-      face->subdomain_id() = this->subdomain_id();
-
       // Set the nodes
-      for (unsigned n=0; n<face->n_nodes(); ++n)
+      for (auto n : face->node_index_range())
         face->set_node(n) = this->node_ptr(InfPrism12::side_nodes_map[i][n]);
-
-      return face;
     }
+
+#ifdef LIBMESH_ENABLE_DEPRECATED
+  if (!proxy) // proxy sides used to leave parent() set
+#endif
+    face->set_parent(nullptr);
+  face->set_interior_parent(this);
+
+  return face;
 }
 
 

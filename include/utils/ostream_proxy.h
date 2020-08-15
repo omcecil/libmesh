@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -221,6 +221,11 @@ public:
   const streamT * get() const {
     return _target;
   }
+
+  /**
+   * Returns the position of the character in the current stream.
+   */
+  std::streampos tellp() { return _target->tellp(); }
 
 private:
   /**

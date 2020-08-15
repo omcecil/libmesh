@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,11 +24,20 @@
 namespace libMesh
 {
 
-unsigned int Edge::which_node_am_i(unsigned int side,
+unsigned int Edge::local_side_node(unsigned int side,
                                    unsigned int /*side_node*/) const
 {
   libmesh_assert_less (side, this->n_sides());
   return side;
+}
+
+
+
+unsigned int Edge::local_edge_node(unsigned int /*edge*/,
+                                   unsigned int /*edge_node*/) const
+{
+  libmesh_error_msg("Calling Edge::local_edge_node() does not make sense.");
+  return 0;
 }
 
 
@@ -65,6 +74,12 @@ std::unique_ptr<Elem> Edge::build_side_ptr (const unsigned int i, bool)
   libmesh_assert_less (i, 2);
   std::unique_ptr<Elem> nodeelem = libmesh_make_unique<NodeElem>(this);
   nodeelem->set_node(0) = this->node_ptr(i);
+
+#ifndef LIBMESH_ENABLE_DEPRECATED
+  nodeelem->set_parent(nullptr);
+#endif
+  nodeelem->set_interior_parent(this);
+
   return nodeelem;
 }
 
@@ -112,6 +127,12 @@ Edge::nodes_on_side(const unsigned int s) const
 {
   libmesh_assert_less(s, 2);
   return {s};
+}
+
+std::vector<unsigned>
+Edge::nodes_on_edge(const unsigned int e) const
+{
+  return nodes_on_side(e);
 }
 
 } // namespace libMesh

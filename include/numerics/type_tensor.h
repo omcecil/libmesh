@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -30,25 +30,22 @@
 #include <tuple>
 
 #ifdef LIBMESH_HAVE_METAPHYSICL
-namespace MetaPhysicL
-{
-template <typename, typename>
-class DualNumber;
-}
+#include "metaphysicl/dualnumber_forward.h"
+
 namespace std
 {
-template <typename T, typename D>
-MetaPhysicL::DualNumber<T, D> norm(const MetaPhysicL::DualNumber<T, D> & in);
-template <typename T, typename D>
-MetaPhysicL::DualNumber<T, D> norm(MetaPhysicL::DualNumber<T, D> && in);
-template <typename T, typename D>
-MetaPhysicL::DualNumber<T, D> sqrt(const MetaPhysicL::DualNumber<T, D> & in);
-template <typename T, typename D>
-MetaPhysicL::DualNumber<T, D> sqrt(MetaPhysicL::DualNumber<T, D> && in);
-template <typename T, typename D>
-MetaPhysicL::DualNumber<T, D> abs(const MetaPhysicL::DualNumber<T, D> & in);
-template <typename T, typename D>
-MetaPhysicL::DualNumber<T, D> abs(MetaPhysicL::DualNumber<T, D> && in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> norm(const MetaPhysicL::DualNumber<T, D, asd> & in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> norm(MetaPhysicL::DualNumber<T, D, asd> && in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> sqrt(const MetaPhysicL::DualNumber<T, D, asd> & in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> sqrt(MetaPhysicL::DualNumber<T, D, asd> && in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> abs(const MetaPhysicL::DualNumber<T, D, asd> & in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> abs(MetaPhysicL::DualNumber<T, D, asd> && in);
 }
 #endif
 
@@ -377,28 +374,8 @@ public:
   /**
    * \returns The Frobenius norm of the tensor, i.e. the square-root of
    * the sum of the elements squared.
-   *
-   * \deprecated Use the norm() function instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  auto size() const -> decltype(std::norm(T()));
-#endif
-
-  /**
-   * \returns The Frobenius norm of the tensor, i.e. the square-root of
-   * the sum of the elements squared.
    */
   auto norm() const -> decltype(std::norm(T()));
-
-  /**
-   * \returns The Frobenius norm of the tensor squared, i.e. sum of the
-   * element magnitudes squared.
-   *
-   * \deprecated Use the norm_sq() function instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  auto size_sq() const -> decltype(std::norm(T()));
-#endif
 
   /**
    * \returns The Frobenius norm of the tensor squared, i.e. sum of the
@@ -583,6 +560,7 @@ TypeTensor<T>::TypeTensor (const T & xx,
   libmesh_assert_equal_to (xy, 0);
   libmesh_assert_equal_to (yx, 0);
   libmesh_assert_equal_to (yy, 0);
+  libmesh_ignore(xy, yx, yy);
 #endif
 
 #if LIBMESH_DIM == 3
@@ -600,6 +578,7 @@ TypeTensor<T>::TypeTensor (const T & xx,
   libmesh_assert_equal_to (zx, 0);
   libmesh_assert_equal_to (zy, 0);
   libmesh_assert_equal_to (zz, 0);
+  libmesh_ignore(xz, yz, zx, zy, zz);
 #endif
 }
 
@@ -625,6 +604,11 @@ TypeTensor<T>::TypeTensor (const Scalar & xx,
   _coords[1] = xy;
   _coords[2] = yx;
   _coords[3] = yy;
+#elif LIBMESH_DIM == 1
+  libmesh_assert_equal_to (xy, 0);
+  libmesh_assert_equal_to (yx, 0);
+  libmesh_assert_equal_to (yy, 0);
+  libmesh_ignore(xy, yx, yy);
 #endif
 
 #if LIBMESH_DIM == 3
@@ -636,6 +620,13 @@ TypeTensor<T>::TypeTensor (const Scalar & xx,
   _coords[6] = zx;
   _coords[7] = zy;
   _coords[8] = zz;
+#else
+  libmesh_assert_equal_to (xz, 0);
+  libmesh_assert_equal_to (yz, 0);
+  libmesh_assert_equal_to (zx, 0);
+  libmesh_assert_equal_to (zy, 0);
+  libmesh_assert_equal_to (zz, 0);
+  libmesh_ignore(xz, yz, zx, zy, zz);
 #endif
 }
 
@@ -666,10 +657,14 @@ TypeTensor<T>::TypeTensor(const TypeVector<T2> & vx,
                           const TypeVector<T2> & vy)
 {
   libmesh_assert_equal_to (LIBMESH_DIM, 2);
+#if LIBMESH_DIM > 2
   _coords[0] = vx(0);
   _coords[1] = vx(1);
   _coords[2] = vy(0);
   _coords[3] = vy(1);
+#else
+  libmesh_ignore(vx, vy);
+#endif
 }
 
 template <typename T>
@@ -679,6 +674,7 @@ TypeTensor<T>::TypeTensor(const TypeVector<T2> & vx,
                           const TypeVector<T2> & vz)
 {
   libmesh_assert_equal_to (LIBMESH_DIM, 3);
+#if LIBMESH_DIM > 2
   _coords[0] = vx(0);
   _coords[1] = vx(1);
   _coords[2] = vx(2);
@@ -688,6 +684,9 @@ TypeTensor<T>::TypeTensor(const TypeVector<T2> & vx,
   _coords[6] = vz(0);
   _coords[7] = vz(1);
   _coords[8] = vz(2);
+#else
+  libmesh_ignore(vx, vy, vz);
+#endif
 }
 
 
@@ -738,8 +737,8 @@ T & TypeTensor<T>::operator () (const unsigned int i,
 {
 #if LIBMESH_DIM < 3
 
-  if (i >= LIBMESH_DIM || j >= LIBMESH_DIM)
-    libmesh_error_msg("ERROR:  You are assigning to a tensor component that is out of range for the compiled LIBMESH_DIM!");
+  libmesh_error_msg_if(i >= LIBMESH_DIM || j >= LIBMESH_DIM,
+                       "ERROR:  You are assigning to a tensor component that is out of range for the compiled LIBMESH_DIM!");
 
 #endif
 
@@ -1271,18 +1270,6 @@ TypeTensor<T>::contract (const TypeTensor<T2> & t) const
 
 
 
-#ifdef LIBMESH_ENABLE_DEPRECATED
-template <typename T>
-inline
-auto TypeTensor<T>::size() const -> decltype(std::norm(T()))
-{
-  libmesh_deprecated();
-  return this->norm();
-}
-#endif
-
-
-
 template <typename T>
 inline
 auto TypeTensor<T>::norm() const -> decltype(std::norm(T()))
@@ -1348,18 +1335,6 @@ void TypeTensor<T>::zero()
   for (unsigned int i=0; i<LIBMESH_DIM*LIBMESH_DIM; i++)
     _coords[i] = 0.;
 }
-
-
-
-#ifdef LIBMESH_ENABLE_DEPRECATED
-template <typename T>
-inline
-auto TypeTensor<T>::size_sq () const -> decltype(std::norm(T()))
-{
-  libmesh_deprecated();
-  return this->norm_sq();
-}
-#endif
 
 
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -78,6 +78,12 @@ public:
   virtual bool is_edge_on_side(const unsigned int e,
                                const unsigned int s) const override final
   { return (e == s); }
+
+  /**
+   * sides_on_edge is trivial in 2D.
+   */
+  virtual std::vector<unsigned int> sides_on_edge(const unsigned int e) const override final
+  { return {e}; }
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
 

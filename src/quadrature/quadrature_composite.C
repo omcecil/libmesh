@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -70,6 +70,10 @@ void QComposite<QSubCell>::init (const Elem & elem,
 {
   libmesh_assert_equal_to (vertex_distance_func.size(), elem.n_vertices());
   libmesh_assert_equal_to (_dim, elem.dim());
+
+  // We already initialized a Lagrange map; we're not supporting
+  // others yet
+  libmesh_assert_equal_to (elem.mapping_type(), LAGRANGE_MAP);
 
   // if we are not cut, revert to simple base class init() method.
   if (!_elem_cutter.is_cut (elem, vertex_distance_func))
@@ -144,7 +148,7 @@ void QComposite<QSubCell>::add_subelem_values (const std::vector<Elem const *> &
         {
           libMesh::err << "ERROR: found a bad cut cell!\n";
 
-          for (unsigned int n=0; n<elem->n_nodes(); n++)
+          for (auto n : elem->node_index_range())
             libMesh::err << elem->point(n) << std::endl;
 
           libmesh_error_msg("Tetgen may have created a 0-volume cell during Cutcell integration.");

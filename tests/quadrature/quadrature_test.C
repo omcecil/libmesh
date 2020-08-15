@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/quadrature.h>
 #include <libmesh/string_to_enum.h>
 #include <libmesh/utility.h>
@@ -12,15 +6,8 @@
 #include <iomanip>
 #include <numeric> // std::iota
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
+#include "libmesh_cppunit.h"
+
 
 using namespace libMesh;
 
@@ -77,6 +64,11 @@ public:
   TEST_ONE_ORDER(QSIMPSON, THIRD,  3);
   TEST_ONE_ORDER(QTRAP, FIRST, 1);
   TEST_ALL_ORDERS(QGRID, 1);
+
+  // In general, QNodal rules (e.g. QTRAP) are only exact for linears.
+  // QSIMPSON is a special case of a nodal quadrature which obtains
+  // higher accuracy.
+  TEST_ONE_ORDER(QNODAL, /*ignored*/FIRST, /*max order=*/1);
 
   // The TEST_ALL_ORDERS macro only goes up to 9th-order
   TEST_ALL_ORDERS(QGAUSS_LOBATTO, 9);
@@ -199,8 +191,13 @@ public:
     // There are 3 different families of quadrature rules for tetrahedra
     QuadratureType qtype[3] = {QCONICAL, QGRUNDMANN_MOLLER, QGAUSS};
 
+    int end_order = 7;
+    // Our higher order tet rules were only computed to double precision
+    if (quadrature_tolerance < 1e-16)
+      end_order = 2;
+
     for (int qt=0; qt<3; ++qt)
-      for (int order=0; order<7; ++order)
+      for (int order=0; order<end_order; ++order)
         {
           std::unique_ptr<QBase> qrule = QBase::build(qtype[qt],
                                                       /*dim=*/3,
@@ -215,7 +212,7 @@ public:
             sumw += qrule->w(qp);
 
           // Make sure that the weights add up to the value we expect
-          LIBMESH_ASSERT_REALS_EQUAL(1./6., sumw, quadrature_tolerance);
+          LIBMESH_ASSERT_REALS_EQUAL(1/Real(6), sumw, quadrature_tolerance);
 
           // Test integrating different polynomial powers
           for (int x_power=0; x_power<=order; ++x_power)
@@ -563,7 +560,7 @@ public:
         for (unsigned int qp=0; qp<qrule->n_points(); qp++)
           sum += qrule->w(qp);
 
-        LIBMESH_ASSERT_REALS_EQUAL( 1./6., sum , quadrature_tolerance );
+        LIBMESH_ASSERT_REALS_EQUAL( 1/Real(6), sum , quadrature_tolerance );
 
         qrule->init (PRISM15);
 

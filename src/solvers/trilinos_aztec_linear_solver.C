@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,7 +24,7 @@
 
 // Local Includes
 #include "libmesh/libmesh_logging.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/trilinos_aztec_linear_solver.h"
 #include "libmesh/trilinos_epetra_matrix.h"
 #include "libmesh/trilinos_epetra_vector.h"

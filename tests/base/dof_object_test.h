@@ -1,8 +1,7 @@
 #ifndef __dof_object_test_h__
 #define __dof_object_test_h__
 
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
+#include "libmesh_cppunit.h"
 
 #define DOFOBJECTTEST                           \
   CPPUNIT_TEST( testSetId );                    \
@@ -13,7 +12,8 @@
   CPPUNIT_TEST( testInvalidateProcId );         \
   CPPUNIT_TEST( testSetNSystems );              \
   CPPUNIT_TEST( testSetNVariableGroups );       \
-  CPPUNIT_TEST( testAddExtraInts );             \
+  CPPUNIT_TEST( testAddExtraData );             \
+  CPPUNIT_TEST( testAddSystemExtraInts );       \
   CPPUNIT_TEST( testSetNSystemsExtraInts );     \
   CPPUNIT_TEST( testSetNVariableGroupsExtraInts ); \
   CPPUNIT_TEST( testManualDofCalculation );     \
@@ -35,7 +35,7 @@ public:
 
   void testSetId()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_id(1);
     CPPUNIT_ASSERT_EQUAL( static_cast<dof_id_type>(1) , aobject.id() );
@@ -43,7 +43,7 @@ public:
 
   void testValidId()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_id(1);
     CPPUNIT_ASSERT( aobject.valid_id() );
@@ -54,7 +54,7 @@ public:
 
   void testInvalidateId()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_id(1);
     aobject.invalidate_id();
@@ -64,7 +64,7 @@ public:
 
   void testSetProcId()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.processor_id(libMesh::global_processor_id());
     CPPUNIT_ASSERT_EQUAL( (processor_id_type)libMesh::global_processor_id() , aobject.processor_id() );
@@ -72,7 +72,7 @@ public:
 
   void testValidProcId()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.processor_id(libMesh::global_processor_id());
     CPPUNIT_ASSERT(aobject.valid_processor_id());
@@ -83,7 +83,7 @@ public:
 
   void testInvalidateProcId()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.processor_id(libMesh::global_processor_id());
     aobject.invalidate_processor_id();
@@ -93,7 +93,7 @@ public:
 
   void testSetNSystems()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_n_systems (10);
 
@@ -102,7 +102,7 @@ public:
 
   void testSetNVariableGroups()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_n_systems (2);
 
@@ -125,9 +125,9 @@ public:
       }
   }
 
-  void testAddExtraInts()
+  void testAddExtraData()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.add_extra_integers (9);
 
@@ -135,11 +135,24 @@ public:
 
     CPPUNIT_ASSERT_EQUAL( (unsigned int) 9, aobject.n_extra_integers() );
 
+    unsigned int ints_per_Real = (sizeof(Real)-1)/sizeof(dof_id_type) + 1;
+
+    for (unsigned int i=0; i != 9; ++i)
+      CPPUNIT_ASSERT_EQUAL( DofObject::invalid_id, aobject.get_extra_integer(i) );
+
     for (unsigned int i=0; i != 9; ++i)
       {
-        CPPUNIT_ASSERT_EQUAL( DofObject::invalid_id, aobject.get_extra_integer(i) );
-        aobject.set_extra_integer(i, i);
-        CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+        // Try out a char at i=1
+        if (i == 1)
+          aobject.set_extra_datum<char>(i, '1');
+        // Try out an extra Real at i=2 if we'll have room
+        if (i == 2 && ints_per_Real <= 4)
+          aobject.set_extra_datum<Real>(i, pi);
+        if (i < 1 || i >= (2 + ints_per_Real))
+          {
+            aobject.set_extra_integer(i, i);
+            CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+          }
       }
 
     aobject.add_extra_integers (6);
@@ -149,12 +162,87 @@ public:
     CPPUNIT_ASSERT_EQUAL( (unsigned int) 6, aobject.n_extra_integers() );
 
     for (unsigned int i=0; i != 6; ++i)
+      {
+        if (i == 1)
+          CPPUNIT_ASSERT_EQUAL(aobject.get_extra_datum<char>(i), '1');
+        if (i == 2 && ints_per_Real <= 4)
+          CPPUNIT_ASSERT_EQUAL(aobject.get_extra_datum<Real>(i), pi);
+        if (i < 1 || i >= (2 + ints_per_Real))
+          CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+      }
+  }
+
+  void testAddSystemExtraInts()
+  {
+    DofObject & aobject(*instance);
+
+    aobject.add_extra_integers (1);
+
+    aobject.add_system();
+
+    CPPUNIT_ASSERT(aobject.has_extra_integers());
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 1, aobject.n_extra_integers() );
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 1, aobject.n_systems() );
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 0, aobject.n_vars(0) );
+
+    aobject.add_extra_integers (4);
+
+    aobject.add_system();
+
+    CPPUNIT_ASSERT(aobject.has_extra_integers());
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 4, aobject.n_extra_integers() );
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 2, aobject.n_systems() );
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 0, aobject.n_vars(0) );
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 0, aobject.n_vars(1) );
+
+    for (unsigned int i=0; i != 4; ++i)
+      {
+        CPPUNIT_ASSERT_EQUAL( DofObject::invalid_id, aobject.get_extra_integer(i) );
+        aobject.set_extra_integer(i, i);
+        CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+      }
+
+    aobject.add_extra_integers (7);
+
+    for (unsigned int i=0; i != 4; ++i)
+      CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+
+    for (unsigned int i=4; i != 7; ++i)
+      CPPUNIT_ASSERT_EQUAL( DofObject::invalid_id, aobject.get_extra_integer(i) );
+
+    aobject.add_system();
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 7, aobject.n_extra_integers() );
+
+    for (unsigned int i=0; i != 4; ++i)
+      CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+
+    for (unsigned int i=4; i != 7; ++i)
+      {
+        CPPUNIT_ASSERT_EQUAL( DofObject::invalid_id, aobject.get_extra_integer(i) );
+        aobject.set_extra_integer(i, i);
+        CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
+      }
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 3, aobject.n_systems() );
+
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 0, aobject.n_vars(0) );
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 0, aobject.n_vars(1) );
+    CPPUNIT_ASSERT_EQUAL( (unsigned int) 0, aobject.n_vars(2) );
+
+    for (unsigned int i=0; i != 7; ++i)
       CPPUNIT_ASSERT_EQUAL( dof_id_type(i), aobject.get_extra_integer(i) );
   }
 
   void testSetNSystemsExtraInts()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.add_extra_integers (5);
 
@@ -203,7 +291,7 @@ public:
 
   void testSetNVariableGroupsExtraInts()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_n_systems (2);
 
@@ -243,7 +331,7 @@ public:
 
   void testManualDofCalculation()
   {
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
 
     aobject.set_n_systems (2);
 
@@ -287,7 +375,7 @@ public:
   {
     // For more information on this bug, see the following email thread:
     // https://sourceforge.net/p/libmesh/mailman/libmesh-users/thread/50C8EE7C.8090405@gmail.com/
-    DofObject aobject(*instance);
+    DofObject & aobject(*instance);
     dof_id_type buf0[] = {2, 8, 257, 0, 257, 96, 257, 192, 257, 0};
     aobject.set_buffer(std::vector<dof_id_type>(buf0, buf0+10));
 

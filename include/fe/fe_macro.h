@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -48,7 +48,8 @@
   template unsigned int FE<2,SUBDIVISION>::n_quadrature_points () const; \
   template void         FE<2,SUBDIVISION>::reinit(const Elem *,const std::vector<Point> * const,const std::vector<Real> * const); \
   template void         FE<2,SUBDIVISION>::init_base_shape_functions(const std::vector<Point> &, const Elem *); \
-  template void         FE<2,SUBDIVISION>::init_shape_functions(const std::vector<Point> &, const Elem *)
+  template void         FE<2,SUBDIVISION>::init_shape_functions(const std::vector<Point> &, const Elem *); \
+  template void         FE<2,SUBDIVISION>::init_dual_shape_functions(unsigned int, unsigned int)
 
 #else // LIBMESH_ENABLE_INFINITE_ELEMENTS
 
@@ -58,7 +59,8 @@
   template void         FE<2,SUBDIVISION>::attach_quadrature_rule (QBase *); \
   template unsigned int FE<2,SUBDIVISION>::n_quadrature_points () const; \
   template void         FE<2,SUBDIVISION>::reinit(const Elem *,const std::vector<Point> * const,const std::vector<Real> * const); \
-  template void         FE<2,SUBDIVISION>::init_shape_functions(const std::vector<Point> &, const Elem *)
+  template void         FE<2,SUBDIVISION>::init_shape_functions(const std::vector<Point> &, const Elem *); \
+  template void         FE<2,SUBDIVISION>::init_dual_shape_functions(unsigned int, unsigned int)
 
 #endif // LIBMESH_ENABLE_INFINITE_ELEMENTS
 
@@ -75,20 +77,8 @@
   template class FE< (_dim), MONOMIAL>;                                 \
   template class FE< (_dim), SCALAR>;                                   \
   template class FE< (_dim), XYZ>;                                      \
-  template class FE< (_dim), NEDELEC_ONE>
-
-#define INSTANTIATE_ALL_MAPS(_dim)              \
-  INSTANTIATE_MAPS(_dim,CLOUGH);                \
-  INSTANTIATE_MAPS(_dim,HERMITE);               \
-  INSTANTIATE_MAPS(_dim,HIERARCHIC);            \
-  INSTANTIATE_MAPS(_dim,L2_HIERARCHIC);         \
-  INSTANTIATE_MAPS(_dim,LAGRANGE);              \
-  INSTANTIATE_MAPS(_dim,LAGRANGE_VEC);          \
-  INSTANTIATE_MAPS(_dim,L2_LAGRANGE);           \
-  INSTANTIATE_MAPS(_dim,MONOMIAL);              \
-  INSTANTIATE_MAPS(_dim,SCALAR);                \
-  INSTANTIATE_MAPS(_dim,XYZ);                   \
-  INSTANTIATE_MAPS(_dim,NEDELEC_ONE)
+  template class FE< (_dim), NEDELEC_ONE>;                              \
+  template class FE< (_dim), MONOMIAL_VEC>
 
 #else //LIBMESH_ENABLE_HIGHER_ORDER_SHAPES
 
@@ -104,22 +94,9 @@
   template class FE< (_dim), BERNSTEIN>;                                \
   template class FE< (_dim), SZABAB>;                                   \
   template class FE< (_dim), XYZ>;                                      \
-  template class FE< (_dim), NEDELEC_ONE>
-
-#define INSTANTIATE_ALL_MAPS(_dim)              \
-  INSTANTIATE_MAPS(_dim,CLOUGH);                \
-  INSTANTIATE_MAPS(_dim,HERMITE);               \
-  INSTANTIATE_MAPS(_dim,HIERARCHIC);            \
-  INSTANTIATE_MAPS(_dim,L2_HIERARCHIC);         \
-  INSTANTIATE_MAPS(_dim,LAGRANGE);              \
-  INSTANTIATE_MAPS(_dim,LAGRANGE_VEC);          \
-  INSTANTIATE_MAPS(_dim,L2_LAGRANGE);           \
-  INSTANTIATE_MAPS(_dim,MONOMIAL);              \
-  INSTANTIATE_MAPS(_dim,SCALAR);                \
-  INSTANTIATE_MAPS(_dim,BERNSTEIN);             \
-  INSTANTIATE_MAPS(_dim,SZABAB);                \
-  INSTANTIATE_MAPS(_dim,XYZ);                   \
-  INSTANTIATE_MAPS(_dim,NEDELEC_ONE)
+  template class FE< (_dim), RATIONAL_BERNSTEIN>;                       \
+  template class FE< (_dim), NEDELEC_ONE>;                              \
+  template class FE< (_dim), MONOMIAL_VEC>
 
 #endif //LIBMESH_ENABLE_HIGHER_ORDER_SHAPES
 

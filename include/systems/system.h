@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,7 +21,6 @@
 #define LIBMESH_SYSTEM_H
 
 // Local Includes
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/elem_range.h"
 #include "libmesh/enum_subset_solve_mode.h" // SUBSET_ZERO
 #include "libmesh/enum_parallel_type.h" // PARALLEL
@@ -47,6 +46,15 @@ enum FEMNormType : int;
 #include <set>
 #include <vector>
 #include <memory>
+
+// This define may be useful in --disable-optional builds when it is
+// possible that libmesh will not have any solvers available.
+#if defined(LIBMESH_HAVE_PETSC) || \
+  defined(LIBMESH_HAVE_EIGEN)   || \
+  defined(LIBMESH_HAVE_LASPACK) || \
+  defined(LIBMESH_TRILINOS_HAVE_AZTECOO)
+#define LIBMESH_HAVE_SOLVER 1
+#endif
 
 namespace libMesh
 {
@@ -1085,7 +1093,9 @@ public:
 
   /**
    * Adds the variable \p var to the list of variables
-   * for this system.
+   * for this system. If \p active_subdomains is either \p nullptr
+   * (the default) or points to an empty set, then it will be assumed that
+   * \p var has no subdomain restrictions
    *
    * \returns The index number for the new variable.
    */
@@ -1096,7 +1106,9 @@ public:
   /**
    * Adds the variable \p var to the list of variables
    * for this system.  Same as before, but assumes \p LAGRANGE
-   * as default value for \p FEType.family.
+   * as default value for \p FEType.family. If \p active_subdomains is either
+   * \p nullptr (the default) or points to an empty set, then it will be assumed
+   * that \p var has no subdomain restrictions
    */
   unsigned int add_variable (const std::string & var,
                              const Order order = FIRST,
@@ -1105,7 +1117,9 @@ public:
 
   /**
    * Adds the variable \p var to the list of variables
-   * for this system.
+   * for this system. If \p active_subdomains is either \p nullptr
+   * (the default) or points to an empty set, then it will be assumed that
+   * \p var has no subdomain restrictions
    *
    * \returns The index number for the new variable.
    */
@@ -1116,7 +1130,9 @@ public:
   /**
    * Adds the variable \p var to the list of variables
    * for this system.  Same as before, but assumes \p LAGRANGE
-   * as default value for \p FEType.family.
+   * as default value for \p FEType.family. If \p active_subdomains is either
+   * \p nullptr (the default) or points to an empty set, then it will be assumed that
+   * \p var has no subdomain restrictions
    */
   unsigned int add_variables (const std::vector<std::string> & vars,
                               const Order order = FIRST,
@@ -1687,6 +1703,18 @@ public:
    */
   void zero_variable (NumericVector<Number> & v, unsigned int var_num) const;
 
+  /**
+   * Setter and getter functions for project_with_constraints boolean
+   */
+  bool get_project_with_constraints()
+  {
+    return project_with_constraints;
+  }
+
+  void set_project_with_constraints(bool _project_with_constraints)
+  {
+    project_with_constraints = _project_with_constraints;
+  }
 
   /**
    * \returns A writable reference to a boolean that determines if this system
@@ -2041,6 +2069,11 @@ private:
    * \p true, then \p EquationSystems::write will ignore this system.
    */
   bool _hide_output;
+
+  /**
+   * Do we want to apply constraints while projecting vectors ?
+   */
+  bool project_with_constraints;
 };
 
 

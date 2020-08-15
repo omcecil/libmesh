@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,11 +21,11 @@
 #include "libmesh/libmesh_config.h"
 #ifdef LIBMESH_HAVE_TETGEN
 
-// libMesh includes
-#include "libmesh/auto_ptr.h" // deprecated
-
 // TetGen include file
+// tetgen.h triggers -Werror=switch-default
+#include "libmesh/ignore_warnings.h"
 #include "tetgen.h"  // Defines REAL and other Tetgen types
+#include "libmesh/restore_warnings.h"
 
 // C++ includes
 #include <string>

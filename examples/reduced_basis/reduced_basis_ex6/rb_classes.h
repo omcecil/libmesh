@@ -36,6 +36,7 @@ using libMesh::RBConstruction;
 using libMesh::RBEvaluation;
 using libMesh::Real;
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
 
 // A simple subclass of RBEvaluation, which just needs to specify
 // (a lower bound for) the coercivity constant for this problem.
@@ -78,7 +79,6 @@ public:
                         const std::string & name_in,
                         const unsigned int number_in)
     : Parent(es, name_in, number_in),
-      ex6_assembly_expansion(*this),
       dirichlet_bc(std::unique_ptr<DirichletBoundary>())
   {}
 
@@ -141,6 +141,12 @@ public:
     elem_fe->get_phi();
     elem_fe->get_dphi();
     elem_fe->get_xyz();
+
+    FEBase * side_fe = nullptr;
+    c.get_side_fe(u_var, side_fe);
+    side_fe->get_JxW();
+    side_fe->get_phi();
+    side_fe->get_xyz();
   }
 
   /**
@@ -165,5 +171,7 @@ public:
    */
   std::unique_ptr<DirichletBoundary> dirichlet_bc;
 };
+
+#endif // LIBMESH_ENABLE_DIRICHLET
 
 #endif

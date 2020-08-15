@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -68,6 +68,7 @@
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
 
+#ifdef LIBMESH_ENABLE_PERIODIC
 // Here we define the azimuthal periodic boundary condition class.
 // This class assumes that (u,v,w) are variables 0, 1, and 2 in
 // the System, but this could be made more general if needed.
@@ -193,6 +194,7 @@ private:
   Point _axis;
   Real _theta;
 };
+#endif // LIBMESH_ENABLE_PERIODIC
 
 class LinearElasticity : public System::Assembly
 {
@@ -354,12 +356,24 @@ int main (int argc, char ** argv)
   libmesh_example_requires(false, "--enable-exodus");
 #endif
 
+  // We use Dirichlet and Periodic boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
+#ifndef LIBMESH_ENABLE_PERIODIC
+  libmesh_example_requires(false, "--enable-periodic");
+#endif
+
   // Initialize the cantilever mesh
   const unsigned int dim = 3;
 
   // Make sure libMesh was compiled for 3D
   libmesh_example_requires(dim == LIBMESH_DIM, "3D support");
 
+  // Make sure libMesh has normal boundary id sizes
+  libmesh_example_requires(sizeof(boundary_id_type) > 1, "boundary_id_size > 1");
+
+#if LIBMESH_BOUNDARY_ID_BYTES > 1
   // Create a 3D mesh distributed across the default MPI communicator.
   Mesh mesh(init.comm());
 
@@ -371,6 +385,7 @@ int main (int argc, char ** argv)
   LinearImplicitSystem & system =
     equation_systems.add_system<LinearImplicitSystem> ("Elasticity");
 
+#ifdef LIBMESH_ENABLE_PERIODIC
   // Add two azimuthal periodic boundaries on two adjacent domains.
   // We do this to show that the periodic boundary condition that
   // we impose leads to a continuous solution across adjacent domains.
@@ -399,6 +414,7 @@ int main (int argc, char ** argv)
     periodic_bc.pairedboundary = 402;
     system.get_dof_map().add_periodic_boundary(periodic_bc);
   }
+#endif // LIBMESH_ENABLE_PERIODIC
 
   mesh.read("systems_of_equations_ex9.exo");
 
@@ -421,8 +437,11 @@ int main (int argc, char ** argv)
   std::set<boundary_id_type> clamped_boundary_ids;
   clamped_boundary_ids.insert(300);
   clamped_boundary_ids.insert(400);
+
+#ifdef LIBMESH_ENABLE_DIRICHLET
   DirichletBoundary clamped_bc(clamped_boundary_ids, variables, zf);
   system.get_dof_map().add_dirichlet_boundary(clamped_bc);
+#endif
 
   // Initialize the data structures for the equation system.
   equation_systems.init();
@@ -440,6 +459,7 @@ int main (int argc, char ** argv)
                                             equation_systems);
 
 #endif // #ifdef LIBMESH_HAVE_EXODUS_API
+#endif // #if LIBMESH_BOUNDARY_ID_BYTES > 1
 
   // All done.
   return 0;

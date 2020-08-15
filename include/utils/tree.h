@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -49,7 +49,7 @@ public:
    */
   Tree (const MeshBase & m,
         unsigned int target_bin_size,
-        Trees::BuildType bt=Trees::NODES);
+        Trees::BuildType bt = Trees::NODES);
 
   /**
    * Copy-constructor.  Not currently implemented.
@@ -59,7 +59,7 @@ public:
   /**
    * Destructor.
    */
-  ~Tree() {}
+  ~Tree() = default;
 
   /**
    * Prints the nodes.
@@ -85,6 +85,17 @@ public:
   virtual const Elem * find_element(const Point & p,
                                     const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
                                     Real relative_tol = TOLERANCE) const override;
+
+  /**
+   * Fills \p candidate_elements with any elements containing the
+   * specified point \p p,
+   * optionally restricted to a set of allowed subdomains,
+   * optionally using a non-zero relative tolerance for searches.
+   */
+  virtual void find_elements(const Point & p,
+                             std::set<const Elem *> & candidate_elements,
+                             const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
+                             Real relative_tol = TOLERANCE) const override;
 
   /**
    * \returns A pointer to the element containing point p,

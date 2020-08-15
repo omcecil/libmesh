@@ -2,49 +2,8 @@
 # -------------------------------------------------------------
 AC_DEFUN([LIBMESH_SET_COMPILERS],
 [
-  # --------------------------------------------------------------
-  # look for a decent C++ compiler or honor --with-cxx=...
-  CXX_TRY_LIST="g++ icpc icc pgCC c++"
-
-     # -------------------------------------------------------------------
-     # MPI -- enabled by default.  Check for it now so we can be somewhat
-     #                             smart about which compilers to look for
-     # -------------------------------------------------------------------
-     AC_ARG_ENABLE(mpi,
-                   AS_HELP_STRING([--disable-mpi],
-                                  [build without MPI message passing support]),
-                   [AS_CASE("${enableval}",
-                            [yes], [enablempi=yes],
-                            [no],  [enablempi=no],
-                            [AC_MSG_ERROR(bad value ${enableval} for --enable-mpi)])],
-                   [enablempi=yes])
-
-  AS_IF([test "$enablempi" != no],
-        [CXX_TRY_LIST="mpicxx mpiCC mpicc $CXX_TRY_LIST"],
-        AC_MSG_RESULT([>>> Disabling MPI per user request <<<]))
-
-  AC_ARG_WITH([cxx],
-              AS_HELP_STRING([--with-cxx=CXX], [C++ compiler to use]),
-              [CXX="$withval"],
-              [])
-
-  # --------------------------------------------------------------
-  # Determines a C++ compiler to use.  First checks if the variable CXX is
-  # already set.  If not, then searches under g++, c++, and other names.
-  # --------------------------------------------------------------
-  AC_PROG_CXX([$CXX_TRY_LIST])
-  # --------------------------------------------------------------
-
-
-
-  # --------------------------------------------------------------
-  # See below for the definition of this function.  It can
-  # figure out which version of a particular compiler, e.g. GCC 4.0,
-  # you are using.
-  # --------------------------------------------------------------
-  DETERMINE_CXX_BRAND
-
-
+  AC_REQUIRE([ACSM_COMPILER_CONTROL_ARGS])
+  AC_REQUIRE([ACSM_SCRAPE_PETSC_CONFIGURE])
 
   # --------------------------------------------------------------
   # look for a decent C compiler or honor --with-cc=...
@@ -132,6 +91,64 @@ AC_DEFUN([LIBMESH_SET_COMPILERS],
           FC=no
           F77=no
         ])
+
+# --------------------------------------------------------------
+  # look for a decent C++ compiler or honor --with-cxx=...
+  CXX_TRY_LIST="g++ icpc icc pgCC c++"
+
+  AC_ARG_WITH([cxx],
+              AS_HELP_STRING([--with-cxx=CXX], [C++ compiler to use]),
+              [CXX="$withval"],
+              [])
+
+  dnl If we already have CXX either from --with-cxx or from the environment, then there's no sense going
+  dnl any further. Moreover if we are not enabling mpi then we don't have to query for mpi compilers
+  dnl or for a compiler from PETSc
+  AS_IF([test -z "$CXX" && test "$enablempi" != no],
+        [
+          dnl Did we get --with-mpi=DIR or was there a MPI_HOME or MPIHOME set?
+          AS_IF([test x"$MPI" != x],
+                [
+                  dnl Inspect $MPI/bin
+                  AS_IF([test -d "$MPI/bin"],
+                        [
+                          AC_CHECK_PROGS(LOCAL_CXX, [mpicxx mpiCC mpicc], [], ["$MPI/bin"])
+                          AS_IF([test -z "$LOCAL_CXX"],
+                                [AS_ECHO(["None of the wrappers we look for exist in $MPI/bin. We will not try to use mpi compiler wrappers"])],
+                                [MPI_USING_WRAPPERS=1;CXX="$MPI/bin/$LOCAL_CXX"])
+                        ],
+                        [AS_ECHO(["An MPI directory was specified, but $MPI/bin does not exist. We will not try to use mpi compiler wrappers"])])
+                ],
+                [
+                  dnl No MPI directory specified. If we have PETSc, let's try to snoop some
+                  dnl information from there. We'll use this information further below and in
+                  dnl mpi.m4
+                  AS_IF([test x"$PETSC_HAVE_MPI" = x1 && test x"$PETSC_CXX" != x],
+                        [],
+                        dnl PETSc doesn't define a CXX so we'll just try to pull one from the environment
+                        [CXX_TRY_LIST="mpicxx mpiCC mpicc $CXX_TRY_LIST"])
+                ]) dnl AS_IF([test x"$MPI" != x])
+        ])
+
+  dnl See whether we are using PETSC_CXX. Unfortunately PETSC_CXX may
+  dnl be prefixed with a PATH, and its not straightforward to strip it off.
+  dnl If CXX is not set AC_PROG_CXX will call AC_CHECK_TOOLS which will prefix
+  dnl every argument in CXX_TRY_LIST with values in $PATH, so we will
+  dnl not find something like PATH/PETSC_PREFIX/mpicxx. The solution
+  dnl then is just to set CXX to PETSC_CXX so that AC_CHECK_TOOLS
+  dnl never gets called
+  AS_IF([test -z "$CXX" && test x"$PETSC_HAVE_MPI" = x1 && test x"$PETSC_CXX" != x],
+        [CXX="$PETSC_CXX"])
+
+  dnl If we still don't have a CXX set then we will try to pick one up from CXX_TRY_LIST
+  AC_PROG_CXX([$CXX_TRY_LIST])
+
+  # --------------------------------------------------------------
+  # See below for the definition of this function.  It can
+  # figure out which version of a particular compiler, e.g. GCC 4.0,
+  # you are using.
+  # --------------------------------------------------------------
+  DETERMINE_CXX_BRAND
 ])
 
 
@@ -225,6 +242,8 @@ AC_DEFUN([DETERMINE_CXX_BRAND],
                 [
                   GXX_VERSION_STRING="`($CXX -V 2>&1) | grep 'Version '`"
                   AS_CASE("$GXX_VERSION_STRING",
+                  [*20.*], [AC_MSG_RESULT(<<< C++ compiler is Intel(R) icc 20 >>>)
+                            GXX_VERSION=intel_icc_v20.x],
                   [*19.*], [AC_MSG_RESULT(<<< C++ compiler is Intel(R) icc 19 >>>)
                             GXX_VERSION=intel_icc_v19.x],
                   [*18.*], [AC_MSG_RESULT(<<< C++ compiler is Intel(R) icc 18 >>>)
@@ -394,9 +413,9 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
           dnl compilers that support the address sanitizer, and they use the
           dnl same set of flags.  If the set of flags used by Clang and GCC ever
           dnl diverges, we'll need to set up separate flags and test them in the
-          dnl case blocks below...  The LIBMESH_TEST_SANITIZE_FLAGS function sets
+          dnl case blocks below...  The ACSM_TEST_SANITIZE_FLAGS function sets
           dnl the variable have_address_sanitizer to either "no" or "yes"
-          LIBMESH_TEST_SANITIZE_FLAGS([$COMMON_SANITIZE_OPTIONS])
+          ACSM_TEST_SANITIZE_FLAGS([$COMMON_SANITIZE_OPTIONS])
 
           dnl Enable the address sanitizer stuff if the test code compiled
           AS_IF([test "x$have_address_sanitizer" = xyes],
@@ -419,15 +438,16 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
         ])
 
   # in the case blocks below we may add GLIBCXX-specific pedantic debugging preprocessor
-  # definitions. however, allow the knowing user to preclude that if they need to.
+  # definitions. Should only be used by a knowing user, because these options break
+  # ABI compatibility.
   AC_ARG_ENABLE(glibcxx-debugging,
-                [AS_HELP_STRING([--disable-glibcxx-debugging],
-                                [omit -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC even in dbg mode])],
+                [AS_HELP_STRING([--enable-glibcxx-debugging],
+                                [enable -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC in dbg mode])],
                 [AS_CASE("${enableval}",
                          [yes], [enableglibcxxdebugging=yes],
                          [no],  [enableglibcxxdebugging=no],
                          [AC_MSG_ERROR(bad value ${enableval} for --enable-glibcxx-debugging)])],
-                [enableglibcxxdebugging=yes])
+                [enableglibcxxdebugging=no])
 
   # GLIBCXX debugging causes untold woes on mac machines - so disable it
   AS_IF([test `uname` = "Darwin"],
@@ -553,7 +573,7 @@ AC_DEFUN([LIBMESH_SET_CXX_FLAGS],
                           dnl       Well, duh, when the tested value is computed...  OK when it
                           dnl       was from an assignment.
                           AS_CASE("$GXX_VERSION",
-                                  [intel_icc_v13.x | intel_icc_v14.x | intel_icc_v15.x | intel_icc_v16.x | intel_icc_v17.x | intel_icc_v18.x],
+                                  [intel_icc_v13.x | intel_icc_v14.x | intel_icc_v15.x | intel_icc_v16.x | intel_icc_v17.x | intel_icc_v18.x | intel_icc_v19.x | intel_icc_v20.x],
                                   [
                                     PROFILING_FLAGS="-p"
                                     CXXFLAGS_DBG="$CXXFLAGS_DBG -w1 -g -wd175 -wd1476 -wd1505 -wd1572 -wd488 -wd161"

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -30,6 +30,19 @@
 namespace libMesh
 {
 
+/**
+ * Encapsulates the common "get value from map, otherwise error"
+ * idiom, which is similar to calling map.at(), but gives a more
+ * useful error message with a line number.
+ */
+#define libmesh_map_find(map, key) libMesh::Utility::map_find((map), (key), __FILE__, __LINE__)
+
+/**
+ * Encapsulates the common "get value from vector, otherwise error"
+ * idiom, which is similar to calling vec.at(), but gives a more
+ * useful error message with a line number.
+ */
+#define libmesh_vector_at(vec, idx) libMesh::Utility::vector_at((vec), (idx), __FILE__, __LINE__)
 
 // ------------------------------------------------------------
 // The Utility namespace is for functions
@@ -44,7 +57,142 @@ namespace Utility
  */
 std::string system_info();
 
+/**
+ * Helper struct for enabling template metaprogramming/SFINAE.
+ */
+template <typename T>
+class is_streamable
+{
+  template <typename U> // must be template to get SFINAE fall-through...
+  static auto test(const U* u) -> decltype(std::cout << *u);
 
+  static auto test(...) -> std::false_type;
+
+public:
+  enum { value = !std::is_same<decltype(test((T*)0)), std::false_type>::value };
+};
+
+/**
+ * This function should not be called directly (although it can be),
+ * instead see the libmesh_map_find() macro.
+ *
+ * Calls find(key), and checks the result against end(). Returns the
+ * corresponding value if found, throws an error otherwise. Templated
+ * on the type of map, so this will work with both std::map and
+ * std::unordered_map.
+ */
+template<typename Map, typename Key,
+         typename std::enable_if<!is_streamable<Key>::value, Key>::type* = nullptr>
+inline
+typename Map::mapped_type &
+map_find(Map & map,
+         const Key & key,
+         const char * filename,
+         int line_number)
+{
+  auto it = map.find(key);
+  libmesh_error_msg_if(it == map.end(),
+                       "map_find() error: key not found in file "
+                       << filename << " on line " << line_number);
+  return it->second;
+}
+
+/**
+ * A version of the function above that works for const objects.
+ */
+template<typename Map, typename Key,
+         typename std::enable_if<!is_streamable<Key>::value, Key>::type* = nullptr>
+inline
+const typename Map::mapped_type &
+map_find(const Map & map,
+         const Key & key,
+         const char * filename,
+         int line_number)
+{
+  auto it = map.find(key);
+  libmesh_error_msg_if(it == map.end(),
+                       "map_find() error: key not found in file "
+                       << filename << " on line " << line_number);
+  return it->second;
+}
+
+/**
+ * A version of the map_find() utility which can only be used if
+ * the map key is printable via std::stream.
+ */
+template<typename Map, typename Key,
+         typename std::enable_if<is_streamable<Key>::value, Key>::type* = nullptr>
+inline
+typename Map::mapped_type &
+map_find(Map & map,
+         const Key & key,
+         const char * filename,
+         int line_number)
+{
+  auto it = map.find(key);
+  libmesh_error_msg_if(it == map.end(),
+                       "map_find() error: key \"" << key << "\" not found in file "
+                       << filename << " on line " << line_number);
+  return it->second;
+}
+
+/**
+ * A version of the function above that works for const objects.
+ */
+template<typename Map, typename Key,
+         typename std::enable_if<is_streamable<Key>::value, Key>::type* = nullptr>
+inline
+const typename Map::mapped_type &
+map_find(const Map & map,
+         const Key & key,
+         const char * filename,
+         int line_number)
+{
+  auto it = map.find(key);
+  libmesh_error_msg_if(it == map.end(),
+                       "map_find() error: key \"" << key << "\" not found in file "
+                       << filename << " on line " << line_number);
+  return it->second;
+}
+
+
+/**
+ * A replacement for std::vector::at(i) which is meant to be used with
+ * a macro, and, unlike at(), gives a proper line number and useful
+ * error message when the index is past the end.
+ */
+template<typename Vector>
+inline
+typename Vector::reference &
+vector_at(Vector & vec,
+          typename Vector::size_type i,
+          const char * filename,
+          int line_number)
+{
+  libmesh_error_msg_if(i >= vec.size(),
+                       "vec_at() error: Index " << i <<
+                       " past end of vector in file " << filename <<
+                       " on line " << line_number);
+  return vec[i];
+}
+
+/**
+ * Same as above, but for const inputs.
+ */
+template<typename Vector>
+inline
+typename Vector::const_reference &
+vector_at(const Vector & vec,
+          typename Vector::size_type i,
+          const char * filename,
+          int line_number)
+{
+  libmesh_error_msg_if(i >= vec.size(),
+                       "vec_at() error: Index " << i <<
+                       " past end of vector in file " << filename <<
+                       " on line " << line_number);
+  return vec[i];
+}
 
 /**
  * \p Utility::iota is a duplication of the SGI STL extension

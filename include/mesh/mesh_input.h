@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -168,8 +168,7 @@ template <class MT>
 inline
 MT & MeshInput<MT>::mesh ()
 {
-  if (_obj == nullptr)
-    libmesh_error_msg("ERROR: _obj should not be nullptr!");
+  libmesh_error_msg_if(_obj == nullptr, "ERROR: _obj should not be nullptr!");
   return *_obj;
 }
 

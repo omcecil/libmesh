@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -86,9 +86,7 @@ MeshFunction::MeshFunction (const EquationSystems & eqn_systems,
 
 MeshFunction::~MeshFunction ()
 {
-  // only delete the point locator when we are the master
-  if (this->_master == nullptr)
-    delete this->_point_locator;
+  delete this->_point_locator;
 }
 
 
@@ -107,36 +105,12 @@ void MeshFunction::init (const Trees::BuildType /*point_locator_build_type*/)
     }
 
   /*
-   * set up the PointLocator: either someone else
-   * is the master (go and get the address of his
-   * point locator) or this object is the master
-   * (build the point locator  on our own).
+   * set up the PointLocator: currently we always get this from the
+   * MeshBase we're associated with.
    */
-  if (this->_master != nullptr)
-    {
-      // we aren't the master
-      const MeshFunction * master =
-        cast_ptr<const MeshFunction *>(this->_master);
+  const MeshBase & mesh = this->_eqn_systems.get_mesh();
 
-      if (master->_point_locator == nullptr)
-        libmesh_error_msg("ERROR: When the master-servant concept is used, the master has to be initialized first!");
-
-      else
-        {
-          this->_point_locator = master->_point_locator;
-        }
-    }
-  else
-    {
-      // we are the master: build the point locator
-
-      // constant reference to the other mesh
-      const MeshBase & mesh = this->_eqn_systems.get_mesh();
-
-      // Get PointLocator object from the Mesh. We are responsible for
-      // deleting this only if we are the master.
-      this->_point_locator = mesh.sub_point_locator().release();
-    }
+  this->_point_locator = mesh.sub_point_locator().release();
 
   // ready for use
   this->_initialized = true;
@@ -159,11 +133,13 @@ MeshFunction::clear ()
 
 std::unique_ptr<FunctionBase<Number>> MeshFunction::clone () const
 {
-  FunctionBase<Number> * mf_clone =
+  MeshFunction * mf_clone =
     new MeshFunction(_eqn_systems, _vector, _dof_map, _system_vars, this);
 
   if (this->initialized())
     mf_clone->init();
+  mf_clone->set_point_locator_tolerance(
+    this->get_point_locator().get_close_to_point_tol());
 
   return std::unique_ptr<FunctionBase<Number>>(mf_clone);
 }
@@ -272,10 +248,8 @@ void MeshFunction::operator() (const Point & p,
          * Note that the fe_type can safely be used from the 0-variable,
          * since the inverse mapping is the same for all FEFamilies
          */
-        const Point mapped_point (FEInterface::inverse_map (dim,
-                                                            this->_dof_map.variable_type(0),
-                                                            element,
-                                                            p));
+        const Point mapped_point (FEMap::inverse_map (dim, element,
+                                                      p));
 
         // loop over all vars
         for (auto index : index_range(this->_system_vars))
@@ -363,10 +337,7 @@ void MeshFunction::discontinuous_value (const Point & p,
        * Note that the fe_type can safely be used from the 0-variable,
        * since the inverse mapping is the same for all FEFamilies
        */
-      const Point mapped_point (FEInterface::inverse_map (dim,
-                                                          this->_dof_map.variable_type(0),
-                                                          element,
-                                                          p));
+      const Point mapped_point (FEMap::inverse_map (dim, element, p));
 
       // loop over all vars
       for (auto index : index_range(this->_system_vars))
@@ -451,10 +422,8 @@ void MeshFunction::gradient (const Point & p,
          * Note that the fe_type can safely be used from the 0-variable,
          * since the inverse mapping is the same for all FEFamilies
          */
-        const Point mapped_point (FEInterface::inverse_map (dim,
-                                                            this->_dof_map.variable_type(0),
-                                                            element,
-                                                            p));
+        const Point mapped_point (FEMap::inverse_map (dim, element,
+                                                      p));
 
         std::vector<Point> point_list (1, mapped_point);
 
@@ -508,7 +477,7 @@ void MeshFunction::gradient (const Point & p,
                 FEInterface::compute_data (dim, fe_type, element, data);
                 //grad [x] = data.dshape[i](v) * dv/dx  * dof_index [i]
                 // sum over all indices
-                for (std::size_t i=0; i<dof_indices.size(); i++)
+                for (auto i : index_range(dof_indices))
                   {
                     // local coordinates
                     for (std::size_t v=0; v<dim; v++)
@@ -565,10 +534,7 @@ void MeshFunction::discontinuous_gradient (const Point & p,
        * Note that the fe_type can safely be used from the 0-variable,
        * since the inverse mapping is the same for all FEFamilies
        */
-      const Point mapped_point (FEInterface::inverse_map (dim,
-                                                          this->_dof_map.variable_type(0),
-                                                          element,
-                                                          p));
+      const Point mapped_point (FEMap::inverse_map (dim, element, p));
 
 
       // loop over all vars
@@ -687,10 +653,8 @@ void MeshFunction::hessian (const Point & p,
          * Note that the fe_type can safely be used from the 0-variable,
          * since the inverse mapping is the same for all FEFamilies
          */
-        const Point mapped_point (FEInterface::inverse_map (dim,
-                                                            this->_dof_map.variable_type(0),
-                                                            element,
-                                                            p));
+        const Point mapped_point (FEMap::inverse_map (dim, element,
+                                                      p));
 
         std::vector<Point> point_list (1, mapped_point);
 
@@ -746,9 +710,9 @@ const Elem * MeshFunction::find_element(const Point & p,
     {
       const MeshFunction * master =
         cast_ptr<const MeshFunction *>(this->_master);
-      if (_out_of_mesh_mode!=master->_out_of_mesh_mode)
-        libmesh_error_msg("ERROR: If you use out-of-mesh-mode in connection with master mesh " \
-                          << "functions, you must enable out-of-mesh mode for both the master and the slave mesh function.");
+      libmesh_error_msg_if(_out_of_mesh_mode!=master->_out_of_mesh_mode,
+                           "ERROR: If you use out-of-mesh-mode in connection with master mesh "
+                           "functions, you must enable out-of-mesh mode for both the master and the slave mesh function.");
     }
 #endif
 
@@ -790,9 +754,9 @@ std::set<const Elem *> MeshFunction::find_elements(const Point & p,
     {
       const MeshFunction * master =
         cast_ptr<const MeshFunction *>(this->_master);
-      if (_out_of_mesh_mode!=master->_out_of_mesh_mode)
-        libmesh_error_msg("ERROR: If you use out-of-mesh-mode in connection with master mesh " \
-                          << "functions, you must enable out-of-mesh mode for both the master and the slave mesh function.");
+      libmesh_error_msg_if(_out_of_mesh_mode!=master->_out_of_mesh_mode,
+                           "ERROR: If you use out-of-mesh-mode in connection with master mesh "
+                           "functions, you must enable out-of-mesh mode for both the master and the slave mesh function.");
     }
 #endif
 

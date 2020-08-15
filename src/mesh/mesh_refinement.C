@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -211,10 +211,14 @@ Node * MeshRefinement::add_node(Elem & parent,
 Elem * MeshRefinement::add_elem (Elem * elem)
 {
   libmesh_assert(elem);
-  _mesh.add_elem (elem);
-  return elem;
+  return _mesh.add_elem (elem);
 }
 
+Elem * MeshRefinement::add_elem (std::unique_ptr<Elem> elem)
+{
+  libmesh_assert(elem);
+  return _mesh.add_elem(std::move(elem));
+}
 
 
 void MeshRefinement::create_parent_error_vector(const ErrorVector & error_per_cell,
@@ -570,7 +574,7 @@ bool MeshRefinement::refine_and_coarsen_elements ()
       _mesh.libmesh_assert_valid_parallel_ids();
 #endif
 
-      _mesh.prepare_for_use (/*skip_renumber =*/false);
+      _mesh.prepare_for_use ();
 
       if (_face_level_mismatch_limit)
         libmesh_assert(test_level_one(true));
@@ -669,7 +673,7 @@ bool MeshRefinement::coarsen_elements ()
 
   // Finally, the new mesh may need to be prepared for use
   if (mesh_changed)
-    _mesh.prepare_for_use (/*skip_renumber =*/false);
+    _mesh.prepare_for_use ();
 
   return mesh_changed;
 }
@@ -742,7 +746,7 @@ bool MeshRefinement::refine_elements ()
 
   // Finally, the new mesh needs to be prepared for use
   if (mesh_changed)
-    _mesh.prepare_for_use (/*skip_renumber =*/false);
+    _mesh.prepare_for_use ();
 
   return mesh_changed;
 }
@@ -1695,7 +1699,7 @@ void MeshRefinement::uniformly_refine (unsigned int n)
 
   // Finally, the new mesh probably needs to be prepared for use
   if (n > 0)
-    _mesh.prepare_for_use (/*skip_renumber =*/false);
+    _mesh.prepare_for_use ();
 }
 
 
@@ -1783,7 +1787,7 @@ void MeshRefinement::uniformly_coarsen (unsigned int n)
 
   // Finally, the new mesh probably needs to be prepared for use
   if (n > 0)
-    _mesh.prepare_for_use (/*skip_renumber =*/false);
+    _mesh.prepare_for_use ();
 }
 
 

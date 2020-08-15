@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -106,6 +106,21 @@ NumericVector<T> & LaspackVector<T>::operator -= (const NumericVector<T> & v)
 
 
 template <typename T>
+NumericVector<T> & LaspackVector<T>::operator *= (const NumericVector<T> & v)
+{
+  libmesh_assert_equal_to(size(), v.size());
+
+  const numeric_index_type n = this->size();
+
+  for (numeric_index_type i=0; i<n; i++)
+    this->set(i, (*this)(i) * v(i));
+
+  return *this;
+}
+
+
+
+template <typename T>
 NumericVector<T> & LaspackVector<T>::operator /= (const NumericVector<T> & v)
 {
   libmesh_assert_equal_to(size(), v.size());
@@ -189,7 +204,7 @@ void LaspackVector<T>::add (const T a, const NumericVector<T> & v_in)
   libmesh_assert(v);
   libmesh_assert_equal_to (this->size(), v->size());
 
-  for (auto i : IntRange<numeric_index_type>(0, v->size()))
+  for (auto i : make_range(v->size()))
     this->add (i, a*(*v)(i));
 
 #ifndef NDEBUG

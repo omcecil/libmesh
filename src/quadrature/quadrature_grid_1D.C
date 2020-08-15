@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,16 +25,8 @@
 namespace libMesh
 {
 
-
-
-void QGrid::init_1D(const ElemType,
-                    unsigned int)
+void QGrid::init_1D(const ElemType, unsigned int)
 {
-  //----------------------------------------------------------------------
-  // 1D quadrature rules
-
-  // We ignore p - the grid rule is just for experimentation
-
   _points.resize(_order + 1);
   _weights.resize(_order + 1);
   const Real dx = Real(2)/(_order+1);
@@ -43,7 +35,6 @@ void QGrid::init_1D(const ElemType,
       _points[i](0) = (i+0.5)*dx-1;
       _weights[i] = dx;
     }
-  return;
 }
 
 } // namespace libMesh

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -200,12 +200,12 @@ void tetrahedralize_domain(const Parallel::Communicator & comm)
   // 5.) Set parameters and tetrahedralize the domain
 
   // 0 means "use TetGen default value"
-  Real quality_constraint = 2.0;
+  double quality_constraint = 2.0;
 
   // The volume constraint determines the max-allowed tetrahedral
   // volume in the Mesh.  TetGen will split cells which are larger than
   // this size
-  Real volume_constraint = 0.001;
+  double volume_constraint = 0.001;
 
   // Construct the Delaunay tetrahedralization
   TetGenMeshInterface t(mesh);
@@ -277,13 +277,13 @@ void add_cube_convex_hull_to_mesh(MeshBase & mesh,
 
   for (auto & elem : cube_mesh.element_ptr_range())
     for (auto s : elem->side_index_range())
-      if (elem->neighbor(s) == nullptr)
+      if (elem->neighbor_ptr(s) == nullptr)
         {
           // Add the node IDs of this side to the set
-          std::unique_ptr<Elem> side = elem->side(s);
+          std::unique_ptr<Elem> side = elem->side_ptr(s);
 
           for (auto n : side->node_index_range())
-            node_id_map.insert(std::make_pair(side->node_id(n), /*dummy_value=*/0));
+            node_id_map.emplace(side->node_id(n), /*dummy_value=*/0);
         }
 
   // For each node in the map, insert it into the input mesh and keep
@@ -315,15 +315,8 @@ void add_cube_convex_hull_to_mesh(MeshBase & mesh,
         // we'll do it in several steps.
         for (auto i : old_elem->node_index_range())
           {
-            // Locate old node ID in the map
-            iterator it = node_id_map.find(old_elem->node_id(i));
-
-            // Check for not found
-            if (it == node_id_map.end())
-              libmesh_error_msg("Node id " << old_elem->node_id(i) << " not found in map!");
-
             // Mapping to node ID in input mesh
-            unsigned new_node_id = (*it).second;
+            unsigned int new_node_id = libmesh_map_find(node_id_map, old_elem->node_id(i));
 
             // Node pointer assigned from input mesh
             new_elem->set_node(i) = mesh.node_ptr(new_node_id);

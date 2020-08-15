@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -84,6 +84,13 @@ public:
   TypeNTensor<N-1,T> slice (const unsigned int /*i*/)
   { return TypeNTensor<N-1,T>(); }
 
+  template <typename Scalar>
+  typename boostcopy::enable_if_c<
+    ScalarTraits<Scalar>::value,
+    TypeNTensor &>::type
+  operator = (const Scalar & libmesh_dbg_var(p))
+  { libmesh_assert_equal_to (p, Scalar(0)); this->zero(); return *this; }
+
   /**
    * Add two tensors.
    */
@@ -166,18 +173,13 @@ public:
   /**
    * \returns The Frobenius norm of the tensor squared, i.e. the sum of the
    * entry magnitudes squared.
-   *
-   * \deprecated Use the norm_sq() function instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  auto size_sq() const -> decltype(std::norm(T())) { libmesh_deprecated(); return 0.;}
-#endif
-
-  /**
-   * \returns The Frobenius norm of the tensor squared, i.e. the sum of the
-   * entry magnitudes squared.
    */
   auto norm_sq() const -> decltype(std::norm(T())) { return 0.;}
+
+  /**
+   * Set all entries of the tensor to 0.
+   */
+  void zero() { libmesh_not_implemented(); }
 
   /**
    * \returns \p true if two tensors are equal, \p false otherwise.

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -158,8 +158,7 @@ void FrequencySystem::assemble ()
 {
   libmesh_assert (_finished_init);
 
-  if (_finished_assemble)
-    libmesh_error_msg("ERROR: Matrices already assembled.");
+  libmesh_error_msg_if(_finished_assemble, "ERROR: Matrices already assembled.");
 
   // Log how long assemble() takes
   LOG_SCOPE("assemble()", "FrequencySystem");
@@ -185,8 +184,7 @@ void FrequencySystem::set_frequencies_by_steps (const Number base_freq,
   this->_keep_solution_duplicates = allocate_solution_duplicates;
 
   // sanity check
-  if (_finished_set_frequencies)
-    libmesh_error_msg("ERROR: frequencies already initialized.");
+  libmesh_error_msg_if(_finished_set_frequencies, "ERROR: frequencies already initialized.");
 
   EquationSystems & es =
     this->get_equation_systems();
@@ -223,9 +221,7 @@ void FrequencySystem::set_frequencies_by_range (const Number min_freq,
   // sanity checks. Only look at the real part.
   libmesh_assert_greater_equal (std::real(max_freq), std::real(min_freq));
   libmesh_assert_greater (n_freq, 0);
-
-  if (_finished_set_frequencies)
-    libmesh_error_msg("ERROR: frequencies already initialized.");
+  libmesh_error_msg_if(_finished_set_frequencies, "ERROR: frequencies already initialized.");
 
   EquationSystems & es =
     this->get_equation_systems();
@@ -261,9 +257,7 @@ void FrequencySystem::set_frequencies (const std::vector<Real> & frequencies,
 
   // sanity checks
   libmesh_assert(!frequencies.empty());
-
-  if (_finished_set_frequencies)
-    libmesh_error_msg("ERROR: frequencies already initialized.");
+  libmesh_error_msg_if(_finished_set_frequencies, "ERROR: frequencies already initialized.");
 
   EquationSystems & es =
     this->get_equation_systems();
@@ -297,9 +291,7 @@ void FrequencySystem::set_frequencies (const std::vector<Number> & frequencies,
 
   // sanity checks
   libmesh_assert(!frequencies.empty());
-
-  if (_finished_set_frequencies)
-    libmesh_error_msg("ERROR: frequencies already initialized.");
+  libmesh_error_msg_if(_finished_set_frequencies, "ERROR: frequencies already initialized.");
 
   EquationSystems & es =
     this->get_equation_systems();
@@ -308,7 +300,7 @@ void FrequencySystem::set_frequencies (const std::vector<Number> & frequencies,
   es.parameters.set<unsigned int>("n_frequencies") = frequencies.size();
 
   // set frequencies, build solution storage
-  for (std::size_t n=0; n<frequencies.size(); n++)
+  for (auto n : index_range(frequencies))
     {
       // remember frequencies as parameters
       es.parameters.set<Number>(this->form_freq_param_name(n)) = frequencies[n];

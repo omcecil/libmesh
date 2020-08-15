@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,17 +17,19 @@
 
 
 
+#include "libmesh/fem_context.h"
+
 #include "libmesh/boundary_info.h"
+#include "libmesh/diff_system.h"
 #include "libmesh/dof_map.h"
 #include "libmesh/elem.h"
 #include "libmesh/fe_base.h"
 #include "libmesh/fe_interface.h"
-#include "libmesh/fem_context.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/mesh_base.h"
+#include "libmesh/numeric_vector.h"
 #include "libmesh/quadrature.h"
 #include "libmesh/system.h"
-#include "libmesh/diff_system.h"
 #include "libmesh/time_solver.h"
 #include "libmesh/unsteady_solver.h" // For euler_residual
 
@@ -76,6 +78,103 @@ FEMContext::FEMContext (const System & sys, int extra_quadrature_order)
   init_internal_data(sys);
 }
 
+
+FEType FEMContext::find_hardest_fe_type()
+{
+  const System & sys = this->get_system();
+  FEType hardest_fe_type = sys.variable_type(0);
+
+  for (auto i : make_range(sys.n_vars()))
+    {
+      FEType fe_type = sys.variable_type(i);
+
+      // Make sure we find a non-SCALAR FE family, even in the case
+      // where the first variable(s) weren't
+      if (hardest_fe_type.family == SCALAR)
+        {
+          hardest_fe_type.family = fe_type.family;
+          hardest_fe_type.order = fe_type.order;
+        }
+
+      // FIXME - we don't yet handle mixed finite elements from
+      // different families which require different quadrature rules
+      // libmesh_assert_equal_to (fe_type.family, hardest_fe_type.family);
+
+      // We need to detect SCALAR's so we can prepare FE objects for
+      // them, and so we don't mistake high order scalars as a reason
+      // to crank up the quadrature order on other types.
+      if (fe_type.family != SCALAR && fe_type.order > hardest_fe_type.order)
+        hardest_fe_type = fe_type;
+    }
+
+  return hardest_fe_type;
+}
+
+
+void FEMContext::attach_quadrature_rules()
+{
+  const System & sys = this->get_system();
+  const unsigned int nv = sys.n_vars();
+
+  for (const auto & dim : _elem_dims)
+    {
+      for (unsigned int i=0; i != nv; ++i)
+        {
+          FEType fe_type = sys.variable_type(i);
+
+          _element_fe[dim][fe_type]->attach_quadrature_rule(_element_qrule[dim].get());
+          _side_fe[dim][fe_type]->attach_quadrature_rule(_side_qrule[dim].get());
+
+          if (dim == 3)
+            _edge_fe[fe_type]->attach_quadrature_rule(_edge_qrule.get());
+        }
+    }
+}
+
+
+
+void FEMContext::use_default_quadrature_rules(int extra_quadrature_order)
+{
+  _extra_quadrature_order = extra_quadrature_order;
+
+  FEType hardest_fe_type = this->find_hardest_fe_type();
+
+  for (const auto & dim : _elem_dims)
+    {
+      // Create an adequate quadrature rule
+      _element_qrule[dim] =
+        hardest_fe_type.default_quadrature_rule(dim, _extra_quadrature_order);
+      _side_qrule[dim] =
+        hardest_fe_type.default_quadrature_rule(dim-1, _extra_quadrature_order);
+      if (dim == 3)
+        _edge_qrule = hardest_fe_type.default_quadrature_rule(1, _extra_quadrature_order);
+    }
+
+  this->attach_quadrature_rules();
+}
+
+
+void FEMContext::use_unweighted_quadrature_rules(int extra_quadrature_order)
+{
+  _extra_quadrature_order = extra_quadrature_order;
+
+  FEType hardest_fe_type = this->find_hardest_fe_type();
+
+  for (const auto & dim : _elem_dims)
+    {
+      // Create an adequate quadrature rule
+      _element_qrule[dim] =
+        hardest_fe_type.unweighted_quadrature_rule(dim, _extra_quadrature_order);
+      _side_qrule[dim] =
+        hardest_fe_type.unweighted_quadrature_rule(dim-1, _extra_quadrature_order);
+      if (dim == 3)
+        _edge_qrule = hardest_fe_type.unweighted_quadrature_rule(1, _extra_quadrature_order);
+    }
+
+  this->attach_quadrature_rules();
+}
+
+
 void FEMContext::init_internal_data(const System & sys)
 {
   // Reserve space for the FEAbstract and QBase objects for each
@@ -101,36 +200,16 @@ void FEMContext::init_internal_data(const System & sys)
   // shape functions to numerically integrate.
 
   unsigned int nv = sys.n_vars();
-
   libmesh_assert (nv);
-  FEType hardest_fe_type = sys.variable_type(0);
 
   bool have_scalar = false;
 
   for (unsigned int i=0; i != nv; ++i)
-    {
-      FEType fe_type = sys.variable_type(i);
-
-      // Make sure we find a non-SCALAR FE family, even in the case
-      // where the first variable(s) weren't
-      if (hardest_fe_type.family == SCALAR)
-        {
-          hardest_fe_type.family = fe_type.family;
-          hardest_fe_type.order = fe_type.order;
-        }
-
-      // FIXME - we don't yet handle mixed finite elements from
-      // different families which require different quadrature rules
-      // libmesh_assert_equal_to (fe_type.family, hardest_fe_type.family);
-
-      // We need to detect SCALAR's so we can prepare FE objects for
-      // them, and so we don't mistake high order scalars as a reason
-      // to crank up the quadrature order on other types.
-      if (fe_type.family == SCALAR)
+    if (sys.variable_type(i).family == SCALAR)
+      {
         have_scalar = true;
-      else if (fe_type.order > hardest_fe_type.order)
-        hardest_fe_type = fe_type;
-    }
+        break;
+      }
 
   if (have_scalar)
     // SCALAR FEs have dimension 0 by assumption
@@ -138,15 +217,7 @@ void FEMContext::init_internal_data(const System & sys)
 
   for (const auto & dim : _elem_dims)
     {
-      // Create an adequate quadrature rule
-      _element_qrule[dim] =
-        hardest_fe_type.default_quadrature_rule(dim, _extra_quadrature_order);
-      _side_qrule[dim] =
-        hardest_fe_type.default_quadrature_rule(dim-1, _extra_quadrature_order);
-      if (dim == 3)
-        _edge_qrule = hardest_fe_type.default_quadrature_rule(1, _extra_quadrature_order);
-
-      // Next, create finite element objects
+      // Create finite element objects
       _element_fe_var[dim].resize(nv);
       _side_fe_var[dim].resize(nv);
       if (dim == 3)
@@ -160,24 +231,20 @@ void FEMContext::init_internal_data(const System & sys)
           if (_element_fe[dim][fe_type] == nullptr)
             {
               _element_fe[dim][fe_type] = FEAbstract::build(dim, fe_type);
-              _element_fe[dim][fe_type]->attach_quadrature_rule(_element_qrule[dim].get());
               _side_fe[dim][fe_type] = FEAbstract::build(dim, fe_type);
-              _side_fe[dim][fe_type]->attach_quadrature_rule(_side_qrule[dim].get());
 
               if (dim == 3)
-                {
-                  _edge_fe[fe_type] = FEAbstract::build(dim, fe_type);
-                  _edge_fe[fe_type]->attach_quadrature_rule(_edge_qrule.get());
-                }
+                _edge_fe[fe_type] = FEAbstract::build(dim, fe_type);
             }
 
           _element_fe_var[dim][i] = _element_fe[dim][fe_type].get();
           _side_fe_var[dim][i] = _side_fe[dim][fe_type].get();
           if ((dim) == 3)
             _edge_fe_var[i] = _edge_fe[fe_type].get();
-
         }
     }
+
+  this->use_default_quadrature_rules(_extra_quadrature_order);
 }
 
 FEMContext::~FEMContext()
@@ -191,14 +258,6 @@ bool FEMContext::has_side_boundary_id(boundary_id_type id) const
   return _boundary_info.has_boundary_id(&(this->get_elem()), side, id);
 }
 
-
-#ifdef LIBMESH_ENABLE_DEPRECATED
-std::vector<boundary_id_type> FEMContext::side_boundary_ids() const
-{
-  libmesh_deprecated();
-  return _boundary_info.boundary_ids(&(this->get_elem()), side);
-}
-#endif
 
 
 void FEMContext::side_boundary_ids(std::vector<boundary_id_type> & vec_to_fill) const
@@ -344,7 +403,7 @@ void FEMContext::interior_values (unsigned int var,
   const std::vector<std::vector<OutputShape>> & phi = fe->get_phi();
 
   // Loop over all the q_points on this element
-  for (std::size_t qp=0; qp != u_vals.size(); qp++)
+  for (auto qp : index_range(u_vals))
     {
       OutputType & u = u_vals[qp];
 
@@ -408,7 +467,7 @@ void FEMContext::interior_gradients(unsigned int var,
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputGradient>> & dphi = fe->get_dphi();
 
   // Loop over all the q_points in this finite element
-  for (std::size_t qp=0; qp != du_vals.size(); qp++)
+  for (auto qp : index_range(du_vals))
     {
       OutputType & du = du_vals[qp];
 
@@ -470,7 +529,7 @@ void FEMContext::interior_hessians(unsigned int var,
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputTensor>> & d2phi = fe->get_d2phi();
 
   // Loop over all the q_points in this finite element
-  for (std::size_t qp=0; qp != d2u_vals.size(); qp++)
+  for (auto qp : index_range(d2u_vals))
     {
       OutputType & d2u = d2u_vals[qp];
 
@@ -596,7 +655,7 @@ void FEMContext::side_values(unsigned int var,
   const std::vector<std::vector<OutputShape>> & phi = the_side_fe->get_phi();
 
   // Loop over all the q_points on this element
-  for (std::size_t qp=0; qp != u_vals.size(); qp++)
+  for (auto qp : index_range(u_vals))
     {
       OutputType & u = u_vals[qp];
 
@@ -678,7 +737,7 @@ void FEMContext::side_gradients(unsigned int var,
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputGradient>> & dphi = the_side_fe->get_dphi();
 
   // Loop over all the q_points in this finite element
-  for (std::size_t qp=0; qp != du_vals.size(); qp++)
+  for (auto qp : index_range(du_vals))
     {
       OutputType & du = du_vals[qp];
 
@@ -745,7 +804,7 @@ void FEMContext::side_hessians(unsigned int var,
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputTensor>> & d2phi = the_side_fe->get_d2phi();
 
   // Loop over all the q_points in this finite element
-  for (std::size_t qp=0; qp != d2u_vals.size(); qp++)
+  for (auto qp : index_range(d2u_vals))
     {
       OutputType & d2u = d2u_vals[qp];
 
@@ -796,7 +855,7 @@ void FEMContext::point_value(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 0 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<OutputShape>> &  phi = fe_new->get_phi();
@@ -846,7 +905,7 @@ void FEMContext::point_gradient(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 1 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputGradient>> &  dphi = fe_new->get_dphi();
@@ -897,7 +956,7 @@ void FEMContext::point_hessian(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 2 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputTensor>> &  d2phi = fe_new->get_d2phi();
@@ -935,7 +994,7 @@ void FEMContext::point_curl(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 3 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputShape>> &  curl_phi = fe_new->get_curl_phi();
@@ -1131,7 +1190,7 @@ void FEMContext::fixed_point_value(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 0 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<OutputShape>> &  phi = fe_new->get_phi();
@@ -1181,7 +1240,7 @@ void FEMContext::fixed_point_gradient(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 1 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputGradient>> &  dphi = fe_new->get_dphi();
@@ -1232,7 +1291,7 @@ void FEMContext::fixed_point_hessian(unsigned int var,
 
   // Build a FE for calculating u(p)
   FEGenericBase<OutputShape> * fe_new =
-    this->build_new_fe( fe, p, tolerance );
+    this->build_new_fe( fe, p, tolerance, 2 );
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<typename FEGenericBase<OutputShape>::OutputTensor>> &  d2phi = fe_new->get_d2phi();
@@ -1439,17 +1498,17 @@ void FEMContext::elem_position_get()
   // in a format that allows a direct copy
   libmesh_assert(this->get_mesh_x_var() == libMesh::invalid_uint ||
                  (this->get_element_fe(this->get_mesh_x_var(), dim)->get_fe_type().family
-                  == LAGRANGE &&
+                  == FEMap::map_fe_type(this->get_elem()) &&
                   this->get_element_fe(this->get_mesh_x_var(), dim)->get_fe_type().order.get_order()
                   == this->get_elem().default_order()));
   libmesh_assert(this->get_mesh_y_var() == libMesh::invalid_uint ||
                  (this->get_element_fe(this->get_mesh_y_var(), dim)->get_fe_type().family
-                  == LAGRANGE &&
+                  == FEMap::map_fe_type(this->get_elem()) &&
                   this->get_element_fe(this->get_mesh_y_var(), dim)->get_fe_type().order.get_order()
                   == this->get_elem().default_order()));
   libmesh_assert(this->get_mesh_z_var() == libMesh::invalid_uint ||
                  (this->get_element_fe(this->get_mesh_z_var(), dim)->get_fe_type().family
-                  == LAGRANGE &&
+                  == FEMap::map_fe_type(this->get_elem()) &&
                   this->get_element_fe(this->get_mesh_z_var(), dim)->get_fe_type().order.get_order()
                   == this->get_elem().default_order()));
 #endif
@@ -1473,6 +1532,22 @@ void FEMContext::elem_position_get()
   //    {
   //      libmesh_not_implemented();
   //    }
+}
+
+
+
+void FEMContext::set_jacobian_tolerance(Real tol)
+{
+  for (auto & m : _element_fe)
+    for (auto & pr : m)
+      pr.second->get_fe_map().set_jacobian_tolerance(tol);
+
+  for (auto & m : _side_fe)
+    for (auto & pr : m)
+      pr.second->get_fe_map().set_jacobian_tolerance(tol);
+
+  for (auto & pr : _edge_fe)
+    pr.second->get_fe_map().set_jacobian_tolerance(tol);
 }
 
 
@@ -1504,15 +1579,15 @@ void FEMContext::_do_elem_position_set(Real)
   // in a format that allows a direct copy
   libmesh_assert(this->get_mesh_x_var() == libMesh::invalid_uint ||
                  (this->get_element_fe(this->get_mesh_x_var(), dim)->get_fe_type().family
-                  == LAGRANGE &&
+                  == FEMap::map_fe_type(this->get_elem()) &&
                   this->get_elem_solution(this->get_mesh_x_var()).size() == n_nodes));
   libmesh_assert(this->get_mesh_y_var() == libMesh::invalid_uint ||
                  (this->get_element_fe(this->get_mesh_y_var(), dim)->get_fe_type().family
-                  == LAGRANGE &&
+                  == FEMap::map_fe_type(this->get_elem()) &&
                   this->get_elem_solution(this->get_mesh_y_var()).size() == n_nodes));
   libmesh_assert(this->get_mesh_z_var() == libMesh::invalid_uint ||
                  (this->get_element_fe(this->get_mesh_z_var(), dim)->get_fe_type().family
-                  == LAGRANGE &&
+                  == FEMap::map_fe_type(this->get_elem()) &&
                   this->get_elem_solution(this->get_mesh_z_var()).size() == n_nodes));
 #endif
 
@@ -1638,7 +1713,7 @@ void FEMContext::pre_fe_reinit(const System & sys, const Elem * e)
   // Initialize the per-variable data for elem.
   {
     unsigned int sub_dofs = 0;
-    for (unsigned int i=0; i != sys.n_vars(); ++i)
+    for (auto i : make_range(sys.n_vars()))
       {
         if (algebraic_type() == CURRENT ||
             algebraic_type() == DOFS_ONLY)
@@ -1753,7 +1828,7 @@ void FEMContext::pre_fe_reinit(const System & sys, const Elem * e)
 
           // Initialize the per-variable data for elem.
           unsigned int sub_dofs = 0;
-          for (unsigned int i=0; i != sys.n_vars(); ++i)
+          for (auto i : make_range(sys.n_vars()))
             {
               const unsigned int n_dofs_var = cast_int<unsigned int>
                 (this->get_dof_indices(i).size());
@@ -1796,7 +1871,8 @@ void FEMContext::_update_time_from_system(Real theta)
 template<>
 FEGenericBase<Real> *
 FEMContext::cached_fe( const unsigned int elem_dim,
-                       const FEType fe_type ) const
+                       const FEType fe_type,
+                       const int get_derivative_level ) const
 {
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   const bool fe_needs_inf =
@@ -1805,13 +1881,18 @@ FEMContext::cached_fe( const unsigned int elem_dim,
 
   if (!_real_fe ||
       elem_dim != _real_fe->get_dim() ||
-      fe_type != _real_fe->get_fe_type())
-    _real_fe =
+      fe_type != _real_fe->get_fe_type() ||
+      get_derivative_level != _real_fe_derivative_level)
+    {
+      _real_fe_derivative_level = get_derivative_level;
+
+      _real_fe =
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
-      fe_needs_inf ?
-      FEGenericBase<Real>::build_InfFE(elem_dim, fe_type) :
+        fe_needs_inf ?
+        FEGenericBase<Real>::build_InfFE(elem_dim, fe_type) :
 #endif
-      FEGenericBase<Real>::build(elem_dim, fe_type);
+        FEGenericBase<Real>::build(elem_dim, fe_type);
+    }
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   else if (fe_needs_inf && !_real_fe_is_inf)
@@ -1832,7 +1913,8 @@ FEMContext::cached_fe( const unsigned int elem_dim,
 template<>
 FEGenericBase<RealGradient> *
 FEMContext::cached_fe( const unsigned int elem_dim,
-                       const FEType fe_type ) const
+                       const FEType fe_type,
+                       const int get_derivative_level ) const
 {
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   const bool fe_needs_inf =
@@ -1841,13 +1923,18 @@ FEMContext::cached_fe( const unsigned int elem_dim,
 
   if (!_real_grad_fe ||
       elem_dim != _real_grad_fe->get_dim() ||
-      fe_type != _real_grad_fe->get_fe_type())
-    _real_grad_fe =
+      fe_type != _real_grad_fe->get_fe_type() ||
+      get_derivative_level != _real_grad_fe_derivative_level)
+    {
+      _real_grad_fe_derivative_level = get_derivative_level;
+
+      _real_grad_fe =
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
-      fe_needs_inf ?
-      FEGenericBase<RealGradient>::build_InfFE(elem_dim, fe_type) :
+        fe_needs_inf ?
+        FEGenericBase<RealGradient>::build_InfFE(elem_dim, fe_type) :
 #endif
-      FEGenericBase<RealGradient>::build(elem_dim, fe_type);
+        FEGenericBase<RealGradient>::build(elem_dim, fe_type);
+    }
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   else if (fe_needs_inf && !_real_grad_fe_is_inf)
@@ -1870,7 +1957,8 @@ template<typename OutputShape>
 FEGenericBase<OutputShape> *
 FEMContext::build_new_fe( const FEGenericBase<OutputShape>* fe,
                           const Point & p,
-                          const Real tolerance) const
+                          const Real tolerance,
+                          const int get_derivative_level) const
 {
   FEType fe_type = fe->get_fe_type();
 
@@ -1892,18 +1980,47 @@ FEMContext::build_new_fe( const FEGenericBase<OutputShape>* fe,
 
   const unsigned int elem_dim = this->has_elem() ? this->get_elem().dim() : 0;
 
-  FEGenericBase<OutputShape>* fe_new = cached_fe<OutputShape>(elem_dim, fe_type);
+  FEGenericBase<OutputShape>* fe_new =
+    cached_fe<OutputShape>(elem_dim, fe_type, get_derivative_level);
 
   // Map the physical co-ordinates to the master co-ordinates using the inverse_map from fe_interface.h
   // Build a vector of point co-ordinates to send to reinit
   Point master_point = this->has_elem() ?
-    FEInterface::inverse_map (elem_dim,
-                              fe_type,
-                              &this->get_elem(),
-                              p,
-                              tolerance) : Point(0);
+    FEMap::inverse_map (elem_dim, &this->get_elem(), p, tolerance) :
+    Point(0);
 
   std::vector<Point> coor(1, master_point);
+
+  switch (get_derivative_level)
+    {
+    case -1:
+      fe_new->get_phi();
+      fe_new->get_dphi();
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+      fe_new->get_d2phi();
+#endif
+      fe_new->get_curl_phi();
+      break;
+    case 0:
+      fe_new->get_phi();
+      break;
+    case 1:
+      fe_new->get_dphi();
+      break;
+    case 2:
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+      fe_new->get_d2phi();
+#else
+      // here a different configuration is required.
+      libmesh_not_implemented();
+#endif
+      break;
+    case 3:
+      fe_new->get_curl_phi();
+      break;
+    default:
+      libmesh_error();
+    }
 
   // Reinitialize the element and compute the shape function values at coor
   if (this->has_elem())
@@ -2042,11 +2159,13 @@ template void FEMContext::side_accel<Gradient>(unsigned int, unsigned int, Gradi
 template FEGenericBase<Real> *
 FEMContext::build_new_fe(const FEGenericBase<Real>*,
                          const Point &,
-                         const Real) const;
+                         const Real,
+                         const int) const;
 
 template FEGenericBase<RealGradient> *
 FEMContext::build_new_fe(const FEGenericBase<RealGradient>*,
                          const Point &,
-                         const Real) const;
+                         const Real,
+                         const int) const;
 
 } // namespace libMesh

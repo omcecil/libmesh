@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -34,7 +34,7 @@ void DenseVectorBase<T>::print_scientific (std::ostream & os, unsigned precision
   std::ios_base::fmtflags os_flags = os.flags();
 
   // Print the vector entries.
-  for (auto i : IntRange<int>(0, this->size()))
+  for (auto i : make_range(this->size()))
     os << std::setw(10)
        << std::scientific
        << std::setprecision(precision)
@@ -50,7 +50,7 @@ void DenseVectorBase<T>::print_scientific (std::ostream & os, unsigned precision
 template<typename T>
 void DenseVectorBase<T>::print (std::ostream & os) const
 {
-  for (auto i : IntRange<int>(0, this->size()))
+  for (auto i : make_range(this->size()))
     os << std::setw(8)
        << this->el(i)
        << std::endl;

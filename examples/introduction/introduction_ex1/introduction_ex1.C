@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -50,12 +50,7 @@ int main (int argc, char ** argv)
   // ./ex1 -d DIM input_mesh_name [-o output_mesh_name]
   // where [output_mesh_name] is an optional parameter giving
   // a filename to write the mesh into.
-  if (argc < 4)
-    {
-      // This handy function will print the file name, line number,
-      // specified message, and then throw an exception.
-      libmesh_error_msg("Usage: " << argv[0] << " -d 2 in.mesh [-o out.mesh]");
-    }
+  libmesh_error_msg_if(argc < 4, "Usage: " << argv[0] << " -d 2 in.mesh [-o out.mesh]");
 
   // Get the dimensionality of the mesh from argv[2]
   const unsigned int dim = std::atoi(argv[2]);

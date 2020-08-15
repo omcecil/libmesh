@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,11 +22,11 @@
 
 // Local Includes
 #include "libmesh/unstructured_mesh.h"
-#include "libmesh/boundary_info.h"
 #include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // C++ Includes
 #include <cstddef>
+#include <unordered_map>
 
 namespace libMesh
 {
@@ -101,10 +101,10 @@ public:
   virtual void renumber_nodes_and_elements () override;
 
   virtual dof_id_type n_nodes () const override
-  { return cast_int<dof_id_type>(_nodes.size()); }
+  { return _n_nodes; }
 
   virtual dof_id_type parallel_n_nodes () const override
-  { return cast_int<dof_id_type>(_nodes.size()); }
+  { return _n_nodes; }
 
   virtual dof_id_type max_node_id () const override
   { return cast_int<dof_id_type>(_nodes.size()); }
@@ -113,10 +113,10 @@ public:
   { _nodes.reserve (nn); }
 
   virtual dof_id_type n_elem () const override
-  { return cast_int<dof_id_type>(_elements.size()); }
+  { return _n_elem; }
 
   virtual dof_id_type parallel_n_elem () const override
-  { return cast_int<dof_id_type>(_elements.size()); }
+  { return _n_elem; }
 
   virtual dof_id_type n_active_elem () const override;
 
@@ -125,6 +125,7 @@ public:
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
   virtual unique_id_type parallel_max_unique_id () const override;
+  virtual void set_next_unique_id(unique_id_type id) override;
 #endif
 
   virtual void reserve_elem (const dof_id_type ne) override
@@ -153,6 +154,7 @@ public:
                             const dof_id_type id = DofObject::invalid_id,
                             const processor_id_type proc_id = DofObject::invalid_processor_id) override;
   virtual Node * add_node (Node * n) override;
+  virtual Node * add_node (std::unique_ptr<Node> n) override;
 
   /**
    * Insert \p Node \p n into the Mesh at a location consistent with
@@ -166,11 +168,14 @@ public:
    * storage.
    */
   virtual Node * insert_node(Node * n) override;
+  virtual Node * insert_node(std::unique_ptr<Node> n) override;
 
   virtual void delete_node (Node * n) override;
   virtual void renumber_node (dof_id_type old_id, dof_id_type new_id) override;
   virtual Elem * add_elem (Elem * e) override;
+  virtual Elem * add_elem (std::unique_ptr<Elem> e) override;
   virtual Elem * insert_elem (Elem * e) override;
+  virtual Elem * insert_elem (std::unique_ptr<Elem> e) override;
   virtual void delete_elem (Elem * e) override;
   virtual void renumber_elem (dof_id_type old_id, dof_id_type new_id) override;
 
@@ -227,6 +232,32 @@ public:
                         bool verbose=true,
                         bool use_binary_search=true,
                         bool enforce_all_nodes_match_on_boundaries=false);
+
+  /**
+   * Return IDs of representative elements of all disconnected subdomains.
+   * Subdomains are considered connected only when they are sharing at least
+   * one d-1 dimensional object (side in 2D, face in 3D), where d is
+   * the mesh dimension.
+   * The optional argument can be used for getting the subdomain IDs of all
+   * elements with element IDs as the index.
+   * This function cannot be called for a mesh with hanging nodes from
+   * adaptive mesh refinement.
+   */
+  std::vector<dof_id_type> get_disconnected_subdomains(std::vector<subdomain_id_type> * subdomain_ids = nullptr) const;
+
+  /**
+   * Return all points on boundary.
+   * The key of the returned unordered map is the ID of a representative
+   * element of all disconnected subdomains. Subdomains are considered
+   * connected only when they are sharing at least one d-1 dimensional object
+   * (side in 2D), where d is the mesh dimension.
+   * The size of the unordered map value is the number of disconnected
+   * boundaries for a subdomain. Boundaries are considered
+   * connected only when they are sharing a d-2 dimensional object.
+   * This function currently only works for 2D meshes.
+   * The points of each boundary are ordered to form an enclosure.
+   */
+  std::unordered_map<dof_id_type, std::vector<std::vector<Point>>> get_boundary_points() const;
 
 public:
   /**
@@ -480,10 +511,14 @@ protected:
    */
   std::vector<Node *> _nodes;
 
+  dof_id_type _n_nodes;
+
   /**
    * The elements in the mesh.
    */
   std::vector<Elem *> _elements;
+
+  dof_id_type _n_elem;
 
 private:
 

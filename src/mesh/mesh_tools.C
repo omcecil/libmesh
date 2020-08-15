@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,6 +20,7 @@
 // Local includes
 #include "libmesh/elem.h"
 #include "libmesh/elem_range.h"
+#include "libmesh/libmesh_logging.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/mesh_communication.h"
 #include "libmesh/mesh_tools.h"
@@ -29,9 +30,11 @@
 #include "libmesh/parallel_ghost_sync.h"
 #include "libmesh/sphere.h"
 #include "libmesh/threads.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/enum_elem_type.h"
 #include "libmesh/int_range.h"
+#include "libmesh/utility.h"
+#include "libmesh/boundary_info.h"
 
 #ifdef DEBUG
 #  include "libmesh/remote_elem.h"
@@ -198,6 +201,41 @@ void assert_semiverify_dofobj(const Parallel::Communicator & communicator,
       libmesh_assert(communicator.semiverify(p_vdid));
     }
 }
+
+
+
+#ifdef LIBMESH_ENABLE_UNIQUE_ID
+void assert_dofobj_unique_id(const Parallel::Communicator & comm,
+                             const DofObject * d,
+                             const std::unordered_set<unique_id_type> & unique_ids)
+{
+  // Duplicating some semiverify code here so we can reuse
+  // tempmin,tempmax afterward
+
+  unique_id_type tempmin, tempmax;
+  if (d)
+    {
+      tempmin = tempmax = d->unique_id();
+    }
+  else
+    {
+      TIMPI::Attributes<unique_id_type>::set_highest(tempmin);
+      TIMPI::Attributes<unique_id_type>::set_lowest(tempmax);
+    }
+  comm.min(tempmin);
+  comm.max(tempmax);
+  bool invalid = d && ((d->unique_id() != tempmin) ||
+                       (d->unique_id() != tempmax));
+  comm.max(invalid);
+
+  // First verify that everything is in sync
+  libmesh_assert(!invalid);
+
+  // Then verify that any remote id doesn't duplicate a local one.
+  if (!d && tempmin == tempmax)
+    libmesh_assert(!unique_ids.count(tempmin));
+}
+#endif // LIBMESH_ENABLE_UNIQUE_ID
 #endif // DEBUG
 
 }
@@ -246,7 +284,12 @@ dof_id_type MeshTools::weight(const MeshBase & mesh, const processor_id_type pid
 void MeshTools::build_nodes_to_elem_map (const MeshBase & mesh,
                                          std::vector<std::vector<dof_id_type>> & nodes_to_elem_map)
 {
-  nodes_to_elem_map.resize (mesh.n_nodes());
+  // A vector indexed over all nodes is too inefficient to use for a
+  // distributed mesh.  Use the unordered_map API instead.
+  if (!mesh.is_serial())
+    libmesh_deprecated();
+
+  nodes_to_elem_map.resize (mesh.max_node_id());
 
   for (const auto & elem : mesh.element_ptr_range())
     for (auto & node : elem->node_ref_range())
@@ -263,7 +306,12 @@ void MeshTools::build_nodes_to_elem_map (const MeshBase & mesh,
 void MeshTools::build_nodes_to_elem_map (const MeshBase & mesh,
                                          std::vector<std::vector<const Elem *>> & nodes_to_elem_map)
 {
-  nodes_to_elem_map.resize (mesh.n_nodes());
+  // A vector indexed over all nodes is too inefficient to use for a
+  // distributed mesh.  Use the unordered_map API instead.
+  if (!mesh.is_serial())
+    libmesh_deprecated();
+
+  nodes_to_elem_map.resize (mesh.max_node_id());
 
   for (const auto & elem : mesh.element_ptr_range())
     for (auto & node : elem->node_ref_range())
@@ -369,19 +417,6 @@ MeshTools::find_block_boundary_nodes(const MeshBase & mesh)
 }
 
 
-#ifdef LIBMESH_ENABLE_DEPRECATED
-MeshTools::BoundingBox
-MeshTools::bounding_box(const MeshBase & mesh)
-{
-  // This function is deprecated.  It simply calls
-  // create_bounding_box() and converts the result to a
-  // MeshTools::BoundingBox.
-  libmesh_deprecated();
-  return MeshTools::create_bounding_box(mesh);
-}
-#endif
-
-
 
 libMesh::BoundingBox
 MeshTools::create_bounding_box (const MeshBase & mesh)
@@ -462,18 +497,6 @@ MeshTools::create_local_bounding_box (const MeshBase & mesh)
 
 
 
-#ifdef LIBMESH_ENABLE_DEPRECATED
-MeshTools::BoundingBox
-MeshTools::processor_bounding_box (const MeshBase & mesh,
-                                   const processor_id_type pid)
-{
-  libmesh_deprecated();
-  return MeshTools::create_processor_bounding_box(mesh, pid);
-}
-#endif
-
-
-
 libMesh::BoundingBox
 MeshTools::create_processor_bounding_box (const MeshBase & mesh,
                                           const processor_id_type pid)
@@ -511,18 +534,6 @@ MeshTools::processor_bounding_sphere (const MeshBase & mesh,
 
   return Sphere (cent, .5*diag);
 }
-
-
-
-#ifdef LIBMESH_ENABLE_DEPRECATED
-MeshTools::BoundingBox
-MeshTools::subdomain_bounding_box (const MeshBase & mesh,
-                                   const subdomain_id_type sid)
-{
-  libmesh_deprecated();
-  return MeshTools::create_subdomain_bounding_box(mesh, sid);
-}
-#endif
 
 
 
@@ -917,24 +928,16 @@ void MeshTools::find_nodal_neighbors(const MeshBase &,
   // user in a std::vector.
   std::set<const Node *> neighbor_set;
 
-  // Iterators to iterate through the elements that include this node
-  auto my_elems_it = nodes_to_elem_map.find(global_id);
-  libmesh_assert(my_elems_it != nodes_to_elem_map.end());
-
-  std::vector<const Elem *>::const_iterator
-    el = my_elems_it->second.begin(),
-    end_el = my_elems_it->second.end();
+  // List of Elems attached to this node.
+  const auto & elem_vec = libmesh_map_find(nodes_to_elem_map, global_id);
 
   // Look through the elements that contain this node
   // find the local node id... then find the side that
   // node lives on in the element
   // next, look for the _other_ node on that side
   // That other node is a "nodal_neighbor"... save it
-  for (; el != end_el; ++el)
+  for (const auto & elem : elem_vec)
     {
-      // Grab an Elem pointer to use in the subsequent loop
-      const Elem * elem = *el;
-
       // We only care about active elements...
       if (elem->active())
         {
@@ -1611,9 +1614,8 @@ void libmesh_assert_contiguous_dof_ids(const MeshBase & mesh, unsigned int sysnu
   // Figure out what our local dof id range is
   for (const auto * node : mesh.local_node_ptr_range())
     {
-      for (unsigned int v=0, nvars = node->n_vars(sysnum);
-           v != nvars; ++v)
-        for (unsigned int c=0; c != node->n_comp(sysnum, v); ++c)
+      for (auto v : make_range(node->n_vars(sysnum)))
+        for (auto c : make_range(node->n_comp(sysnum, v)))
           {
             dof_id_type id = node->dof_number(sysnum, v, c);
             min_dof_id = std::min (min_dof_id, id);
@@ -1626,9 +1628,8 @@ void libmesh_assert_contiguous_dof_ids(const MeshBase & mesh, unsigned int sysnu
     {
       if (node->processor_id() == mesh.processor_id())
         continue;
-      for (unsigned int v=0, nvars = node->n_vars(sysnum);
-           v != nvars; ++v)
-        for (unsigned int c=0; c != node->n_comp(sysnum, v); ++c)
+      for (auto v : make_range(node->n_vars(sysnum)))
+        for (auto c : make_range(node->n_comp(sysnum, v)))
           {
             dof_id_type id = node->dof_number(sysnum, v, c);
             libmesh_assert (id < min_dof_id ||
@@ -1645,16 +1646,39 @@ void libmesh_assert_valid_unique_ids(const MeshBase & mesh)
 
   libmesh_parallel_only(mesh.comm());
 
+  // First collect all the unique_ids we can see and make sure there's
+  // no duplicates
+  std::unordered_set<unique_id_type> semilocal_unique_ids;
+  dof_id_type n_semilocal_obj = 0;
+
+  for (auto const & elem : mesh.active_element_ptr_range())
+    {
+      libmesh_assert (!semilocal_unique_ids.count(elem->unique_id()));
+      semilocal_unique_ids.insert(elem->unique_id());
+      ++n_semilocal_obj;
+    }
+
+  for (auto const & node : mesh.node_ptr_range())
+    {
+      libmesh_assert (!semilocal_unique_ids.count(node->unique_id()));
+      semilocal_unique_ids.insert(node->unique_id());
+      ++n_semilocal_obj;
+    }
+
+  // Then make sure elements are all in sync and remote elements don't
+  // duplicate semilocal
+
   dof_id_type pmax_elem_id = mesh.max_elem_id();
   mesh.comm().max(pmax_elem_id);
 
   for (dof_id_type i=0; i != pmax_elem_id; ++i)
     {
       const Elem * elem = mesh.query_elem_ptr(i);
-      const unique_id_type unique_id = elem ? elem->unique_id() : 0;
-      const unique_id_type * uid_ptr = elem ? &unique_id : nullptr;
-      libmesh_assert(mesh.comm().semiverify(uid_ptr));
+      assert_dofobj_unique_id(mesh.comm(), elem, semilocal_unique_ids);
     }
+
+  // Then make sure nodes are all in sync and remote elements don't
+  // duplicate semilocal
 
   dof_id_type pmax_node_id = mesh.max_node_id();
   mesh.comm().max(pmax_node_id);
@@ -1662,9 +1686,7 @@ void libmesh_assert_valid_unique_ids(const MeshBase & mesh)
   for (dof_id_type i=0; i != pmax_node_id; ++i)
     {
       const Node * node = mesh.query_node_ptr(i);
-      const unique_id_type unique_id = node ? node->unique_id() : 0;
-      const unique_id_type * uid_ptr = node ? &unique_id : nullptr;
-      libmesh_assert(mesh.comm().semiverify(uid_ptr));
+      assert_dofobj_unique_id(mesh.comm(), node, semilocal_unique_ids);
     }
 }
 #endif
@@ -1790,8 +1812,8 @@ void libmesh_assert_parallel_consistent_procids<Elem>(const MeshBase & mesh)
   // along and just figure out new max ids ourselves.
   dof_id_type parallel_max_elem_id = 0;
   for (const auto & elem : mesh.element_ptr_range())
-    parallel_max_elem_id = std::max(parallel_max_elem_id,
-                                    elem->id()+1);
+    parallel_max_elem_id = std::max<dof_id_type>(parallel_max_elem_id,
+                                                 elem->id()+1);
   mesh.comm().max(parallel_max_elem_id);
 
   // Check processor ids for consistency between processors
@@ -1843,8 +1865,8 @@ void libmesh_assert_topology_consistent_procids<Node>(const MeshBase & mesh)
   // ourselves.
   dof_id_type parallel_max_node_id = 0;
   for (const auto & node : mesh.node_ptr_range())
-    parallel_max_node_id = std::max(parallel_max_node_id,
-                                    node->id()+1);
+    parallel_max_node_id = std::max<dof_id_type>(parallel_max_node_id,
+                                                 node->id()+1);
   mesh.comm().max(parallel_max_node_id);
 
 
@@ -1932,8 +1954,8 @@ void libmesh_assert_parallel_consistent_procids<Node>(const MeshBase & mesh)
   // ourselves.
   dof_id_type parallel_max_node_id = 0;
   for (const auto & node : mesh.node_ptr_range())
-    parallel_max_node_id = std::max(parallel_max_node_id,
-                                    node->id()+1);
+    parallel_max_node_id = std::max<dof_id_type>(parallel_max_node_id,
+                                                 node->id()+1);
   mesh.comm().max(parallel_max_node_id);
 
   std::vector<bool> node_touched_by_anyone(parallel_max_node_id, false);
@@ -2324,7 +2346,7 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
           const dof_id_type id = node.id();
           const proc_id_map_type::iterator it = new_proc_ids.find(id);
           if (it == new_proc_ids.end())
-            new_proc_ids.insert(std::make_pair(id,pid));
+            new_proc_ids.emplace(id, pid);
           else
             it->second = node.choose_processor_id(it->second, pid);
         }
@@ -2342,7 +2364,7 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
         continue;
       const processor_id_type pid = it->second;
       if (node->processor_id() != DofObject::invalid_processor_id)
-        ids_to_push[node->processor_id()].push_back(std::make_pair(id, pid));
+        ids_to_push[node->processor_id()].emplace_back(id, pid);
     }
 
   auto action_functor =
@@ -2356,7 +2378,7 @@ void MeshTools::correct_node_proc_ids (MeshBase & mesh)
           const processor_id_type pid = p.second;
           const proc_id_map_type::iterator it = new_proc_ids.find(id);
           if (it == new_proc_ids.end())
-            new_proc_ids.insert(std::make_pair(id,pid));
+            new_proc_ids.emplace(id, pid);
           else
             {
               const Node & node = mesh.node_ref(id);

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,6 @@
 #include "libmesh/nonlinear_implicit_system.h"
 #include "libmesh/libmesh.h"
 #include "libmesh/parallel_object.h"
-#include "libmesh/auto_ptr.h" // deprecated
 
 #ifdef LIBMESH_FORWARD_DECLARE_ENUMS
 namespace libMesh
@@ -309,8 +308,17 @@ public:
    * stopping condition.
    *
    */
-  Real absolute_residual_tolerance;
-  Real relative_residual_tolerance;
+  double absolute_residual_tolerance;
+  double relative_residual_tolerance;
+
+  /**
+   * The NonlinearSolver should exit if the residual becomes greater
+   * than the initial residual times the divergence_tolerance.
+   *
+   * Users should adjust this tolerances to prevent divergence of the
+   * NonlinearSolver.
+   */
+  double divergence_tolerance;
 
   /**
    * The NonlinearSolver should exit after the full nonlinear step norm is
@@ -323,8 +331,8 @@ public:
    *
    * \note Not all NonlinearSolvers support \p relative_step_tolerance!
    */
-  Real absolute_step_tolerance;
-  Real relative_step_tolerance;
+  double absolute_step_tolerance;
+  double relative_step_tolerance;
 
   /**
    * Each linear solver step should exit after \p max_linear_iterations
@@ -336,12 +344,12 @@ public:
    * Any required linear solves will at first be done with this tolerance;
    * the NonlinearSolver may tighten the tolerance for later solves.
    */
-  Real initial_linear_tolerance;
+  double initial_linear_tolerance;
 
   /**
    * The tolerance for linear solves is kept above this minimum
    */
-  Real minimum_linear_tolerance;
+  double minimum_linear_tolerance;
 
   /**
    * After a call to solve this will reflect whether or not the nonlinear
@@ -408,6 +416,7 @@ NonlinearSolver<T>::NonlinearSolver (sys_type & s) :
   max_function_evaluations(0),
   absolute_residual_tolerance(0),
   relative_residual_tolerance(0),
+  divergence_tolerance(0),
   absolute_step_tolerance(0),
   relative_step_tolerance(0),
   max_linear_iterations(0),

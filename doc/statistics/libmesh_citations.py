@@ -25,23 +25,23 @@ This script creates a bar graph of the number of "papers using libmesh" by year.
 # directory. Note: you must have bibtex2html in your PATH in order to
 # run this script.
 data = [
-'\'04', 5,
+'\'04', 7,
 '\'05', 2,
-'\'06', 14,
-'\'07', 8,
-'\'08', 23,
-'\'09', 29,
-'\'10', 26,
-'\'11', 34,
-'\'12', 56,
-'\'13', 82,
-'\'14', 74,
-'\'15', 94,
-'\'16', 125,
-'\'17', 133,
-'\'18', 149,
-'\'19', 44,
-'T', 102,
+'\'06', 15,
+'\'07', 10,
+'\'08', 30,
+'\'09', 31,
+'\'10', 30,
+'\'11', 40,
+'\'12', 57,
+'\'13', 89,
+'\'14', 81,
+'\'15', 108,
+'\'16', 145,
+'\'17', 153,
+'\'18', 158,
+'\'19', 128,
+'\'20', 122,
     ]
 
 # Extract the x-axis labels from the data array
@@ -69,11 +69,7 @@ width = 0.8
 # The colors used come from sns.color_palette("muted").as_hex() They
 # are the "same basic order of hues as the default matplotlib color
 # cycle but more attractive colors."
-ax.bar(x[0:N-1], n_papers[0:N-1], width, color=u'#4878cf', align='center')
-ax.bar(x[-1],    n_papers[-1],    width, color=u'#6acc65', align='center')
-
-# Label the x-axis
-plt.xlabel('T=PhD, MS, and BS Theses')
+ax.bar(x[0:N], n_papers[0:N], width, color=u'#4878cf', align='center')
 
 # Set up the xtick locations and labels.  Note that you have to offset
 # the position of the ticks by width/2, where width is the width of

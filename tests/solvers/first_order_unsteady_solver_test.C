@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/equation_systems.h>
 #include <libmesh/mesh.h>
 #include <libmesh/mesh_generation.h>
@@ -12,19 +6,7 @@
 #include <libmesh/euler_solver.h>
 #include <libmesh/euler2_solver.h>
 
-#include "test_comm.h"
-
 #include "solvers/time_solver_test_common.h"
-
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 
 //! Implements ODE: 2.1\dot{u} = 5, u(0) = 0;
@@ -41,10 +23,10 @@ public:
   { return 5.0; }
 
   virtual Number M( FEMContext & /*context*/, unsigned int /*qp*/ )
-  { return 2.1; }
+  { return Real(21)/10; }
 
   virtual Number u( Real t )
-  { return 5.0/2.1*t; }
+  { return Real(50)/21*t; }
 };
 
 //! Implements ODE: 5.0\dot{u} = 2.0t, u(0) = 0;
@@ -64,7 +46,7 @@ public:
   { return 5.0; }
 
   virtual Number u( Real t )
-  { return 1.0/5.0*t*t; }
+  { return 1/Real(5)*t*t; }
 };
 
 template<typename TimeSolverType>
@@ -93,8 +75,10 @@ class EulerSolverTest : public CppUnit::TestCase,
 public:
   CPPUNIT_TEST_SUITE( EulerSolverTest );
 
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testEulerSolverConstantFirstOrderODE );
   CPPUNIT_TEST( testEulerSolverLinearTimeFirstOrderODE );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 
@@ -124,8 +108,10 @@ class Euler2SolverTest : public CppUnit::TestCase,
 public:
   CPPUNIT_TEST_SUITE( Euler2SolverTest );
 
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testEuler2SolverConstantFirstOrderODE );
   CPPUNIT_TEST( testEuler2SolverLinearTimeFirstOrderODE );
+#endif
 
   CPPUNIT_TEST_SUITE_END();
 

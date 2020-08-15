@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -89,9 +89,8 @@ void MatlabIO::read_stream(std::istream & in)
 
     for (unsigned int i=0; i<nElem; i++)
       {
-        Elem * elem = new Tri3; // Always build a triangle
-        elem->set_id(i);
-        the_mesh.add_elem (elem);
+        // Always build a triangle
+        Elem * elem = the_mesh.add_elem(Elem::build_with_id(TRI3, i));
 
         for (unsigned int n=0; n<3; n++)  // Always read three 3 nodes
           {

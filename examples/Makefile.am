@@ -22,6 +22,7 @@ SUBDIRS = \
 	fem_system/fem_system_ex2 \
 	fem_system/fem_system_ex3 \
 	fem_system/fem_system_ex4 \
+	fem_system/fem_system_ex5 \
 	solution_transfer/solution_transfer_ex1 \
 	miscellaneous/miscellaneous_ex1 \
 	miscellaneous/miscellaneous_ex2 \
@@ -63,7 +64,8 @@ SUBDIRS = \
 	vector_fe/vector_fe_ex1 \
 	vector_fe/vector_fe_ex2 \
 	vector_fe/vector_fe_ex3 \
-        vector_fe/vector_fe_ex4
+        vector_fe/vector_fe_ex4 \
+        vector_fe/vector_fe_ex5
 
 AUTOMAKE_OPTIONS = subdir-objects
 

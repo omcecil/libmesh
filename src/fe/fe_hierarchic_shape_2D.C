@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -29,16 +29,25 @@ namespace
 {
 using namespace libMesh;
 
+Real fe_triangle_helper (const Elem & elem,
+                         const Real edgenumerator,
+                         const Real crossval,
+                         const unsigned int basisorder,
+                         const Order totalorder,
+                         const unsigned int noden);
+
 Real fe_hierarchic_2D_shape(const Elem * elem,
                             const Order order,
                             const unsigned int i,
-                            const Point & p);
+                            const Point & p,
+                            const bool add_p_level);
 
 Real fe_hierarchic_2D_shape_deriv(const Elem * elem,
                                   const Order order,
                                   const unsigned int i,
                                   const unsigned int j,
-                                  const Point & p);
+                                  const Point & p,
+                                  const bool add_p_level);
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -46,7 +55,8 @@ Real fe_hierarchic_2D_shape_second_deriv(const Elem * elem,
                                          const Order order,
                                          const unsigned int i,
                                          const unsigned int j,
-                                         const Point & p);
+                                         const Point & p,
+                                         const bool add_p_level);
 
 #endif // LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -56,6 +66,11 @@ Real fe_hierarchic_2D_shape_second_deriv(const Elem * elem,
 
 namespace libMesh
 {
+
+
+LIBMESH_DEFAULT_VECTORIZED_FE(2,HIERARCHIC)
+LIBMESH_DEFAULT_VECTORIZED_FE(2,L2_HIERARCHIC)
+
 
 template <>
 Real FE<2,HIERARCHIC>::shape(const ElemType,
@@ -85,22 +100,45 @@ template <>
 Real FE<2,HIERARCHIC>::shape(const Elem * elem,
                              const Order order,
                              const unsigned int i,
-                             const Point & p)
+                             const Point & p,
+                             const bool add_p_level)
 {
-  return fe_hierarchic_2D_shape(elem, order, i, p);
+  return fe_hierarchic_2D_shape(elem, order, i, p, add_p_level);
 }
 
+
+
+template <>
+Real FE<2,HIERARCHIC>::shape(const FEType fet,
+                             const Elem * elem,
+                             const unsigned int i,
+                             const Point & p,
+                             const bool add_p_level)
+{
+  return fe_hierarchic_2D_shape(elem, fet.order, i, p, add_p_level);
+}
 
 
 template <>
 Real FE<2,L2_HIERARCHIC>::shape(const Elem * elem,
                                 const Order order,
                                 const unsigned int i,
-                                const Point & p)
+                                const Point & p,
+                                const bool add_p_level)
 {
-  return fe_hierarchic_2D_shape(elem, order, i, p);
+  return fe_hierarchic_2D_shape(elem, order, i, p, add_p_level);
 }
 
+
+template <>
+Real FE<2,L2_HIERARCHIC>::shape(const FEType fet,
+                                const Elem * elem,
+                                const unsigned int i,
+                                const Point & p,
+                                const bool add_p_level)
+{
+  return fe_hierarchic_2D_shape(elem, fet.order, i, p, add_p_level);
+}
 
 
 template <>
@@ -134,10 +172,24 @@ Real FE<2,HIERARCHIC>::shape_deriv(const Elem * elem,
                                    const Order order,
                                    const unsigned int i,
                                    const unsigned int j,
-                                   const Point & p)
+                                   const Point & p,
+                                   const bool add_p_level)
 {
-  return fe_hierarchic_2D_shape_deriv(elem, order, i, j, p);
+  return fe_hierarchic_2D_shape_deriv(elem, order, i, j, p, add_p_level);
 }
+
+
+template <>
+Real FE<2,HIERARCHIC>::shape_deriv(const FEType fet,
+                                   const Elem * elem,
+                                   const unsigned int i,
+                                   const unsigned int j,
+                                   const Point & p,
+                                   const bool add_p_level)
+{
+  return fe_hierarchic_2D_shape_deriv(elem, fet.order, i, j, p, add_p_level);
+}
+
 
 
 
@@ -146,11 +198,23 @@ Real FE<2,L2_HIERARCHIC>::shape_deriv(const Elem * elem,
                                       const Order order,
                                       const unsigned int i,
                                       const unsigned int j,
-                                      const Point & p)
+                                      const Point & p,
+                                      const bool add_p_level)
 {
-  return fe_hierarchic_2D_shape_deriv(elem, order, i, j, p);
+  return fe_hierarchic_2D_shape_deriv(elem, order, i, j, p, add_p_level);
 }
 
+
+template <>
+Real FE<2,L2_HIERARCHIC>::shape_deriv(const FEType fet,
+                                      const Elem * elem,
+                                      const unsigned int i,
+                                      const unsigned int j,
+                                      const Point & p,
+                                      const bool add_p_level)
+{
+  return fe_hierarchic_2D_shape_deriv(elem, fet.order, i, j, p, add_p_level);
+}
 
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
@@ -186,11 +250,23 @@ Real FE<2,HIERARCHIC>::shape_second_deriv(const Elem * elem,
                                           const Order order,
                                           const unsigned int i,
                                           const unsigned int j,
-                                          const Point & p)
+                                          const Point & p,
+                                          const bool add_p_level)
 {
-  return fe_hierarchic_2D_shape_second_deriv(elem, order, i, j, p);
+  return fe_hierarchic_2D_shape_second_deriv(elem, order, i, j, p, add_p_level);
 }
 
+
+template <>
+Real FE<2,HIERARCHIC>::shape_second_deriv(const FEType fet,
+                                          const Elem * elem,
+                                          const unsigned int i,
+                                          const unsigned int j,
+                                          const Point & p,
+                                          const bool add_p_level)
+{
+  return fe_hierarchic_2D_shape_second_deriv(elem, fet.order, i, j, p, add_p_level);
+}
 
 
 template <>
@@ -198,9 +274,22 @@ Real FE<2,L2_HIERARCHIC>::shape_second_deriv(const Elem * elem,
                                              const Order order,
                                              const unsigned int i,
                                              const unsigned int j,
-                                             const Point & p)
+                                             const Point & p,
+                                             const bool add_p_level)
 {
-  return fe_hierarchic_2D_shape_second_deriv(elem, order, i, j, p);
+  return fe_hierarchic_2D_shape_second_deriv(elem, order, i, j, p, add_p_level);
+}
+
+
+template <>
+Real FE<2,L2_HIERARCHIC>::shape_second_deriv(const FEType fet,
+                                             const Elem * elem,
+                                             const unsigned int i,
+                                             const unsigned int j,
+                                             const Point & p,
+                                             const bool add_p_level)
+{
+  return fe_hierarchic_2D_shape_second_deriv(elem, fet.order, i, j, p, add_p_level);
 }
 
 #endif //  LIBMESH_ENABLE_SECOND_DERIVATIVES
@@ -213,14 +302,47 @@ namespace
 {
 using namespace libMesh;
 
+Real fe_triangle_helper (const Elem & elem,
+                         const Real edgenumerator,
+                         const Real crossval,
+                         const unsigned int basisorder,
+                         const Order totalorder,
+                         const unsigned int noden)
+{
+  // Get factors to account for edge-flipping
+  Real flip = 1;
+  if (basisorder%2 && (elem.point(noden) > elem.point((noden+1)%3)))
+    flip = -1.;
+
+  // Avoid NaN around vertices!
+  if (crossval == 0.)
+    {
+      unsigned int basisfactorial = 1.;
+      for (unsigned int n=2; n <= basisorder; ++n)
+        basisfactorial *= n;
+
+      return std::pow(edgenumerator, basisorder) / basisfactorial;
+    }
+  // FIXME - what happens with roundoff when 0 < crossval < O(epsilon)?
+
+  const Real edgeval = edgenumerator / crossval;
+  const Real crossfunc = std::pow(crossval, basisorder);
+
+  return flip * crossfunc *
+    FE<1,HIERARCHIC>::shape(EDGE3, totalorder,
+                            basisorder, edgeval);
+}
+
 Real fe_hierarchic_2D_shape(const Elem * elem,
                             const Order order,
                             const unsigned int i,
-                            const Point & p)
+                            const Point & p,
+                            const bool add_p_level)
 {
   libmesh_assert(elem);
 
-  const Order totalorder = static_cast<Order>(order+elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order+add_p_level*elem->p_level());
   libmesh_assert_greater (totalorder, 0);
 
   switch (elem->type())
@@ -246,66 +368,33 @@ Real fe_hierarchic_2D_shape(const Elem * elem,
         // Edge DoFs
         else if (i < totalorder + 2u)
           {
-            // Avoid returning NaN on vertices!
-            if (zeta0 + zeta1 == 0.)
-              return 0.;
-
             const unsigned int basisorder = i - 1;
-            // Get factors to account for edge-flipping
-            Real f0 = 1;
-            if (basisorder%2 && (elem->point(0) > elem->point(1)))
-              f0 = -1.;
 
-            Real edgeval = (zeta1 - zeta0) / (zeta1 + zeta0);
-            Real crossfunc = zeta0 + zeta1;
-            for (unsigned int n=1; n != basisorder; ++n)
-              crossfunc *= (zeta0 + zeta1);
+            const Real crossval = zeta0 + zeta1;
+            const Real edgenumerator = zeta1 - zeta0;
 
-            return f0 * crossfunc *
-              FE<1,HIERARCHIC>::shape(EDGE3, totalorder,
-                                      basisorder, edgeval);
+            return fe_triangle_helper(*elem, edgenumerator, crossval,
+                                      basisorder, totalorder, 0);
           }
         else if (i < 2u*totalorder + 1)
           {
-            // Avoid returning NaN on vertices!
-            if (zeta1 + zeta2 == 0.)
-              return 0.;
-
             const unsigned int basisorder = i - totalorder;
-            // Get factors to account for edge-flipping
-            Real f1 = 1;
-            if (basisorder%2 && (elem->point(1) > elem->point(2)))
-              f1 = -1.;
 
-            Real edgeval = (zeta2 - zeta1) / (zeta2 + zeta1);
-            Real crossfunc = zeta2 + zeta1;
-            for (unsigned int n=1; n != basisorder; ++n)
-              crossfunc *= (zeta2 + zeta1);
+            const Real crossval = zeta2 + zeta1;
+            const Real edgenumerator = zeta2 - zeta1;
 
-            return f1 * crossfunc *
-              FE<1,HIERARCHIC>::shape(EDGE3, totalorder,
-                                      basisorder, edgeval);
+            return fe_triangle_helper(*elem, edgenumerator, crossval,
+                                      basisorder, totalorder, 1);
           }
         else if (i < 3u*totalorder)
           {
-            // Avoid returning NaN on vertices!
-            if (zeta0 + zeta2 == 0.)
-              return 0.;
-
             const unsigned int basisorder = i - (2u*totalorder) + 1;
-            // Get factors to account for edge-flipping
-            Real f2 = 1;
-            if (basisorder%2 && (elem->point(2) > elem->point(0)))
-              f2 = -1.;
 
-            Real edgeval = (zeta0 - zeta2) / (zeta0 + zeta2);
-            Real crossfunc = zeta0 + zeta2;
-            for (unsigned int n=1; n != basisorder; ++n)
-              crossfunc *= (zeta0 + zeta2);
+            const Real crossval = zeta0 + zeta2;
+            const Real edgenumerator = zeta0 - zeta2;
 
-            return f2 * crossfunc *
-              FE<1,HIERARCHIC>::shape(EDGE3, totalorder,
-                                      basisorder, edgeval);
+            return fe_triangle_helper(*elem, edgenumerator, crossval,
+                                      basisorder, totalorder, 2);
           }
         // Interior DoFs
         else
@@ -403,13 +492,15 @@ Real fe_hierarchic_2D_shape_deriv(const Elem * elem,
                                   const Order order,
                                   const unsigned int i,
                                   const unsigned int j,
-                                  const Point & p)
+                                  const Point & p,
+                                  const bool add_p_level)
 {
   libmesh_assert(elem);
 
   const ElemType type = elem->type();
 
-  const Order totalorder = static_cast<Order>(order+elem->p_level());
+  const Order totalorder =
+    static_cast<Order>(order+add_p_level*elem->p_level());
 
   libmesh_assert_greater (totalorder, 0);
 
@@ -543,7 +634,8 @@ Real fe_hierarchic_2D_shape_second_deriv(const Elem * elem,
                                          const Order order,
                                          const unsigned int i,
                                          const unsigned int j,
-                                         const Point & p)
+                                         const Point & p,
+                                         const bool add_p_level)
 {
   libmesh_assert(elem);
 
@@ -585,8 +677,8 @@ Real fe_hierarchic_2D_shape_second_deriv(const Elem * elem,
       libmesh_error_msg("Invalid derivative index j = " << j);
     }
 
-  return (FE<2,HIERARCHIC>::shape_deriv(elem, order, i, prevj, pp) -
-          FE<2,HIERARCHIC>::shape_deriv(elem, order, i, prevj, pm)
+  return (FE<2,HIERARCHIC>::shape_deriv(elem, order, i, prevj, pp, add_p_level) -
+          FE<2,HIERARCHIC>::shape_deriv(elem, order, i, prevj, pm, add_p_level)
           )/2./eps;
 }
 

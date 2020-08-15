@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,7 @@
 // Local Includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/compare_types.h"
+#include "libmesh/int_range.h"
 
 // C++ includes
 
@@ -31,6 +32,7 @@ namespace libMesh
 
 // Forward declarations
 template <typename T> class DenseVectorBase;
+template <typename T> class DenseVector;
 
 /**
  * Defines an abstract dense matrix base class for use in Finite Element-type
@@ -139,6 +141,11 @@ public:
   add (const T2 factor,
        const DenseMatrixBase<T3> & mat);
 
+  /**
+   * Return the matrix diagonal
+   */
+  DenseVector<T> diagonal() const;
+
 protected:
 
   /**
@@ -191,8 +198,8 @@ DenseMatrixBase<T>::add (const T2 factor,
   libmesh_assert_equal_to (this->m(), mat.m());
   libmesh_assert_equal_to (this->n(), mat.n());
 
-  for (unsigned int j=0; j<this->n(); j++)
-    for (unsigned int i=0; i<this->m(); i++)
+  for (auto j : make_range(this->n()))
+    for (auto i : make_range(this->m()))
       this->el(i,j) += factor*mat.el(i,j);
 }
 

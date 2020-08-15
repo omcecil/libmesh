@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -140,7 +140,7 @@ public:
    * The tolerance for linear solves is kept below this multiplier (which
    * defaults to 1e-3) times the norm of the current nonlinear residual
    */
-  Real linear_tolerance_multiplier;
+  double linear_tolerance_multiplier;
 
 protected:
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,21 +17,25 @@
 
 
 
+// Local includes
+#include "libmesh/distributed_vector.h"
+
+// libMesh includes
+#include "libmesh/dense_vector.h"
+#include "libmesh/dense_subvector.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh_common.h"
+#include "libmesh/tensor_tools.h"
+
+// TIMPI includes
+#include "timpi/parallel_implementation.h"
+#include "timpi/parallel_sync.h"
 
 // C++ includes
 #include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
 #include <cmath> // for std::abs
 #include <limits> // std::numeric_limits<T>::min()
 
-// Local Includes
-#include "libmesh/distributed_vector.h"
-#include "libmesh/dense_vector.h"
-#include "libmesh/dense_subvector.h"
-#include "libmesh/parallel.h"
-#include "libmesh/parallel_sync.h"
-#include "libmesh/tensor_tools.h"
-#include "libmesh/int_range.h"
 
 namespace libMesh
 {
@@ -163,6 +167,21 @@ NumericVector<T> & DistributedVector<T>::operator -= (const NumericVector<T> & v
 
 
 template <typename T>
+NumericVector<T> & DistributedVector<T>::operator *= (const NumericVector<T> & v)
+{
+  libmesh_assert_equal_to(size(), v.size());
+
+  const DistributedVector<T> & v_vec = cast_ref<const DistributedVector<T> &>(v);
+
+  for (auto i : index_range(_values))
+    _values[i] *= v_vec._values[i];
+
+  return *this;
+}
+
+
+
+template <typename T>
 NumericVector<T> & DistributedVector<T>::operator /= (const NumericVector<T> & v)
 {
   libmesh_assert_equal_to(size(), v.size());
@@ -239,8 +258,7 @@ void DistributedVector<T>::add (const T a, const NumericVector<T> & v_in)
 
   // Make sure the NumericVector passed in is really a DistributedVector
   const DistributedVector<T> * v = cast_ptr<const DistributedVector<T> *>(&v_in);
-  if (!v)
-    libmesh_error_msg("Cannot add different types of NumericVectors.");
+  libmesh_error_msg_if(!v, "Cannot add different types of NumericVectors.");
 
   for (auto i : index_range(_values))
     _values[i] += a * v->_values[i];
@@ -365,7 +383,7 @@ DistributedVector<T>::operator = (const std::vector<T> & v)
     _values = v;
 
   else if (v.size() == size())
-    for (std::size_t i=first_local_index(); i<last_local_index(); i++)
+    for (auto i : index_range(*this))
       _values[i-first_local_index()] = v[i];
 
   else

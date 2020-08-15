@@ -93,8 +93,16 @@ target_triplet = @target@
 @LIBMESH_ENABLE_FPARSER_TRUE@am__append_2 = contrib/fparser.hh
 subdir = include
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
-	$(top_srcdir)/m4/all_static.m4 \
+am__aclocal_m4_deps =  \
+	$(top_srcdir)/m4/autoconf-submodule/acsm_code_coverage.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/acsm_compiler_control_args.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/acsm_mpi.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/acsm_scrape_petsc_configure.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/acsm_summarize_env.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/acsm_test_sanitize_flags.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/ax_prefix_config_h.m4 \
+	$(top_srcdir)/m4/autoconf-submodule/ax_split_version.m4 \
+	$(top_srcdir)/m4/ac_cxx_rtti.m4 $(top_srcdir)/m4/all_static.m4 \
 	$(top_srcdir)/m4/ax_boost_base.m4 \
 	$(top_srcdir)/m4/ax_check_compile_flag.m4 \
 	$(top_srcdir)/m4/ax_compiler_vendor.m4 \
@@ -102,13 +110,10 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
 	$(top_srcdir)/m4/ax_gcc_archflag.m4 \
 	$(top_srcdir)/m4/ax_gcc_x86_cpuid.m4 \
 	$(top_srcdir)/m4/ax_openmp.m4 $(top_srcdir)/m4/ax_pthread.m4 \
-	$(top_srcdir)/m4/ax_split_version.m4 \
 	$(top_srcdir)/m4/ax_tls.m4 $(top_srcdir)/m4/backtrace.m4 \
 	$(top_srcdir)/m4/boost.m4 $(top_srcdir)/m4/capnproto.m4 \
 	$(top_srcdir)/m4/compiler.m4 \
-	$(top_srcdir)/m4/config_environment.m4 \
-	$(top_srcdir)/m4/config_summary.m4 \
-	$(top_srcdir)/m4/coverage.m4 $(top_srcdir)/m4/cppunit.m4 \
+	$(top_srcdir)/m4/config_summary.m4 $(top_srcdir)/m4/cppunit.m4 \
 	$(top_srcdir)/m4/curl.m4 $(top_srcdir)/m4/cxx11.m4 \
 	$(top_srcdir)/m4/cxx17.m4 $(top_srcdir)/m4/demangle.m4 \
 	$(top_srcdir)/m4/dlopen.m4 $(top_srcdir)/m4/eigen.m4 \
@@ -125,20 +130,19 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_cxx_rtti.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/locale.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/metis.m4 $(top_srcdir)/m4/mpi.m4 \
-	$(top_srcdir)/m4/namespaces.m4 $(top_srcdir)/m4/nanoflann.m4 \
-	$(top_srcdir)/m4/nemesis.m4 $(top_srcdir)/m4/netcdf.m4 \
-	$(top_srcdir)/m4/nlopt.m4 $(top_srcdir)/m4/parmetis.m4 \
-	$(top_srcdir)/m4/petsc.m4 $(top_srcdir)/m4/precision.m4 \
-	$(top_srcdir)/m4/prefix_config.m4 $(top_srcdir)/m4/qhull.m4 \
-	$(top_srcdir)/m4/sanitize.m4 $(top_srcdir)/m4/sfc.m4 \
-	$(top_srcdir)/m4/slepc.m4 $(top_srcdir)/m4/sstream.m4 \
-	$(top_srcdir)/m4/strstream.m4 $(top_srcdir)/m4/tbb.m4 \
-	$(top_srcdir)/m4/tecio.m4 $(top_srcdir)/m4/tecplot.m4 \
-	$(top_srcdir)/m4/tetgen.m4 $(top_srcdir)/m4/threads.m4 \
-	$(top_srcdir)/m4/triangle.m4 $(top_srcdir)/m4/trilinos.m4 \
-	$(top_srcdir)/m4/unordered.m4 $(top_srcdir)/m4/vtk.m4 \
-	$(top_srcdir)/m4/xdr.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/metis.m4 $(top_srcdir)/m4/namespaces.m4 \
+	$(top_srcdir)/m4/nanoflann.m4 $(top_srcdir)/m4/nemesis.m4 \
+	$(top_srcdir)/m4/netcdf.m4 $(top_srcdir)/m4/nlopt.m4 \
+	$(top_srcdir)/m4/parmetis.m4 $(top_srcdir)/m4/petsc.m4 \
+	$(top_srcdir)/m4/precision.m4 $(top_srcdir)/m4/qhull.m4 \
+	$(top_srcdir)/m4/sfc.m4 $(top_srcdir)/m4/slepc.m4 \
+	$(top_srcdir)/m4/sstream.m4 $(top_srcdir)/m4/strstream.m4 \
+	$(top_srcdir)/m4/tbb.m4 $(top_srcdir)/m4/tecio.m4 \
+	$(top_srcdir)/m4/tecplot.m4 $(top_srcdir)/m4/tetgen.m4 \
+	$(top_srcdir)/m4/threads.m4 $(top_srcdir)/m4/triangle.m4 \
+	$(top_srcdir)/m4/trilinos.m4 $(top_srcdir)/m4/unordered.m4 \
+	$(top_srcdir)/m4/vtk.m4 $(top_srcdir)/m4/xdr.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(include_HEADERS) \
@@ -380,6 +384,7 @@ LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
+LOCAL_CXX = @LOCAL_CXX@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
@@ -395,13 +400,10 @@ ML_INCLUDES = @ML_INCLUDES@
 ML_LIBS = @ML_LIBS@
 ML_MAKEFILE_EXPORT = @ML_MAKEFILE_EXPORT@
 MPCXX = @MPCXX@
-MPI = @MPI@
 MPI_IMPL = @MPI_IMPL@
-MPI_INCLUDES_PATH = @MPI_INCLUDES_PATH@
-MPI_INCLUDES_PATHS = @MPI_INCLUDES_PATHS@
+MPI_INCLUDES = @MPI_INCLUDES@
+MPI_LDFLAGS = @MPI_LDFLAGS@
 MPI_LIBS = @MPI_LIBS@
-MPI_LIBS_PATH = @MPI_LIBS_PATH@
-MPI_LIBS_PATHS = @MPI_LIBS_PATHS@
 NANOFLANN_INCLUDE = @NANOFLANN_INCLUDE@
 NEMESIS_INCLUDE = @NEMESIS_INCLUDE@
 NETCDF_INCLUDE = @NETCDF_INCLUDE@
@@ -538,6 +540,7 @@ libmesh_installed_LIBS = @libmesh_installed_LIBS@
 libmesh_optional_INCLUDES = @libmesh_optional_INCLUDES@
 libmesh_optional_LIBS = @libmesh_optional_LIBS@
 libmesh_pkgconfig_requires = @libmesh_pkgconfig_requires@
+libmesh_precision_LIBS = @libmesh_precision_LIBS@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mandir = @mandir@
@@ -546,6 +549,7 @@ oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 petscmajor = @petscmajor@
 petscmajorminor = @petscmajorminor@
+petscminor = @petscminor@
 petscversion = @petscversion@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
@@ -600,12 +604,12 @@ include_HEADERS = \
         base/dof_map.h \
         base/dof_object.h \
         base/factory.h \
+        base/float128_shims.h \
         base/getpot.h \
         base/ghost_point_neighbors.h \
         base/ghosting_functor.h \
         base/id_types.h \
         base/libmesh.h \
-        base/libmesh_C_isnan.h \
         base/libmesh_base.h \
         base/libmesh_common.h \
         base/libmesh_documentation.h \
@@ -664,6 +668,8 @@ include_HEADERS = \
         fe/fe_base.h \
         fe/fe_compute_data.h \
         fe/fe_interface.h \
+        fe/fe_interface_macros.h \
+        fe/fe_lagrange_shape_1D.h \
         fe/fe_macro.h \
         fe/fe_map.h \
         fe/fe_transformation_base.h \
@@ -676,6 +682,7 @@ include_HEADERS = \
         fe/inf_fe_instantiate_2D.h \
         fe/inf_fe_instantiate_3D.h \
         fe/inf_fe_macro.h \
+        fe/inf_fe_map.h \
         geom/bounding_box.h \
         geom/cell.h \
         geom/cell_hex.h \
@@ -744,9 +751,11 @@ include_HEADERS = \
         mesh/boundary_mesh.h \
         mesh/checkpoint_io.h \
         mesh/distributed_mesh.h \
+        mesh/dyna_io.h \
         mesh/ensight_io.h \
         mesh/exodusII_io.h \
         mesh/exodusII_io_helper.h \
+        mesh/exodus_header_info.h \
         mesh/fro_io.h \
         mesh/gmsh_io.h \
         mesh/gmv_io.h \
@@ -805,6 +814,7 @@ include_HEADERS = \
         numerics/dense_subvector.h \
         numerics/dense_vector.h \
         numerics/dense_vector_base.h \
+        numerics/diagonal_matrix.h \
         numerics/distributed_vector.h \
         numerics/eigen_core_support.h \
         numerics/eigen_preconditioner.h \
@@ -820,6 +830,7 @@ include_HEADERS = \
         numerics/petsc_macro.h \
         numerics/petsc_matrix.h \
         numerics/petsc_preconditioner.h \
+        numerics/petsc_shell_matrix.h \
         numerics/petsc_solver_exception.h \
         numerics/petsc_vector.h \
         numerics/preconditioner.h \
@@ -843,36 +854,17 @@ include_HEADERS = \
         numerics/wrapped_function.h \
         numerics/wrapped_functor.h \
         numerics/zero_function.h \
-        parallel/attributes.h \
-        parallel/communicator.h \
-        parallel/data_type.h \
         parallel/libmesh_call_mpi.h \
-        parallel/message_tag.h \
-        parallel/op_function.h \
-        parallel/packing.h \
         parallel/parallel.h \
         parallel/parallel_algebra.h \
         parallel/parallel_bin_sorter.h \
-        parallel/parallel_communicator_specializations \
         parallel/parallel_elem.h \
         parallel/parallel_ghost_sync.h \
         parallel/parallel_histogram.h \
-        parallel/parallel_implementation.h \
         parallel/parallel_node.h \
         parallel/parallel_object.h \
         parallel/parallel_only.h \
         parallel/parallel_sort.h \
-        parallel/parallel_sync.h \
-        parallel/post_wait_copy_buffer.h \
-        parallel/post_wait_delete_buffer.h \
-        parallel/post_wait_dereference_shared_ptr.h \
-        parallel/post_wait_dereference_tag.h \
-        parallel/post_wait_free_buffer.h \
-        parallel/post_wait_unpack_buffer.h \
-        parallel/post_wait_work.h \
-        parallel/request.h \
-        parallel/standard_type.h \
-        parallel/status.h \
         parallel/threads.h \
         parallel/threads_allocators.h \
         parallel/threads_none.h \
@@ -902,6 +894,7 @@ include_HEADERS = \
         quadrature/quadrature_grid.h \
         quadrature/quadrature_jacobi.h \
         quadrature/quadrature_monomial.h \
+        quadrature/quadrature_nodal.h \
         quadrature/quadrature_simpson.h \
         quadrature/quadrature_trap.h \
         reduced_basis/rb_assembly_expansion.h \
@@ -944,6 +937,7 @@ include_HEADERS = \
         solvers/eigen_time_solver.h \
         solvers/euler2_solver.h \
         solvers/euler_solver.h \
+        solvers/file_solution_history.h \
         solvers/first_order_unsteady_solver.h \
         solvers/linear_solver.h \
         solvers/memory_solution_history.h \
@@ -1005,11 +999,33 @@ include_HEADERS = \
         systems/system_subset.h \
         systems/system_subset_by_subdomain.h \
         systems/transient_system.h \
+        timpi_shims/attributes.h \
+        timpi_shims/communicator.h \
+        timpi_shims/data_type.h \
+        timpi_shims/message_tag.h \
+        timpi_shims/op_function.h \
+        timpi_shims/packing.h \
+        timpi_shims/parallel_communicator_specializations \
+        timpi_shims/parallel_implementation.h \
+        timpi_shims/parallel_sync.h \
+        timpi_shims/post_wait_copy_buffer.h \
+        timpi_shims/post_wait_delete_buffer.h \
+        timpi_shims/post_wait_dereference_shared_ptr.h \
+        timpi_shims/post_wait_dereference_tag.h \
+        timpi_shims/post_wait_free_buffer.h \
+        timpi_shims/post_wait_unpack_buffer.h \
+        timpi_shims/post_wait_work.h \
+        timpi_shims/request.h \
+        timpi_shims/standard_type.h \
+        timpi_shims/status.h \
         utils/compare_types.h \
+        utils/enum_to_string.h \
         utils/error_vector.h \
+        utils/hashing.h \
         utils/hashword.h \
         utils/ignore_warnings.h \
         utils/int_range.h \
+        utils/jacobi_polynomials.h \
         utils/libmesh_nullptr.h \
         utils/location_maps.h \
         utils/mapvector.h \

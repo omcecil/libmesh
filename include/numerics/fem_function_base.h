@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,6 @@
 // Local Includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/dense_vector.h" // required to instantiate a DenseVector<> below
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/fem_context.h"
 
 // C++ includes

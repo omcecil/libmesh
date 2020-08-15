@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -39,7 +39,8 @@ DirichletBoundary(const std::set<boundary_id_type> & b_in,
   variables(variables_in),
   f(f_in ? f_in->clone() : nullptr),
   g(g_in ? g_in->clone() : nullptr),
-  f_system(nullptr)
+  f_system(nullptr),
+  jacobian_tolerance(0.)
 {
   libmesh_assert(f);
   f->init();
@@ -55,7 +56,8 @@ DirichletBoundary(const std::set<boundary_id_type> & b_in,
                   VariableIndexing type) :
   b(b_in),
   variables(variables_in),
-  f_system(nullptr)
+  f_system(nullptr),
+  jacobian_tolerance(0.)
 {
   if (type == LOCAL_VARIABLE_ORDER)
     {
@@ -78,7 +80,8 @@ DirichletBoundary(const std::set<boundary_id_type> & b_in,
                   VariableIndexing type) :
   b(b_in),
   variables(variables_in),
-  f_system(nullptr)
+  f_system(nullptr),
+  jacobian_tolerance(0.)
 {
   if (type == LOCAL_VARIABLE_ORDER)
     {
@@ -111,7 +114,8 @@ DirichletBoundary(const std::set<boundary_id_type> & b_in,
   variables(variables_in),
   f_fem(f_in ? f_in->clone() : nullptr),
   g_fem(g_in ? g_in->clone() : nullptr),
-  f_system(&f_sys_in)
+  f_system(&f_sys_in),
+  jacobian_tolerance(0.)
 {
   libmesh_assert(f_fem);
 }
@@ -125,7 +129,8 @@ DirichletBoundary(const std::set<boundary_id_type> & b_in,
                   VariableIndexing type) :
   b(b_in),
   variables(variables_in),
-  f_system(&f_sys_in)
+  f_system(&f_sys_in),
+  jacobian_tolerance(0.)
 {
   if (type == LOCAL_VARIABLE_ORDER)
     {
@@ -147,7 +152,8 @@ DirichletBoundary(const std::set<boundary_id_type> & b_in,
                   VariableIndexing type) :
   b(b_in),
   variables(variables_in),
-  f_system(&f_sys_in)
+  f_system(&f_sys_in),
+  jacobian_tolerance(0.)
 {
   if (type == LOCAL_VARIABLE_ORDER)
     {
@@ -175,7 +181,8 @@ DirichletBoundary(const DirichletBoundary & d_in) :
   g(d_in.g ? d_in.g->clone() : nullptr),
   f_fem(d_in.f_fem ? d_in.f_fem->clone() : nullptr),
   g_fem(d_in.g_fem ? d_in.g_fem->clone() : nullptr),
-  f_system(d_in.f_system)
+  f_system(d_in.f_system),
+  jacobian_tolerance(d_in.jacobian_tolerance)
 {
   libmesh_assert(f || f_fem);
   libmesh_assert(!(f && f_fem));
@@ -189,7 +196,16 @@ DirichletBoundary(const DirichletBoundary & d_in) :
 }
 
 
-DirichletBoundary::~DirichletBoundary () {}
+DirichletBoundary & DirichletBoundary::operator= (const DirichletBoundary & rhs)
+{
+  // Implementation in terms of the copy constructor to avoid code duplication.
+  DirichletBoundary tmp(rhs);
+  std::swap(tmp, *this); // class must be "MoveAssignable" and "MoveConstructible" for std::swap to work.
+  return *this;
+}
+
+
+DirichletBoundary::~DirichletBoundary () = default;
 
 } // namespace libMesh
 

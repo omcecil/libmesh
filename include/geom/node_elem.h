@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -117,9 +117,16 @@ public:
   /**
    * NodeElems don't have sides, so they can't have nodes on sides.
    */
-  virtual unsigned int which_node_am_i(unsigned int /*side*/,
+  virtual unsigned int local_side_node(unsigned int /*side*/,
                                        unsigned int /*side_node*/) const override
-  { libmesh_error_msg("Calling NodeElem::which_node_am_i() does not make sense."); return 0; }
+  { libmesh_error_msg("Calling NodeElem::local_side_node() does not make sense."); return 0; }
+
+  /**
+   * NodeElems don't have edges, so they can't have nodes on edges.
+   */
+  virtual unsigned int local_edge_node(unsigned int /*edge*/,
+                                       unsigned int /*edge_node*/) const override
+  { libmesh_error_msg("Calling NodeElem::local_edge_node() does not make sense."); return 0; }
 
   /**
    * The \p Elem::side_ptr() member makes no sense for nodes.
@@ -170,6 +177,18 @@ public:
   { libmesh_not_implemented(); return false; }
 
   virtual std::vector<unsigned int> nodes_on_side(const unsigned int) const override
+  {
+    libmesh_not_implemented();
+    return {0};
+  }
+
+  virtual std::vector<unsigned int> nodes_on_edge(const unsigned int) const override
+  {
+    libmesh_not_implemented();
+    return {0};
+  }
+
+  virtual std::vector<unsigned int> sides_on_edge(const unsigned int) const override
   {
     libmesh_not_implemented();
     return {0};

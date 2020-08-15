@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,22 +17,31 @@
 
 
 
-// Local Includes
+// Local includes
+#include "libmesh/parmetis_partitioner.h"
+
+// libMesh includes
 #include "libmesh/libmesh_config.h"
 #include "libmesh/mesh_base.h"
-#include "libmesh/parallel.h"    // also includes mpi.h
 #include "libmesh/mesh_serializer.h"
 #include "libmesh/mesh_tools.h"
 #include "libmesh/mesh_communication.h"
-#include "libmesh/parmetis_partitioner.h"
 #include "libmesh/metis_partitioner.h"
-#include "libmesh/parallel_ghost_sync.h"
+#include "libmesh/parallel_only.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/elem.h"
 #include "libmesh/parmetis_helper.h"
 
+// TIMPI includes
+#include "timpi/communicator.h"    // also includes mpi.h
+#include "timpi/parallel_implementation.h"    // for min()
+
 // Include the ParMETIS header file.
 #ifdef LIBMESH_HAVE_PARMETIS
+
+// Before we include a header wrapped in a namespace, we'd better make
+// sure none of its dependencies end up in that namespace
+#include <mpi.h>
 
 namespace Parmetis {
 extern "C" {
@@ -118,6 +127,10 @@ void ParmetisPartitioner::_do_repartition (MeshBase & mesh,
 
   MetisPartitioner mp;
 
+  // Metis and other fallbacks only work in serial, and need to get
+  // handed element ranges from an already-serialized mesh.
+  mesh.allgather();
+
   // Don't just call partition() here; that would end up calling
   // post-element-partitioning work redundantly (and at the moment
   // incorrectly)
@@ -147,19 +160,28 @@ void ParmetisPartitioner::_do_repartition (MeshBase & mesh,
   // Initialize the data structures required by ParMETIS
   this->initialize (mesh, n_sbdmns);
 
-  // Make sure all processors have enough active local elements.
-  // Parmetis tends to crash when it's given only a couple elements
-  // per partition.
+  // build the graph corresponding to the mesh
+  this->build_graph (mesh);
+
+  // Make sure all processors have enough active local elements and
+  // enough connectivity among them.
+  // Parmetis tends to die when it's given only a couple elements
+  // per partition or when it can't reach elements from each other.
   {
-    bool all_have_enough_elements = true;
+    bool ready_for_parmetis = true;
     for (const auto & nelem : _n_active_elem_on_proc)
       if (nelem < MIN_ELEM_PER_PROC)
-        all_have_enough_elements = false;
+        ready_for_parmetis = false;
+
+    std::size_t my_adjacency = _pmetis->adjncy.size();
+    mesh.comm().min(my_adjacency);
+    if (!my_adjacency)
+      ready_for_parmetis = false;
 
     // Parmetis will not work unless each processor has some
     // elements. Specifically, it will abort when passed a nullptr
-    // partition array on *any* of the processors.
-    if (!all_have_enough_elements)
+    // partition or adjacency array on *any* of the processors.
+    if (!ready_for_parmetis)
       {
         // FIXME: revert to METIS, although this requires a serial mesh
         MeshSerializer serialize(mesh);
@@ -168,9 +190,6 @@ void ParmetisPartitioner::_do_repartition (MeshBase & mesh,
         return;
       }
   }
-
-  // build the graph corresponding to the mesh
-  this->build_graph (mesh);
 
 
   // Partition the graph
@@ -267,7 +286,7 @@ void ParmetisPartitioner::initialize (const MeshBase & mesh,
                            cast_int<std::size_t>(mesh.n_processors()+1));
   libmesh_assert_equal_to (_pmetis->vtxdist[0], 0);
 
-  for (processor_id_type pid=0; pid<mesh.n_processors(); pid++)
+  for (auto pid : make_range(mesh.n_processors()))
     {
       _pmetis->vtxdist[pid+1] = _pmetis->vtxdist[pid] + _n_active_elem_on_proc[pid];
       n_active_elem += _n_active_elem_on_proc[pid];
@@ -302,7 +321,7 @@ void ParmetisPartitioner::initialize (const MeshBase & mesh,
           libmesh_assert_less (cnt, global_index.size());
           libmesh_assert_less (global_index[cnt], n_active_elem);
 
-          global_index_map.insert(std::make_pair(elem->id(), global_index[cnt++]));
+          global_index_map.emplace(elem->id(), global_index[cnt++]);
         }
     }
     // really, shouldn't be close!
@@ -313,8 +332,8 @@ void ParmetisPartitioner::initialize (const MeshBase & mesh,
     // then the number of active elements is not the same as the sum over all
     // processors of the number of active elements per processor, which means
     // there must be some unpartitioned objects out there.
-    if (global_index_map.size() != _global_index_by_pid_map.size())
-      libmesh_error_msg("ERROR:  ParmetisPartitioner cannot handle unpartitioned objects!");
+    libmesh_error_msg_if(global_index_map.size() != _global_index_by_pid_map.size(),
+                         "ERROR:  ParmetisPartitioner cannot handle unpartitioned objects!");
   }
 
   // Finally, we need to initialize the vertex (partition) weights and the initial subdomain
@@ -325,7 +344,7 @@ void ParmetisPartitioner::initialize (const MeshBase & mesh,
 
     const dof_id_type first_local_elem = _pmetis->vtxdist[mesh.processor_id()];
 
-    for (processor_id_type pid=0; pid<mesh.n_processors(); pid++)
+    for (auto pid : make_range(mesh.n_processors()))
       {
         dof_id_type tgt_subdomain_size = 0;
 
@@ -375,7 +394,7 @@ void ParmetisPartitioner::initialize (const MeshBase & mesh,
                          std::lower_bound(subdomain_bounds.begin(),
                                           subdomain_bounds.end(),
                                           global_index)));
-        libmesh_assert_less (subdomain_id, static_cast<unsigned int>(_pmetis->nparts));
+        libmesh_assert_less (subdomain_id, _pmetis->nparts);
         libmesh_assert_less (local_index, _pmetis->part.size());
 
         _pmetis->part[local_index] = subdomain_id;

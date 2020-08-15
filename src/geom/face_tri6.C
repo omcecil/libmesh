@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -134,6 +134,12 @@ Tri6::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
+std::vector<unsigned>
+Tri6::nodes_on_edge(const unsigned int e) const
+{
+  return nodes_on_side(e);
+}
+
 bool Tri6::has_affine_map() const
 {
   // Make sure edges are straight
@@ -187,7 +193,7 @@ dof_id_type Tri6::key (const unsigned int s) const
 
 
 
-unsigned int Tri6::which_node_am_i(unsigned int side,
+unsigned int Tri6::local_side_node(unsigned int side,
                                    unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
@@ -201,22 +207,7 @@ unsigned int Tri6::which_node_am_i(unsigned int side,
 std::unique_ptr<Elem> Tri6::build_side_ptr (const unsigned int i,
                                             bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Edge3,Tri6>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> edge = libmesh_make_unique<Edge3>();
-      edge->subdomain_id() = this->subdomain_id();
-
-      // Set the nodes
-      for (unsigned n=0; n<edge->n_nodes(); ++n)
-        edge->set_node(n) = this->node_ptr(Tri6::side_nodes_map[i][n]);
-
-      return edge;
-    }
+  return this->simple_build_side_ptr<Edge3, Tri6>(i, proxy);
 }
 
 
@@ -379,6 +370,13 @@ BoundingBox Tri6::loose_bounding_box () const
 
 Real Tri6::volume () const
 {
+  // This specialization is good for Lagrange mappings only
+  if (this->mapping_type() != LAGRANGE_MAP)
+    return this->Elem::volume();
+
+  Real vol=0.;
+
+#if LIBMESH_DIM > 1
   // Make copies of our points.  It makes the subsequent calculations a bit
   // shorter and avoids dereferencing the same pointer multiple times.
   Point
@@ -417,10 +415,10 @@ Real Tri6::volume () const
   const static Real wts[N] = {Real(9)/80, w1, w1,     w1,     w2, w2,     w2};
 
   // Approximate the area with quadrature
-  Real vol=0.;
   for (unsigned int q=0; q<N; ++q)
     vol += wts[q] * cross_norm(xi[q]*a1 + eta[q]*b1 + c1,
                                xi[q]*b1 + eta[q]*b2 + c2);
+#endif // LIBMESH_DIM > 1
 
   return vol;
 }

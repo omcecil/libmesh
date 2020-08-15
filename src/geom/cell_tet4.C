@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -57,6 +57,15 @@ const unsigned int Tet4::edge_nodes_map[Tet4::num_edges][Tet4::nodes_per_edge] =
     {2, 3}  // Edge 5
   };
 
+const unsigned int Tet4::edge_sides_map[Tet4::num_edges][2] =
+  {
+    {0, 1}, // Edge 0
+    {0, 2}, // Edge 1
+    {0, 3}, // Edge 2
+    {1, 3}, // Edge 3
+    {1, 2}, // Edge 4
+    {2, 3}  // Edge 5
+  };
 
 // ------------------------------------------------------------
 // Tet4 class member functions
@@ -139,6 +148,13 @@ Tet4::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
+std::vector<unsigned>
+Tet4::nodes_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_nodes_map[e]), std::end(edge_nodes_map[e])};
+}
+
 Order Tet4::default_order() const
 {
   return FIRST;
@@ -147,21 +163,7 @@ Order Tet4::default_order() const
 std::unique_ptr<Elem> Tet4::build_side_ptr (const unsigned int i,
                                             bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Tri3,Tet4>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> face = libmesh_make_unique<Tri3>();
-      face->subdomain_id() = this->subdomain_id();
-
-      for (unsigned n=0; n<face->n_nodes(); ++n)
-        face->set_node(n) = this->node_ptr(Tet4::side_nodes_map[i][n]);
-
-      return face;
-    }
+  return this->simple_build_side_ptr<Tri3, Tet4>(i, proxy);
 }
 
 

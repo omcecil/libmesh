@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -34,8 +34,8 @@ void BoundaryVolumeSolutionTransfer::transfer(const Variable & from_var,
     to_dimension = to_sys->get_mesh().mesh_dimension();
 
   // Sanity check
-  if (from_dimension == to_dimension)
-    libmesh_error_msg("Error: Transfer must be from volume mesh to its boundary or vice-versa!");
+  libmesh_error_msg_if(from_dimension == to_dimension,
+                       "Error: Transfer must be from volume mesh to its boundary or vice-versa!");
 
   if (from_dimension > to_dimension)
     this->transfer_volume_boundary(from_var, to_var);
@@ -80,23 +80,17 @@ transfer_volume_boundary(const Variable & from_var, const Variable & to_var)
     {
       const Elem * from_elem = to_elem->interior_parent();
 
-      if (!from_elem)
-        libmesh_error_msg("Error, transfer must be between a Mesh and its associated BoundaryMesh.");
+      libmesh_error_msg_if(!from_elem, "Error, transfer must be between a Mesh and its associated BoundaryMesh.");
 
       // loop through all nodes in each boundary element.
-      for (unsigned int node=0; node < to_elem->n_nodes(); node++)
+      for (const Node & to_node : to_elem->node_ref_range())
         {
-          // Node in boundary element.
-          const Node * to_node = to_elem->node_ptr(node);
-
-          for (unsigned int node_id=0; node_id < from_elem->n_nodes(); node_id++)
+          // Nodes in interior_parent element.
+          for (const Node & from_node : from_elem->node_ref_range())
             {
-              // Nodes in interior_parent element.
-              const Node * from_node = from_elem->node_ptr(node_id);
-
-              const dof_id_type from_dof = from_node->dof_number(from_sys_number,
-                                                                 from_var_number,
-                                                                 from_n_comp - 1);
+              const dof_id_type from_dof = from_node.dof_number(from_sys_number,
+                                                                from_var_number,
+                                                                from_n_comp - 1);
 
               // See if we've already encountered this DOF in the loop
               // over boundary elements.
@@ -105,12 +99,12 @@ transfer_volume_boundary(const Variable & from_var, const Variable & to_var)
               // If we've already mapped this dof, we don't need to map
               // it again or do floating point comparisons.
               if (it == dof_mapping.end() &&
-                  from_node->absolute_fuzzy_equals(*to_node, TOLERANCE))
+                  from_node.absolute_fuzzy_equals(to_node, TOLERANCE))
                 {
                   // Global dof_index for node in BoundaryMesh.
-                  const dof_id_type to_dof = to_node->dof_number(to_sys_number,
-                                                                 to_var_number,
-                                                                 to_n_comp - 1);
+                  const dof_id_type to_dof = to_node.dof_number(to_sys_number,
+                                                                to_var_number,
+                                                                to_n_comp - 1);
 
                   // Keep track of the volume system dof index which is needed.
                   dof_mapping[from_dof] = to_dof;
@@ -178,8 +172,7 @@ transfer_boundary_volume(const Variable & from_var, const Variable & to_var)
     {
       const Elem * to_elem = from_elem->interior_parent();
 
-      if (!to_elem)
-        libmesh_error_msg("Error, transfer must be between a Mesh and its associated BoundaryMesh.");
+      libmesh_error_msg_if(!to_elem, "Error, transfer must be between a Mesh and its associated BoundaryMesh.");
 
       // Get dof indices for phi2 for all nodes on this boundary element
       dof_map.dof_indices(from_elem, from_dof_indices, from_var_number);
@@ -188,23 +181,21 @@ transfer_boundary_volume(const Variable & from_var, const Variable & to_var)
       from_sys->current_local_solution->get(from_dof_indices, value);
 
       // loop through all nodes in each boundary element.
-      for (unsigned int node=0; node < from_elem->n_nodes(); node++)
+      for (auto node : from_elem->node_index_range())
         {
           // Node in boundary element.
           const Node * from_node = from_elem->node_ptr(node);
 
-          for (unsigned int node_id=0; node_id < to_elem->n_nodes(); node_id++)
+          // Nodes in interior_parent element.
+          for (const Node & to_node : to_elem->node_ref_range())
             {
-              // Nodes in interior_parent element.
-              const Node * to_node = to_elem->node_ptr(node_id);
-
               // Match BoundaryNode & VolumeNode.
-              if (to_node->absolute_fuzzy_equals(*from_node, TOLERANCE))
+              if (to_node.absolute_fuzzy_equals(*from_node, TOLERANCE))
                 {
                   // Global dof_index for node in VolumeMesh.
-                  const dof_id_type to_dof = to_node->dof_number(to_sys_number,
-                                                                 to_var_number,
-                                                                 to_n_comp - 1);
+                  const dof_id_type to_dof = to_node.dof_number(to_sys_number,
+                                                                to_var_number,
+                                                                to_n_comp - 1);
 
                   // Assign values to boundary in VolumeMesh.
                   to_sys->solution->set(to_dof, value[node]);

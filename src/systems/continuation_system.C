@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,7 @@
 #include "libmesh/linear_solver.h"
 #include "libmesh/time_solver.h"
 #include "libmesh/newton_solver.h"
+#include "libmesh/numeric_vector.h"
 #include "libmesh/sparse_matrix.h"
 
 namespace libMesh
@@ -358,11 +359,11 @@ void ContinuationSystem::initialize_tangent()
 void ContinuationSystem::continuation_solve()
 {
   // Be sure the user has set the continuation parameter pointer
-  if (!continuation_parameter)
-    libmesh_error_msg("You must set the continuation_parameter pointer " \
-                      << "to a member variable of the derived class, preferably in the " \
-                      << "Derived class's init_data function.  This is how the ContinuationSystem " \
-                      << "updates the continuation parameter.");
+  libmesh_error_msg_if(!continuation_parameter,
+                       "You must set the continuation_parameter pointer "
+                       "to a member variable of the derived class, preferably in the "
+                       "Derived class's init_data function.  This is how the ContinuationSystem "
+                       "updates the continuation parameter.");
 
   // Use extra precision for all the numbers printed in this function.
   std::streamsize old_precision = libMesh::out.precision();
@@ -416,7 +417,7 @@ void ContinuationSystem::continuation_solve()
       Real nonlinear_residual_afterstep = 0.;
 
       // The linear solver tolerance, can be updated dynamically at each Newton step.
-      Real current_linear_tolerance = 0.;
+      double current_linear_tolerance = 0.;
 
       // The nonlinear loop
       for (newton_step=0; newton_step<newton_solver->max_nonlinear_iterations; ++newton_step)
@@ -448,9 +449,9 @@ void ContinuationSystem::continuation_solve()
               libmesh_assert_not_equal_to (nonlinear_residual_beforestep, 0.0);
               libmesh_assert_not_equal_to (nonlinear_residual_afterstep, 0.0);
 
-              current_linear_tolerance = std::min(gam*std::pow(nonlinear_residual_afterstep/nonlinear_residual_beforestep, alp),
-                                                  current_linear_tolerance*current_linear_tolerance
-                                                  );
+              current_linear_tolerance =
+                double(std::min(gam*std::pow(nonlinear_residual_afterstep/nonlinear_residual_beforestep, alp),
+                                current_linear_tolerance*current_linear_tolerance));
 
               // Don't let it get ridiculously small!!
               if (current_linear_tolerance < 1.e-12)
@@ -584,12 +585,12 @@ void ContinuationSystem::continuation_solve()
           // Not sure if this is really necessary
           rhs->close();
           const Real yrhsnorm=rhs->l2_norm();
-          if (yrhsnorm == 0.0)
-            libmesh_error_msg("||G_Lambda|| = 0");
+          libmesh_error_msg_if(yrhsnorm == 0.0, "||G_Lambda|| = 0");
 
           // We select a tolerance for the y-system which is based on the inexact Newton
           // tolerance but scaled by an extra term proportional to the RHS (which is not -> 0 in this case)
-          const Real ysystemtol=current_linear_tolerance*(nonlinear_residual_beforestep/yrhsnorm);
+          const double ysystemtol =
+            double(current_linear_tolerance*(nonlinear_residual_beforestep/yrhsnorm));
           if (!quiet)
             libMesh::out << "ysystemtol=" << ysystemtol << std::endl;
 
@@ -915,8 +916,7 @@ void ContinuationSystem::continuation_solve()
 
   // Check for convergence of the whole arcstep.  If not converged at this
   // point, we have no choice but to quit.
-  if (!arcstep_converged)
-    libmesh_error_msg("Arcstep failed to converge after max number of reductions! Exiting...");
+  libmesh_error_msg_if(!arcstep_converged, "Arcstep failed to converge after max number of reductions! Exiting...");
 
   // Print converged solution control parameter and max value.
   libMesh::out << "lambda_current=" << *continuation_parameter << std::endl;

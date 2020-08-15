@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,7 @@
 // C++ includes
 
 // Local Includes
+#include "libmesh/libmesh_logging.h"
 #include "libmesh/petsc_vector.h"
 #include "libmesh/petsc_matrix.h"
 #include "libmesh/dof_map.h"
@@ -82,7 +83,7 @@ extern "C"
     sys.get_dof_map().enforce_constraints_exactly(sys, sys.current_local_solution.get());
 
     if (solver->objective_object != nullptr)
-      (*objective) = solver->objective_object->objective(*(sys.current_local_solution), sys);
+      (*objective) = PS(solver->objective_object->objective(*(sys.current_local_solution), sys));
     else
       libmesh_error_msg("Objective function not defined in __libmesh_tao_objective");
 

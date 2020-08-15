@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,18 +27,19 @@
 
 #if defined(LIBMESH_HAVE_LIBHILBERT)
 
-// Local includes
+// TIMPI includes
+#include "timpi/standard_type.h"
+
+// C/C++ includes
+
 // So many implicit-fallthrough warnings in crazy libHilbert macros...
 #include "libmesh/ignore_warnings.h"
 #include "hilbert.h"
 #include "libmesh/restore_warnings.h"
-#include "libmesh/parallel.h"
 
-// C++ includes
 #include <cstddef>
 
-namespace libMesh {
-namespace Parallel {
+namespace TIMPI {
 
 #ifdef LIBMESH_HAVE_MPI
 // A StandardType<> specialization to return a derived MPI datatype
@@ -51,19 +52,28 @@ class StandardType<Hilbert::HilbertIndices> : public DataType
 public:
   explicit
   StandardType(const Hilbert::HilbertIndices * =nullptr) {
-    _datatype = DataType(Parallel::StandardType<Hilbert::inttype>(), 3);
+    _datatype = DataType(StandardType<Hilbert::inttype>(), 3);
   }
 
   StandardType(const StandardType<Hilbert::HilbertIndices> & t)
     : DataType()
   {
-    libmesh_call_mpi (MPI_Type_dup (t._datatype, &_datatype));
+    timpi_call_mpi (MPI_Type_dup (t._datatype, &_datatype));
   }
 
   ~StandardType() { this->free(); }
+
+  static const bool is_fixed_type = true;
 };
 
 #endif // LIBMESH_HAVE_MPI
+
+} // namespace TIMPI
+
+
+namespace libMesh {
+
+namespace Parallel {
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
 typedef std::pair<Hilbert::HilbertIndices, unique_id_type> DofObjectKey;
@@ -71,9 +81,7 @@ typedef std::pair<Hilbert::HilbertIndices, unique_id_type> DofObjectKey;
 typedef Hilbert::HilbertIndices DofObjectKey;
 #endif
 
-
 } // namespace Parallel
-
 
 } // namespace libMesh
 

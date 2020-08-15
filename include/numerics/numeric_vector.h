@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,9 +22,9 @@
 
 // Local includes
 #include "libmesh/libmesh_common.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/enum_parallel_type.h"
 #include "libmesh/id_types.h"
+#include "libmesh/int_range.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/libmesh.h"
 #include "libmesh/parallel_object.h"
@@ -132,6 +132,12 @@ public:
   NumericVector (NumericVector &&) = default;
   NumericVector (const NumericVector &) = default;
   NumericVector & operator= (NumericVector &&) = default;
+
+  /**
+   * While this class doesn't manage any memory, the derived class might and
+   * users may be deleting through a pointer to this base class
+   */
+  virtual ~NumericVector() = default;
 
   /**
    * Builds a \p NumericVector on the processors in communicator
@@ -391,6 +397,15 @@ public:
   NumericVector<T> & operator *= (const T a) { this->scale(a); return *this; }
 
   /**
+   * Computes the component-wise multiplication of this vector's entries by
+   * another's,
+   * \f$ u_i \leftarrow u_i v_i \, \forall i\f$
+   *
+   * \returns A reference to *this.
+   */
+  virtual NumericVector<T> & operator *= (const NumericVector<T> & v) = 0;
+
+  /**
    * Scales the vector by \p 1/a,
    * \f$ \vec{u} \leftarrow \frac{1}{a}\vec{u} \f$.
    * Equivalent to \p u.scale(1./a)
@@ -400,15 +415,15 @@ public:
   NumericVector<T> & operator /= (const T a) { this->scale(1./a); return *this; }
 
   /**
-   * Computes the pointwise division of this vector's entries by another's,
+   * Computes the component-wise division of this vector's entries by another's,
    * \f$ u_i \leftarrow \frac{u_i}{v_i} \, \forall i\f$
    *
    * \returns A reference to *this.
    */
-  virtual NumericVector<T> & operator /= (const NumericVector<T> & /*v*/) = 0;
+  virtual NumericVector<T> & operator /= (const NumericVector<T> & v) = 0;
 
   /**
-   * Computes the pointwise reciprocal,
+   * Computes the component-wise reciprocal,
    * \f$ u_i \leftarrow \frac{1}{u_i} \, \forall i\f$
    */
   virtual void reciprocal() = 0;
@@ -903,7 +918,7 @@ void NumericVector<Complex>::print(std::ostream & os) const
 
   // std::complex<>::operator<<() is defined, but use this form
   os << "#\tReal part\t\tImaginary part" << std::endl;
-  for (numeric_index_type i=this->first_local_index(); i<this->last_local_index(); i++)
+  for (auto i : index_range(*this))
     os << i << "\t"
        << (*this)(i).real() << "\t\t"
        << (*this)(i).imag() << std::endl;
@@ -920,7 +935,7 @@ void NumericVector<T>::print(std::ostream & os) const
      << "\t\tlocal =  " << this->local_size() << std::endl;
 
   os << "#\tValue" << std::endl;
-  for (numeric_index_type i=this->first_local_index(); i<this->last_local_index(); i++)
+  for (auto i : index_range(*this))
     os << i << "\t" << (*this)(i) << std::endl;
 }
 
@@ -941,7 +956,7 @@ void NumericVector<Complex>::print_global(std::ostream & os) const
 
   os << "Size\tglobal =  " << this->size() << std::endl;
   os << "#\tReal part\t\tImaginary part" << std::endl;
-  for (numeric_index_type i=0; i!=v.size(); i++)
+  for (auto i : make_range(v.size()))
     os << i << "\t"
        << v[i].real() << "\t\t"
        << v[i].imag() << std::endl;
@@ -963,7 +978,7 @@ void NumericVector<T>::print_global(std::ostream & os) const
 
   os << "Size\tglobal =  " << this->size() << std::endl;
   os << "#\tValue" << std::endl;
-  for (numeric_index_type i=0; i!=v.size(); i++)
+  for (auto i : make_range(v.size()))
     os << i << "\t" << v[i] << std::endl;
 }
 
@@ -980,6 +995,18 @@ void  NumericVector<T>::swap (NumericVector<T> & v)
 
 
 } // namespace libMesh
+
+
+// Workaround for weird boost/NumericVector interaction bug
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+namespace boost { namespace multiprecision { namespace detail {
+template <typename T, typename To>
+struct is_lossy_conversion<libMesh::NumericVector<T>, To> {
+  typedef boost::mpl::true_ type;
+  static const bool value = type::value;
+};
+}}}
+#endif
 
 
 #endif  // LIBMESH_NUMERIC_VECTOR_H

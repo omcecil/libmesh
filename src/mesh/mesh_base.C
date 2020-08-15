@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -28,6 +28,7 @@
 
 // Local includes
 #include "libmesh/boundary_info.h"
+#include "libmesh/libmesh_logging.h"
 #include "libmesh/elem.h"
 #include "libmesh/ghost_point_neighbors.h"
 #include "libmesh/mesh_base.h"
@@ -39,7 +40,7 @@
 #include "libmesh/threads.h"
 #include "libmesh/enum_elem_type.h"
 #include "libmesh/enum_point_locator_type.h"
-
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 namespace libMesh
 {
@@ -53,6 +54,8 @@ MeshBase::MeshBase (const Parallel::Communicator & comm_in,
   ParallelObject (comm_in),
   boundary_info  (new BoundaryInfo(*this)),
   _n_parts       (1),
+  _default_mapping_type(LAGRANGE_MAP),
+  _default_mapping_data(0),
   _is_prepared   (false),
   _point_locator (),
   _count_lower_dim_elems_in_point_locator(true),
@@ -63,9 +66,10 @@ MeshBase::MeshBase (const Parallel::Communicator & comm_in,
   _skip_noncritical_partitioning(false),
   _skip_all_partitioning(libMesh::on_command_line("--skip-partitioning")),
   _skip_renumber_nodes_and_elements(false),
+  _skip_find_neighbors(false),
   _allow_remote_element_removal(true),
   _spatial_dimension(d),
-  _default_ghosting(new GhostPointNeighbors(*this)),
+  _default_ghosting(libmesh_make_unique<GhostPointNeighbors>(*this)),
   _point_locator_close_to_point_tol(0.)
 {
   _elem_dims.insert(d);
@@ -81,6 +85,8 @@ MeshBase::MeshBase (const MeshBase & other_mesh) :
   ParallelObject (other_mesh),
   boundary_info  (new BoundaryInfo(*this)),
   _n_parts       (other_mesh._n_parts),
+  _default_mapping_type(other_mesh._default_mapping_type),
+  _default_mapping_data(other_mesh._default_mapping_data),
   _is_prepared   (other_mesh._is_prepared),
   _point_locator (),
   _count_lower_dim_elems_in_point_locator(other_mesh._count_lower_dim_elems_in_point_locator),
@@ -90,14 +96,35 @@ MeshBase::MeshBase (const MeshBase & other_mesh) :
 #endif
   _skip_noncritical_partitioning(false),
   _skip_all_partitioning(libMesh::on_command_line("--skip-partitioning")),
-  _skip_renumber_nodes_and_elements(false),
+  _skip_renumber_nodes_and_elements(other_mesh._skip_renumber_nodes_and_elements),
+  _skip_find_neighbors(other_mesh._skip_find_neighbors),
   _allow_remote_element_removal(true),
   _elem_dims(other_mesh._elem_dims),
   _spatial_dimension(other_mesh._spatial_dimension),
-  _default_ghosting(new GhostPointNeighbors(*this)),
-  _ghosting_functors(other_mesh._ghosting_functors),
+  _default_ghosting(libmesh_make_unique<GhostPointNeighbors>(*this)),
   _point_locator_close_to_point_tol(other_mesh._point_locator_close_to_point_tol)
 {
+   for (const auto & gf : other_mesh._ghosting_functors )
+   {
+     std::shared_ptr<GhostingFunctor> clone_gf = gf->clone();
+     // Some subclasses of GhostingFunctor might not override the
+     // clone function yet. If this is the case, GhostingFunctor will
+     // return nullptr by default. The clone function should be overridden
+     // in all derived classes. This following code ("else") is written
+     // for API upgrade. That will allow users gradually to update their code.
+     // Once the API upgrade is done, we will come back and delete "else."
+     if (clone_gf)
+     {
+       clone_gf->set_mesh(this);
+       add_ghosting_functor(clone_gf);
+     }
+     else
+     {
+       libmesh_deprecated();
+       add_ghosting_functor(*gf);
+     }
+   }
+
   // Make sure we don't accidentally delete the other mesh's default
   // ghosting functor; we'll use our own if that's needed.
   if (other_mesh._ghosting_functors.count(other_mesh._default_ghosting.get()))
@@ -136,6 +163,21 @@ unsigned int MeshBase::mesh_dimension() const
 
 
 
+void MeshBase::set_elem_dimensions(const std::set<unsigned char> & elem_dims)
+{
+#ifdef DEBUG
+  // In debug mode, we call cache_elem_dims() and then make sure
+  // the result actually agrees with what the user specified.
+  parallel_object_only();
+
+  this->cache_elem_dims();
+  libmesh_assert_msg(_elem_dims == elem_dims, \
+                     "Specified element dimensions does not match true element dimensions!");
+#endif
+
+  _elem_dims = elem_dims;
+}
+
 unsigned int MeshBase::spatial_dimension () const
 {
   return cast_int<unsigned int>(_spatial_dimension);
@@ -153,14 +195,50 @@ void MeshBase::set_spatial_dimension(unsigned char d)
 
 
 
-unsigned int MeshBase::add_elem_integer(const std::string & name)
+unsigned int MeshBase::add_elem_integer(const std::string & name,
+                                        bool allocate_data)
 {
   for (auto i : index_range(_elem_integer_names))
     if (_elem_integer_names[i] == name)
       return i;
 
   _elem_integer_names.push_back(name);
+  if (allocate_data)
+    this->size_elem_extra_integers();
   return _elem_integer_names.size()-1;
+}
+
+
+
+std::vector<unsigned int> MeshBase::add_elem_integers(const std::vector<std::string> & names,
+                                                      bool allocate_data)
+{
+  std::unordered_map<std::string, std::size_t> name_indices;
+  for (auto i : index_range(_elem_integer_names))
+    name_indices[_elem_integer_names[i]] = i;
+
+  std::vector<unsigned int> returnval(names.size());
+
+  bool added_an_integer = false;
+  for (auto i : index_range(names))
+    {
+      const std::string & name = names[i];
+      auto it = name_indices.find(name);
+      if (it != name_indices.end())
+        returnval[i] = it->second;
+      else
+        {
+          returnval[i] = _elem_integer_names.size();
+          name_indices[name] = returnval[i];
+          _elem_integer_names.push_back(name);
+          added_an_integer = true;
+        }
+    }
+
+  if (allocate_data && added_an_integer)
+    this->size_elem_extra_integers();
+
+  return returnval;
 }
 
 
@@ -177,14 +255,61 @@ unsigned int MeshBase::get_elem_integer_index(const std::string & name) const
 
 
 
-unsigned int MeshBase::add_node_integer(const std::string & name)
+bool MeshBase::has_elem_integer(const std::string & name) const
+{
+  for (auto & entry : _elem_integer_names)
+    if (entry == name)
+      return true;
+
+  return false;
+}
+
+
+
+unsigned int MeshBase::add_node_integer(const std::string & name,
+                                        bool allocate_data)
 {
   for (auto i : index_range(_node_integer_names))
     if (_node_integer_names[i] == name)
       return i;
 
   _node_integer_names.push_back(name);
+  if (allocate_data)
+    this->size_node_extra_integers();
   return _node_integer_names.size()-1;
+}
+
+
+
+std::vector<unsigned int> MeshBase::add_node_integers(const std::vector<std::string> & names,
+                                                      bool allocate_data)
+{
+  std::unordered_map<std::string, std::size_t> name_indices;
+  for (auto i : index_range(_node_integer_names))
+    name_indices[_node_integer_names[i]] = i;
+
+  std::vector<unsigned int> returnval(names.size());
+
+  bool added_an_integer = false;
+  for (auto i : index_range(names))
+    {
+      const std::string & name = names[i];
+      auto it = name_indices.find(name);
+      if (it != name_indices.end())
+        returnval[i] = it->second;
+      else
+        {
+          returnval[i] = _node_integer_names.size();
+          name_indices[name] = returnval[i];
+          _node_integer_names.push_back(name);
+          added_an_integer = true;
+        }
+    }
+
+  if (allocate_data && added_an_integer)
+    this->size_node_extra_integers();
+
+  return returnval;
 }
 
 
@@ -201,7 +326,70 @@ unsigned int MeshBase::get_node_integer_index(const std::string & name) const
 
 
 
+bool MeshBase::has_node_integer(const std::string & name) const
+{
+  for (auto & entry : _node_integer_names)
+    if (entry == name)
+      return true;
+
+  return false;
+}
+
+
+
+void MeshBase::remove_orphaned_nodes ()
+{
+  LOG_SCOPE("remove_orphaned_nodes()", "MeshBase");
+
+  // Will hold the set of nodes that are currently connected to elements
+  std::unordered_set<Node *> connected_nodes;
+
+  // Loop over the elements.  Find which nodes are connected to at
+  // least one of them.
+  for (const auto & element : this->element_ptr_range())
+    for (auto & n : element->node_ref_range())
+      connected_nodes.insert(&n);
+
+  for (const auto & node : this->node_ptr_range())
+    if (!connected_nodes.count(node))
+      this->delete_node(node);
+}
+
+
+
 void MeshBase::prepare_for_use (const bool skip_renumber_nodes_and_elements, const bool skip_find_neighbors)
+{
+  libmesh_deprecated();
+
+  // We only respect the users wish if they tell us to skip renumbering. If they tell us not to
+  // skip renumbering but someone previously called allow_renumbering(false), then the latter takes
+  // precedence
+  if (skip_renumber_nodes_and_elements)
+    this->allow_renumbering(false);
+
+  // We always accept the user's value for skip_find_neighbors, in contrast to skip_renumber
+  const bool old_allow_find_neighbors = this->allow_find_neighbors();
+  this->allow_find_neighbors(!skip_find_neighbors);
+
+  this->prepare_for_use();
+
+  this->allow_find_neighbors(old_allow_find_neighbors);
+}
+
+void MeshBase::prepare_for_use (const bool skip_renumber_nodes_and_elements)
+{
+  libmesh_deprecated();
+
+  // We only respect the users wish if they tell us to skip renumbering. If they tell us not to
+  // skip renumbering but someone previously called allow_renumbering(false), then the latter takes
+  // precedence
+  if (skip_renumber_nodes_and_elements)
+    this->allow_renumbering(false);
+
+  this->prepare_for_use();
+}
+
+void MeshBase::prepare_for_use ()
 {
   LOG_SCOPE("prepare_for_use()", "MeshBase");
 
@@ -221,30 +409,26 @@ void MeshBase::prepare_for_use (const bool skip_renumber_nodes_and_elements, con
   // Renumber the nodes and elements so that they in contiguous
   // blocks.  By default, _skip_renumber_nodes_and_elements is false.
   //
-  // We may currently change that by passing
-  // skip_renumber_nodes_and_elements==true to this function, but we
-  // should use the allow_renumbering() accessor instead.
-  //
   // Instances where you if prepare_for_use() should not renumber the nodes
   // and elements include reading in e.g. an xda/r or gmv file. In
   // this case, the ordering of the nodes may depend on an accompanying
   // solution, and the node ordering cannot be changed.
 
-  if (skip_renumber_nodes_and_elements)
-    {
-      libmesh_deprecated();
-      this->allow_renumbering(false);
-    }
 
   // Mesh modification operations might not leave us with consistent
-  // id counts, but our partitioner might need that consistency.
+  // id counts, or might leave us with orphaned nodes we're no longer
+  // using, but our partitioner might need that consistency and/or
+  // might be confused by orphaned nodes.
   if (!_skip_renumber_nodes_and_elements)
     this->renumber_nodes_and_elements();
   else
-    this->update_parallel_id_counts();
+    {
+      this->remove_orphaned_nodes();
+      this->update_parallel_id_counts();
+    }
 
   // Let all the elements find their neighbors
-  if (!skip_find_neighbors)
+  if (!_skip_find_neighbors)
     this->find_neighbors();
 
   // The user may have set boundary conditions.  We require that the
@@ -336,6 +520,10 @@ void MeshBase::clear ()
 void MeshBase::remove_ghosting_functor(GhostingFunctor & ghosting_functor)
 {
   _ghosting_functors.erase(&ghosting_functor);
+
+  auto it = _shared_functors.find(&ghosting_functor);
+  if (it != _shared_functors.end())
+    _shared_functors.erase(it);
 }
 
 
@@ -530,27 +718,6 @@ unsigned int MeshBase::recalculate_n_partitions()
 
 
 
-#ifdef LIBMESH_ENABLE_DEPRECATED
-const PointLocatorBase & MeshBase::point_locator () const
-{
-  libmesh_deprecated();
-
-  if (_point_locator.get() == nullptr)
-    {
-      // PointLocator construction may not be safe within threads
-      libmesh_assert(!Threads::in_threads);
-
-      _point_locator = PointLocatorBase::build(TREE_ELEMENTS, *this);
-
-      if (_point_locator_close_to_point_tol > 0.)
-        _point_locator->set_close_to_point_tol(_point_locator_close_to_point_tol);
-    }
-
-  return *_point_locator;
-}
-#endif
-
-
 std::unique_ptr<PointLocatorBase> MeshBase::sub_point_locator () const
 {
   // If there's no master point locator, then we need one.
@@ -659,11 +826,11 @@ void MeshBase::cache_elem_dims()
   // If the mesh is x-aligned or x-y planar, we will end up checking
   // every node's coordinates and not breaking out of the loop
   // early...
+#if LIBMESH_DIM > 1
   if (_spatial_dimension < 3)
     {
       for (const auto & node : this->node_ptr_range())
         {
-#if LIBMESH_DIM > 1
           // Note: the exact floating point comparison is intentional,
           // we don't want to get tripped up by tolerances.
           if ((*node)(1) != 0.)
@@ -676,7 +843,6 @@ void MeshBase::cache_elem_dims()
               break;
 #endif
             }
-#endif
 
 #if LIBMESH_DIM > 2
           if ((*node)(2) != 0.)
@@ -689,6 +855,7 @@ void MeshBase::cache_elem_dims()
 #endif
         }
     }
+#endif // LIBMESH_DIM > 1
 }
 
 void MeshBase::detect_interior_parents()
@@ -706,7 +873,7 @@ void MeshBase::detect_interior_parents()
   for (const auto & elem : this->active_element_ptr_range())
     {
       // Populating the node_to_elem map, same as MeshTools::build_nodes_to_elem_map
-      for (unsigned int n=0; n<elem->n_vertices(); n++)
+      for (auto n : make_range(elem->n_vertices()))
         {
           libmesh_assert_less (elem->id(), this->max_elem_id());
 
@@ -729,7 +896,7 @@ void MeshBase::detect_interior_parents()
 
       bool found_interior_parents = false;
 
-      for (dof_id_type n=0; n < element->n_vertices(); n++)
+      for (auto n : make_range(element->n_vertices()))
         {
           std::vector<dof_id_type> & element_ids = node_to_elem[element->node_id(n)];
           for (const auto & eid : element_ids)
@@ -760,7 +927,7 @@ void MeshBase::detect_interior_parents()
           for (const auto & interior_parent_id : neighbors_0)
             {
               found_interior_parents = false;
-              for (dof_id_type n=1; n < element->n_vertices(); n++)
+              for (auto n : make_range(1u, element->n_vertices()))
                 {
                   if (neighbors[n].find(interior_parent_id)!=neighbors[n].end())
                     {
@@ -801,6 +968,34 @@ void MeshBase::set_point_locator_close_to_point_tol(Real val)
 Real MeshBase::get_point_locator_close_to_point_tol() const
 {
   return _point_locator_close_to_point_tol;
+}
+
+
+
+void MeshBase::size_elem_extra_integers()
+{
+  const std::size_t new_size = _elem_integer_names.size();
+  for (auto elem : this->element_ptr_range())
+    elem->add_extra_integers(new_size);
+}
+
+
+
+void MeshBase::size_node_extra_integers()
+{
+  const std::size_t new_size = _node_integer_names.size();
+  for (auto node : this->node_ptr_range())
+    node->add_extra_integers(new_size);
+}
+
+
+std::pair<std::vector<unsigned int>, std::vector<unsigned int>>
+MeshBase::merge_extra_integer_names(const MeshBase & other)
+{
+  std::pair<std::vector<unsigned int>, std::vector<unsigned int>> returnval;
+  returnval.first = this->add_elem_integers(other._elem_integer_names);
+  returnval.second = this->add_node_integers(other._node_integer_names);
+  return returnval;
 }
 
 

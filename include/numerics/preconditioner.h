@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -86,18 +86,6 @@ public:
   static std::unique_ptr<Preconditioner<T>>
   build_preconditioner(const libMesh::Parallel::Communicator & comm,
                        const SolverPackage solver_package = libMesh::default_solver_package());
-
-  /**
-   * Builds a \p Preconditioner using the linear solver package specified by
-   * \p solver_package
-   *
-   * \deprecated Use build_preconditioner() instead.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  static Preconditioner<T> *
-  build(const libMesh::Parallel::Communicator & comm,
-        const SolverPackage solver_package = libMesh::default_solver_package());
-#endif
 
   /**
    * \returns \p true if the data structures are initialized, \p false

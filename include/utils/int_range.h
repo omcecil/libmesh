@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,14 +22,16 @@
 
 #include "libmesh/libmesh_common.h" // cast_int
 
-// libMesh includes
-#include "numeric_vector.h"
-
 // C++ includes
 #include <vector>
 
 namespace libMesh
 {
+
+// Forward declarations
+template <typename T> class DenseSubVector;
+template <typename T> class DenseVector;
+template <typename T> class NumericVector;
 
 /**
  * The \p IntRange templated class is intended to make it easy to
@@ -107,6 +109,26 @@ IntRange<std::size_t> index_range(const std::vector<T> & vec)
 }
 
 
+/**
+ * Same thing but for DenseVector
+ */
+template <typename T>
+IntRange<unsigned int> index_range(const DenseVector<T> & vec)
+{
+  return {0, vec.size()};
+}
+
+
+/**
+ * Same thing but for DenseSubVector
+ */
+template <typename T>
+IntRange<unsigned int> index_range(const DenseSubVector<T> & vec)
+{
+  return {0, vec.size()};
+}
+
+
 
 /**
  * Same thing but for NumericVector. Returns a range (first_local_index, last_local_index).
@@ -115,6 +137,40 @@ template <typename T>
 IntRange<numeric_index_type> index_range(const NumericVector<T> & vec)
 {
   return {vec.first_local_index(), vec.last_local_index()};
+}
+
+
+
+/**
+ * The 2-parameter make_range() helper function returns an IntRange<T>
+ * when both input parameters are of type T. This saves a bit of
+ * typing over calling the IntRange<T> constructor directly.
+ */
+template <typename T>
+IntRange<T> make_range(T beg, T end)
+{
+  return {beg, end};
+}
+
+
+
+/**
+ * The 1-parameter version of make_range() saves even more typing in
+ * the common case of a 0 starting point. Example usage:
+ *
+ * for (auto i : make_range(10))
+ *
+ * will loop from 0 to 9. In more realistic cases such as:
+ *
+ * for (auto i : make_range(foo()))
+ *
+ * this construction guarantees that the function foo() is called
+ * exactly once rather than once per loop iteration.
+ */
+template <typename T>
+IntRange<T> make_range(T end)
+{
+  return {T(0), end};
 }
 
 } // namespace libMesh

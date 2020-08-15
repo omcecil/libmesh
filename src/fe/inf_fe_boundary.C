@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -81,12 +81,10 @@ void InfFE<Dim,T_radial,T_base>::reinit(const Elem * inf_elem,
       else
         {
           // build a new 0-dimensional quadrature-rule:
-          radial_qrule.release();
           radial_qrule=QBase::build(QGAUSS, 0, fe_type.radial_order);
           radial_qrule->init(NODEELEM, 0);
 
           //the base_qrule is set up with dim-1, but apparently we need dim, so we replace it:
-          base_qrule.release();
           base_qrule=QBase::build(qrule->type(), side->dim(), qrule->get_order());
 
           //FIXME: Do I have to care about the order of my neighbours element?
@@ -120,9 +118,9 @@ void InfFE<Dim,T_radial,T_base>::reinit(const Elem * inf_elem,
   // somewhere else...
   if (s==0)
     {
-      for (unsigned int p=0; p<qp.size(); p++)
+      for (auto & p : qp)
         {
-          qp[p](Dim-1)=-1.;
+          p(Dim-1)=-1.;
         }
     }
 
@@ -173,7 +171,7 @@ void InfFE<Dim,T_radial,T_base>::init_face_shape_functions(const std::vector<Poi
     this->update_base_elem(inf_side);
   else
     // in this case, I need the 2D base
-    this->update_base_elem(inf_side->parent());
+    this->update_base_elem(inf_side->interior_parent());
 
   // Initialize the base quadrature rule
   base_qrule->init(base_elem->type(), inf_side->p_level());
@@ -214,15 +212,14 @@ void InfFE<Dim,T_radial,T_base>::init_face_shape_functions(const std::vector<Poi
 
     // The element type and order to use in the base map
     const Order    base_mapping_order     ( base_elem->default_order() );
-    const ElemType base_mapping_elem_type ( base_elem->type()          );
 
     // the number of mapping shape functions. For base side it is 1.
     // (Lagrange shape functions are used for mapping in the base)
     const unsigned int n_radial_mapping_sf =
       inf_side->infinite() ? cast_int<unsigned int>(radial_map.size()) : 1;
 
-    const unsigned int n_base_mapping_shape_functions = Base::n_base_mapping_sf(base_mapping_elem_type,
-                                                                                base_mapping_order);
+    const unsigned int n_base_mapping_shape_functions =
+      InfFEBase::n_base_mapping_sf(*base_elem, base_mapping_order);
 
     const unsigned int n_total_mapping_shape_functions =
       n_radial_mapping_sf * n_base_mapping_shape_functions;
@@ -277,9 +274,11 @@ void InfFE<Dim,T_radial,T_base>::init_face_shape_functions(const std::vector<Poi
       {
         psi_map[i].resize         (n_total_qp);
         dpsidxi_map[i].resize     (n_total_qp);
-        dpsideta_map[i].resize     (n_total_qp);
+        dpsideta_map[i].resize    (n_total_qp);
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
         d2psidxi2_map[i].resize   (n_total_qp);
+        d2psidxideta_map[i].resize(n_total_qp);
+        d2psideta2_map[i].resize  (n_total_qp);
 #endif
       }
 

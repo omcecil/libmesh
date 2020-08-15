@@ -1,13 +1,6 @@
-#include "libmesh/exodusII_io.h"
-
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 // Basic include files
 #include "libmesh/equation_systems.h"
+#include "libmesh/exodusII_io.h"
 #include "libmesh/mesh.h"
 #include "libmesh/mesh_generation.h"
 #include "libmesh/node.h"
@@ -17,16 +10,8 @@
 #include "libmesh/numeric_vector.h"
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -159,27 +144,27 @@ public:
         const dof_id_type gold_i_uy = gold_i_ux + 1;
         const dof_id_type gold_i_v  = gold_i_uy + 1;
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,0,0))),
-                                     gold_vector[gold_i_ux], tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,v2,0))),
-                                     gold_vector[gold_i_uy], tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,2*v2,0))),
-                                     gold_vector[gold_i_v], tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,0,0))),
+                                gold_vector[gold_i_ux], tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,v2,0))),
+                                gold_vector[gold_i_uy], tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,2*v2,0))),
+                                gold_vector[gold_i_v], tol);
 
         // Let's check imaginary parts and magnitude for good measure
 #ifdef LIBMESH_USE_COMPLEX_NUMBERS
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,1,0))),
-                                     0.0, tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,2,0))),
-                                     std::abs(gold_vector[gold_i_ux]), tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,4,0))),
-                                     0.0, tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,5,0))),
-                                     std::abs(gold_vector[gold_i_uy]), tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,7,0))),
-                                     0.0, tol);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,8,0))),
-                                     std::abs(gold_vector[gold_i_v]), tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,1,0))),
+                                0.0, tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,2,0))),
+                                std::abs(gold_vector[gold_i_ux]), tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,4,0))),
+                                0.0, tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,5,0))),
+                                std::abs(gold_vector[gold_i_uy]), tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,7,0))),
+                                0.0, tol);
+        LIBMESH_ASSERT_FP_EQUAL(libmesh_real(sys2_soln(node->dof_number(0,8,0))),
+                                std::abs(gold_vector[gold_i_v]), tol);
 #endif
       }
 #endif // #ifdef LIBMESH_HAVE_EXODUS_API

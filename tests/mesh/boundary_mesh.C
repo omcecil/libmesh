@@ -1,26 +1,14 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/mesh.h>
 #include <libmesh/mesh_generation.h>
 #include <libmesh/mesh_refinement.h>
 #include <libmesh/remote_elem.h>
 #include <libmesh/replicated_mesh.h>
+#include <libmesh/auto_ptr.h> // libmesh_make_unique
+#include <libmesh/boundary_info.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -47,10 +35,10 @@ protected:
 
   void build_mesh()
   {
-    _mesh.reset(new Mesh(*TestCommWorld));
-    _all_boundary_mesh.reset(new Mesh(*TestCommWorld));
-    _left_boundary_mesh.reset(new Mesh(*TestCommWorld));
-    _internal_boundary_mesh.reset(new Mesh(*TestCommWorld));
+    _mesh = libmesh_make_unique<Mesh>(*TestCommWorld);
+    _all_boundary_mesh = libmesh_make_unique<Mesh>(*TestCommWorld);
+    _left_boundary_mesh = libmesh_make_unique<Mesh>(*TestCommWorld);
+    _internal_boundary_mesh = libmesh_make_unique<Mesh>(*TestCommWorld);
 
     MeshTools::Generation::build_square(*_mesh, 3, 5,
                                         0.2, 0.8, 0.2, 0.7, QUAD9);
@@ -96,13 +84,32 @@ protected:
     // Get the border of the square
     _mesh->get_boundary_info().sync(*_all_boundary_mesh);
 
+    // Check that the interior_parent side indices that we set on the
+    // BoundaryMesh as extra integers agree with the side returned
+    // by which_side_am_i().
+    unsigned int parent_side_index_tag =
+      _all_boundary_mesh->get_elem_integer_index("parent_side_index");
+
+    for (const auto & belem : _all_boundary_mesh->element_ptr_range())
+      {
+        dof_id_type parent_side_index =
+          belem->get_extra_integer(parent_side_index_tag);
+
+        CPPUNIT_ASSERT_EQUAL
+          (static_cast<dof_id_type>(belem->interior_parent()->which_side_am_i(belem)),
+           parent_side_index);
+      }
+
     std::set<boundary_id_type> left_id, right_id;
     left_id.insert(3);
     right_id.insert(1);
 
     // Add the right side of the square to the square; this should
-    // make it a mixed dimension mesh
-    _mesh->get_boundary_info().add_elements(right_id, *_mesh);
+    // make it a mixed dimension mesh. We skip storing the parent
+    // side ids (which is the default) since they are not needed
+    // in this particular test.
+    _mesh->get_boundary_info().add_elements
+      (right_id, *_mesh, /*store_parent_side_ids=*/false);
     _mesh->prepare_for_use();
 
     // Add the left side of the square to its own boundary mesh.
@@ -220,8 +227,8 @@ public:
             CPPUNIT_ASSERT_EQUAL(pip->level(), elem->level());
 
             // We only added right edges
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(elem->centroid()(0), 0.8,
-                                         TOLERANCE*TOLERANCE);
+            LIBMESH_ASSERT_FP_EQUAL(0.8, elem->centroid()(0),
+                                    TOLERANCE*TOLERANCE);
           }
         else
           {
@@ -249,8 +256,8 @@ public:
         CPPUNIT_ASSERT_EQUAL(pip->level(), elem->level());
 
         // We only added left edges
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(elem->centroid()(0), 0.2,
-                                     TOLERANCE*TOLERANCE);
+        LIBMESH_ASSERT_FP_EQUAL(0.2, elem->centroid()(0),
+                                TOLERANCE*TOLERANCE);
       }
 
     for (const auto & elem : _left_boundary_mesh->active_element_ptr_range())

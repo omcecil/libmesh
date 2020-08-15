@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -130,24 +130,16 @@ int main (int argc, char ** argv)
   GetPot command_line (argc, argv);
 
   // Check for proper calling arguments.
-  if (argc < 3)
-    {
-      // This handy function will print the file name, line number,
-      // specified message, and then throw an exception.
-      libmesh_error_msg("Usage:\n" << "\t " << argv[0] << " -d 2(3)" << " -n 15");
-    }
+  libmesh_error_msg_if(argc < 3, "Usage:\n" << "\t " << argv[0] << " -d 2(3)" << " -n 15");
 
   // Brief message to the user regarding the program name
   // and command line arguments.
-  else
-    {
-      libMesh::out << "Running " << argv[0];
+  libMesh::out << "Running " << argv[0];
 
-      for (int i=1; i<argc; i++)
-        libMesh::out << " " << argv[i];
+  for (int i=1; i<argc; i++)
+    libMesh::out << " " << argv[i];
 
-      libMesh::out << std::endl << std::endl;
-    }
+  libMesh::out << std::endl << std::endl;
 
   // Read problem dimension from command line.  Use int
   // instead of unsigned since the GetPot overload is ambiguous
@@ -158,6 +150,11 @@ int main (int argc, char ** argv)
 
   // Skip higher-dimensional examples on a lower-dimensional libMesh build
   libmesh_example_requires(dim <= LIBMESH_DIM, "2D/3D support");
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // Create a mesh with user-defined dimension.
   // Read number of elements from command line
@@ -176,8 +173,8 @@ int main (int argc, char ** argv)
     family = command_line.next(family);
 
   // Cannot use discontinuous basis.
-  if ((family == "MONOMIAL") || (family == "XYZ"))
-    libmesh_error_msg("ex4 currently requires a C^0 (or higher) FE basis.");
+  libmesh_error_msg_if((family == "MONOMIAL") || (family == "XYZ"),
+                       "ex4 currently requires a C^0 (or higher) FE basis.");
 
   // Create a mesh, with dimension to be overridden later, distributed
   // across the default MPI communicator.
@@ -274,6 +271,7 @@ int main (int argc, char ** argv)
   // This function just calls the function exact_solution via exact_solution_wrapper
   AnalyticFunction<> exact_solution_object(exact_solution_wrapper);
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
   // In general, when reusing a system-indexed exact solution, we want
   // to use the default system-ordering constructor for
   // DirichletBoundary, so we demonstrate that here.  In this case,
@@ -285,7 +283,7 @@ int main (int argc, char ** argv)
   // We must add the Dirichlet boundary condition _before_
   // we call equation_systems.init()
   system.get_dof_map().add_dirichlet_boundary(dirichlet_bc);
-
+#endif
 
   // Initialize the data structures for the equation system.
   equation_systems.init();
@@ -561,14 +559,10 @@ void assemble_poisson(EquationSystems & es,
       // and NumericVector::add_vector() members do this for us.
       // Start logging the insertion of the local (element)
       // matrix and vector into the global matrix and vector
-      perf_log.push ("matrix insertion");
+      LOG_SCOPE_WITH("matrix insertion", "", perf_log);
 
       system.matrix->add_matrix (Ke, dof_indices);
       system.rhs->add_vector    (Fe, dof_indices);
-
-      // Start logging the insertion of the local (element)
-      // matrix and vector into the global matrix and vector
-      perf_log.pop ("matrix insertion");
     }
 
   // That's it.  We don't need to do anything else to the

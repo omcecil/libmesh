@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,7 +20,6 @@
 #define LIBMESH_PARALLEL_SORT_H
 
 // Local Includes
-#include "libmesh/parallel.h"
 #include "libmesh/libmesh_common.h"
 #include "libmesh/parallel_object.h"
 
@@ -30,9 +29,12 @@
 namespace libMesh
 {
 
-
 namespace Parallel
 {
+
+// Forward declarations
+class Communicator;
+
 /**
  * The parallel sorting method is templated on the
  * type of data which is to be sorted.  It may later
@@ -121,7 +123,7 @@ private:
 
   /**
    * Sorts the local data into bins across all processors.
-   * Right now it constructs a BenSorter<KeyType> object.
+   * Right now it constructs a BinSorter<KeyType> object.
    * In the future this could be a template parameter.
    */
   void binsort ();

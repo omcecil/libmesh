@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -103,17 +103,17 @@ void SparseMatrix<Complex>::print(std::ostream & os, const bool sparse) const
     }
 
   os << "Real part:" << std::endl;
-  for (numeric_index_type i=0; i<this->m(); i++)
+  for (auto i : make_range(this->m()))
     {
-      for (numeric_index_type j=0; j<this->n(); j++)
+      for (auto j : make_range(this->n()))
         os << std::setw(8) << (*this)(i,j).real() << " ";
       os << std::endl;
     }
 
   os << std::endl << "Imaginary part:" << std::endl;
-  for (numeric_index_type i=0; i<this->m(); i++)
+  for (auto i : make_range(this->m()))
     {
-      for (numeric_index_type j=0; j<this->n(); j++)
+      for (auto j : make_range(this->n()))
         os << std::setw(8) << (*this)(i,j).imag() << " ";
       os << std::endl;
     }
@@ -203,8 +203,7 @@ void SparseMatrix<T>::print(std::ostream & os, const bool sparse) const
 
   libmesh_assert (this->initialized());
 
-  if (!this->_dof_map)
-    libmesh_error_msg("Error!  Trying to print a matrix with no dof_map set!");
+  libmesh_error_msg_if(!this->_dof_map, "Error!  Trying to print a matrix with no dof_map set!");
 
   // We'll print the matrix from processor 0 to make sure
   // it's serialized properly
@@ -216,7 +215,7 @@ void SparseMatrix<T>::print(std::ostream & os, const bool sparse) const
         {
           if (sparse)
             {
-              for (numeric_index_type j=0; j<this->n(); j++)
+              for (auto j : make_range(this->n()))
                 {
                   T c = (*this)(i,j);
                   if (c != static_cast<T>(0.0))
@@ -227,7 +226,7 @@ void SparseMatrix<T>::print(std::ostream & os, const bool sparse) const
             }
           else
             {
-              for (numeric_index_type j=0; j<this->n(); j++)
+              for (auto j : make_range(this->n()))
                 os << (*this)(i,j) << " ";
               os << std::endl;
             }
@@ -236,7 +235,7 @@ void SparseMatrix<T>::print(std::ostream & os, const bool sparse) const
       std::vector<numeric_index_type> ibuf, jbuf;
       std::vector<T> cbuf;
       numeric_index_type currenti = this->_dof_map->end_dof();
-      for (processor_id_type p=1; p < this->n_processors(); ++p)
+      for (auto p : IntRange<processor_id_type>(1, this->n_processors()))
         {
           this->comm().receive(p, ibuf);
           this->comm().receive(p, jbuf);
@@ -267,7 +266,7 @@ void SparseMatrix<T>::print(std::ostream & os, const bool sparse) const
                 }
               else
                 {
-                  for (numeric_index_type j=0; j<this->n(); j++)
+                  for (auto j : make_range(this->n()))
                     {
                       if (currentb < ibuf.size() &&
                           ibuf[currentb] == currenti &&
@@ -303,7 +302,7 @@ void SparseMatrix<T>::print(std::ostream & os, const bool sparse) const
       for (numeric_index_type i=this->_dof_map->first_dof();
            i!=this->_dof_map->end_dof(); ++i)
         {
-          for (numeric_index_type j=0; j<this->n(); j++)
+          for (auto j : make_range(this->n()))
             {
               T c = (*this)(i,j);
               if (c != static_cast<T>(0.0))

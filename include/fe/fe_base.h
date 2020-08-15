@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,7 +22,6 @@
 
 // Local includes
 #include "libmesh/libmesh_common.h"
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/compare_types.h"
 #include "libmesh/fe_abstract.h"
 #include "libmesh/fe_transformation_base.h"
@@ -31,6 +30,7 @@
 #include "libmesh/tensor_tools.h"
 #include "libmesh/type_n_tensor.h"
 #include "libmesh/vector_value.h"
+#include "libmesh/dense_matrix.h"
 
 // C++ includes
 #include <cstddef>
@@ -208,6 +208,23 @@ public:
   { libmesh_assert(!calculations_started || calculate_phi);
     calculate_phi = true; return phi; }
 
+  const std::vector<std::vector<OutputShape>> & get_dual_phi() const
+  {
+    libmesh_assert(!calculations_started || calculate_dual);
+    calculate_dual = true;
+    // Dual phi computation relies on primal phi computation
+    this->request_phi();
+    // also need JxW calculations
+    this->get_JxW();
+    return dual_phi;
+  }
+
+  void request_phi() const override
+  { get_phi(); }
+
+  void request_dual_phi() const override
+  { get_dual_phi(); }
+
   /**
    * \returns The shape function derivatives at the quadrature
    * points.
@@ -215,6 +232,19 @@ public:
   const std::vector<std::vector<OutputGradient>> & get_dphi() const
   { libmesh_assert(!calculations_started || calculate_dphi);
     calculate_dphi = calculate_dphiref = true; return dphi; }
+
+  const std::vector<std::vector<OutputGradient>> & get_dual_dphi() const
+  { libmesh_assert(!calculations_started || calculate_dphi);
+    calculate_dphi = calculate_dual = calculate_dphiref = true; return dual_dphi; }
+
+  void request_dphi() const override
+  { get_dphi(); }
+
+  void request_dual_dphi() const override
+  { get_dual_dphi(); }
+
+  const DenseMatrix<Real> & get_dual_coeff() const
+  { return dual_coeff; }
 
   /**
    * \returns The curl of the shape function at the quadrature
@@ -289,6 +319,10 @@ public:
   const std::vector<std::vector<OutputTensor>> & get_d2phi() const
   { libmesh_assert(!calculations_started || calculate_d2phi);
     calculate_d2phi = calculate_dphiref = true; return d2phi; }
+
+  const std::vector<std::vector<OutputTensor>> & get_dual_d2phi() const
+  { libmesh_assert(!calculations_started || calculate_d2phi);
+    calculate_d2phi = calculate_dual = calculate_dphiref = true; return dual_d2phi; }
 
   /**
    * \returns The shape function second derivatives at the quadrature
@@ -433,13 +467,15 @@ public:
   /**
    * Prints the value of each shape function at each quadrature point.
    */
-  void print_phi(std::ostream & os) const;
+  void print_phi(std::ostream & os) const override;
+  void print_dual_phi(std::ostream & os) const override;
 
   /**
    * Prints the value of each shape function's derivative
    * at each quadrature point.
    */
-  void print_dphi(std::ostream & os) const;
+  void print_dphi(std::ostream & os) const override;
+  void print_dual_dphi(std::ostream & os) const override;
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -447,7 +483,8 @@ public:
    * Prints the value of each shape function's second derivatives
    * at each quadrature point.
    */
-  void print_d2phi(std::ostream & os) const;
+  void print_d2phi(std::ostream & os) const override;
+  void print_dual_d2phi(std::ostream & os) const override;
 
 #endif
 
@@ -475,6 +512,21 @@ protected:
   void determine_calculations();
 
   /**
+   * \returns true iff no calculations have been requested of this
+   * FE object or of its associated FEMap
+   */
+  bool calculating_nothing() const
+  {
+    return calculate_nothing &&
+      !this->calculate_phi && !this->calculate_dphi &&
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
+      !this->calculate_d2phi &&
+#endif
+      !this->calculate_curl_phi && !this->calculate_div_phi &&
+      !this->calculate_map;
+  }
+
+  /**
    * After having updated the jacobian and the transformation
    * from local to global coordinates in \p FEAbstract::compute_map(),
    * the first derivatives of the shape functions are
@@ -484,7 +536,19 @@ protected:
    * still should be usable for children. Therefore, keep
    * it protected.
    */
-  virtual void compute_shape_functions(const Elem * elem, const std::vector<Point> & qp);
+  virtual void compute_shape_functions(const Elem * elem, const std::vector<Point> & qp) override;
+
+  /**
+   * Compute the dual basis coefficients \p dual_coeff
+   */
+  void compute_dual_shape_coeffs();
+
+  /**
+   * Compute \p dual_phi, \p dual_dphi, \p dual_d2phi
+   * It is only valid for this to be called after reinit has occured with a
+   * quadrature rule
+   */
+  void compute_dual_shape_functions();
 
   /**
    * Object that handles computing shape function values, gradients, etc
@@ -496,11 +560,18 @@ protected:
    * Shape function values.
    */
   std::vector<std::vector<OutputShape>>   phi;
+  std::vector<std::vector<OutputShape>>   dual_phi;
 
   /**
    * Shape function derivative values.
    */
   std::vector<std::vector<OutputGradient>>  dphi;
+  std::vector<std::vector<OutputGradient>>  dual_dphi;
+
+  /**
+   * Coefficient matrix for the dual basis.
+   */
+  mutable DenseMatrix<Real> dual_coeff;
 
   /**
    * Shape function curl values. Only defined for vector types.
@@ -549,6 +620,7 @@ protected:
    * Shape function second derivative values.
    */
   std::vector<std::vector<OutputTensor>>  d2phi;
+  std::vector<std::vector<OutputTensor>>  dual_d2phi;
 
   /**
    * Shape function second derivatives in the xi direction.
@@ -661,6 +733,33 @@ private:
 
 };
 
+// --------------------------------------------------------------------
+// Generic templates. We specialize for OutputType = Real, so these are
+// only used for OutputType = RealVectorValue
+template <typename OutputType>
+void FEGenericBase<OutputType>::compute_dual_shape_functions ()
+{
+  libmesh_error_msg(
+      "Computation of dual shape functions for vector finite element "
+      "families is not currently implemented");
+}
+
+template <typename OutputType>
+void FEGenericBase<OutputType>::compute_dual_shape_coeffs ()
+{
+  libmesh_error_msg(
+      "Computation of dual shape functions for vector finite element "
+      "families is not currently implemented");
+}
+
+// -----------------------------------------------------------
+// Forward declaration of specialization
+template <>
+void FEGenericBase<Real>::compute_dual_shape_functions();
+
+template <>
+void FEGenericBase<Real>::compute_dual_shape_coeffs();
+
 
 // Typedefs for convenience and backwards compatibility
 typedef FEGenericBase<Real> FEBase;
@@ -678,7 +777,9 @@ FEGenericBase<OutputType>::FEGenericBase(const unsigned int d,
   FEAbstract(d,fet),
   _fe_trans( FETransformationBase<OutputType>::build(fet) ),
   phi(),
+  dual_phi(),
   dphi(),
+  dual_dphi(),
   curl_phi(),
   div_phi(),
   dphidxi(),
@@ -689,6 +790,7 @@ FEGenericBase<OutputType>::FEGenericBase(const unsigned int d,
   dphidz()
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
   ,d2phi(),
+  dual_d2phi(),
   d2phidxi2(),
   d2phidxideta(),
   d2phidxidzeta(),

@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 // libmesh includes
 #include <libmesh/composite_function.h>
 #include <libmesh/const_function.h>
@@ -12,15 +6,8 @@
 #include <libmesh/zero_function.h>
 #include <libmesh/analytic_function.h>
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
+#include "libmesh_cppunit.h"
+
 
 using namespace libMesh;
 
@@ -85,11 +72,11 @@ private:
 
       composite_inner(Point(0), 0, test_one);
 
-      CPPUNIT_ASSERT_DOUBLES_EQUAL(test_one(0), 2, 1.e-12);
-      CPPUNIT_ASSERT_DOUBLES_EQUAL(test_one(1), 2, 1.e-12);
-      CPPUNIT_ASSERT_DOUBLES_EQUAL(test_one(2), 2, 1.e-12);
-      CPPUNIT_ASSERT_DOUBLES_EQUAL(test_one(3), 1, 1.e-12);
-      CPPUNIT_ASSERT_DOUBLES_EQUAL(test_one(4), 1, 1.e-12);
+      LIBMESH_ASSERT_FP_EQUAL(2, test_one(0), 1.e-12);
+      LIBMESH_ASSERT_FP_EQUAL(2, test_one(1), 1.e-12);
+      LIBMESH_ASSERT_FP_EQUAL(2, test_one(2), 1.e-12);
+      LIBMESH_ASSERT_FP_EQUAL(1, test_one(3), 1.e-12);
+      LIBMESH_ASSERT_FP_EQUAL(1, test_one(4), 1.e-12);
     }
     // Test that ConstFunction copy- and move-assignment works.
     ConstFunction<Real> cf_three(3);
@@ -111,19 +98,19 @@ private:
     DenseVector<Real> test_two(8);
     composite_outer_copy2(Point(0), 0, test_two);
 
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(0), 3, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(2), 3, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(4), 3, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(5), 2, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(1), 2, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(3), 2, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(6), 1, 1.e-12);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(test_two(7), 1, 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(3, test_two(0), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(3, test_two(2), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(3, test_two(4), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(2, test_two(5), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(2, test_two(1), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(2, test_two(3), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(1, test_two(6), 1.e-12);
+    LIBMESH_ASSERT_FP_EQUAL(1, test_two(7), 1.e-12);
   }
 
   void testTimeDependence()
   {
-
+#ifdef LIBMESH_HAVE_FPARSER
     // We'll test the order of adding these functions to
     // make sure time dependence gets detected/updated correctly
     // for each
@@ -211,7 +198,7 @@ private:
       composite.attach_subfunction(zero, index_set);
       CPPUNIT_ASSERT(!composite.is_time_dependent());
     }
-
+#endif // #ifdef LIBMESH_HAVE_FPARSER
   }
 };
 

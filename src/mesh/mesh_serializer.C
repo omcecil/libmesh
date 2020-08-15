@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,7 +19,7 @@
 // Local includes
 #include "libmesh/mesh_serializer.h"
 #include "libmesh/mesh_base.h"
-#include "libmesh/parallel.h" // parallel_only() macro
+#include "libmesh/parallel_only.h"
 
 namespace libMesh
 {

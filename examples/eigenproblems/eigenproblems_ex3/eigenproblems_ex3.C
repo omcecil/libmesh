@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -118,6 +118,11 @@ int main (int argc, char ** argv)
   libmesh_example_requires(false, "--disable-complex or use SLEPc>=3.6.2");
 #endif
 
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
+
   // Tell the user what we are doing.
   {
     libMesh::out << "Running " << argv[0];
@@ -214,12 +219,14 @@ int main (int argc, char ** argv)
 
     ZeroFunction<> zf;
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
     // Most DirichletBoundary users will want to supply a "locally
     // indexed" functor
     DirichletBoundary dirichlet_bc(boundary_ids, variables, zf,
                                    LOCAL_VARIABLE_ORDER);
 
     eigen_system.get_dof_map().add_dirichlet_boundary(dirichlet_bc);
+#endif
   }
 
   // Initialize the data structures for the equation system.

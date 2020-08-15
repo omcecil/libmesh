@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/equation_systems.h>
 #include <libmesh/replicated_mesh.h>
 #include <libmesh/mesh_generation.h>
@@ -18,16 +12,8 @@
 #include <libmesh/numeric_vector.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -106,23 +92,21 @@ protected:
     _mesh->add_point( Point(0.0, 0.0), 0 );
 
     {
-      Elem* elem_top = _mesh->add_elem( new Quad4 );
+      Elem * elem_top = _mesh->add_elem(Elem::build(QUAD4));
       elem_top->set_node(0) = _mesh->node_ptr(0);
       elem_top->set_node(1) = _mesh->node_ptr(1);
       elem_top->set_node(2) = _mesh->node_ptr(2);
       elem_top->set_node(3) = _mesh->node_ptr(3);
 
-      Elem* elem_bottom = _mesh->add_elem( new Quad4 );
+      Elem * elem_bottom = _mesh->add_elem(Elem::build(QUAD4));
       elem_bottom->set_node(0) = _mesh->node_ptr(4);
       elem_bottom->set_node(1) = _mesh->node_ptr(5);
       elem_bottom->set_node(2) = _mesh->node_ptr(1);
       elem_bottom->set_node(3) = _mesh->node_ptr(0);
     }
 
-    // libMesh will renumber, but we numbered according to its scheme
-    // anyway. We do this because when we call uniformly_refine subsequently,
-    // it's going use skip_renumber=false.
-    _mesh->prepare_for_use(false /*skip_renumber*/);
+    _mesh->allow_renumbering(true);
+    _mesh->prepare_for_use();
 
     // get a point locator
     _point_locator = _mesh->sub_point_locator();

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,6 +26,7 @@
 
 // C++ includes
 #include <vector>
+#include <unordered_set>
 
 namespace libMesh
 {
@@ -87,6 +88,17 @@ private:
   const bool implicit_neighbor_dofs;
   const bool need_full_sparsity_pattern;
 
+  // If there are "spider" nodes in the mesh (i.e. a single node which
+  // is connected to many 1D elements) and Constraints, we can end up
+  // sorting the same set of DOFs multiple times in handle_vi_vj(),
+  // only to find that it has no net effect on the final sparsity. In
+  // such cases it is much faster to keep track of (element_dofs_i,
+  // element_dofs_j) pairs which have already been handled and not
+  // repeat the computation. We use this data structure to keep track
+  // of hashes of sets of dofs we have already seen, thus avoiding
+  // unnecessary caluclations.
+  std::unordered_set<dof_id_type> hashed_dof_sets;
+
   void handle_vi_vj(const std::vector<dof_id_type> & element_dofs_i,
                     const std::vector<dof_id_type> & element_dofs_j);
 
@@ -105,7 +117,7 @@ public:
   Build (const MeshBase & mesh_in,
          const DofMap & dof_map_in,
          const CouplingMatrix * dof_coupling_in,
-         std::set<GhostingFunctor *> coupling_functors_in,
+         const std::set<GhostingFunctor *> & coupling_functors_in,
          const bool implicit_neighbor_dofs_in,
          const bool need_full_sparsity_pattern_in);
 

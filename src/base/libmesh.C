@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -18,14 +18,21 @@
 
 // Local includes
 #include "libmesh/libmesh.h"
+
+// libMesh includes
 #include "libmesh/getpot.h"
-#include "libmesh/parallel.h"
 #include "libmesh/reference_counter.h"
 #include "libmesh/libmesh_singleton.h"
 #include "libmesh/remote_elem.h"
 #include "libmesh/threads.h"
+#include "libmesh/parallel_only.h"
 #include "libmesh/print_trace.h"
 #include "libmesh/enum_solver_package.h"
+#include "libmesh/perf_log.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
+
+// TIMPI includes
+#include "timpi/communicator.h"
 
 // C/C++ includes
 #include <iostream>
@@ -61,9 +68,7 @@
 # include "libmesh/petsc_macro.h"
 # include <petsc.h>
 # include <petscerror.h>
-#if !PETSC_RELEASE_LESS_THAN(3,3,0)
-#include "libmesh/petscdmlibmesh.h"
-#endif
+# include "libmesh/petscdmlibmesh.h"
 # if defined(LIBMESH_HAVE_SLEPC)
 // Ignore unused variable warnings from SLEPc
 #  include "libmesh/ignore_warnings.h"
@@ -325,18 +330,14 @@ void libmesh_terminate_handler()
 
 
 
-#ifndef LIBMESH_HAVE_MPI
-LibMeshInit::LibMeshInit (int argc, const char * const * argv)
-#else
 LibMeshInit::LibMeshInit (int argc, const char * const * argv,
-                          MPI_Comm COMM_WORLD_IN)
-#endif
+                          TIMPI::communicator COMM_WORLD_IN, int n_threads)
 {
   // should _not_ be initialized already.
   libmesh_assert (!libMesh::initialized());
 
   // Build a command-line parser.
-  command_line.reset (new GetPot (argc, argv));
+  command_line = libmesh_make_unique<GetPot>(argc, argv);
 
   // Disable performance logging upon request
   {
@@ -350,11 +351,21 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
     // multithreading competition.  If you would like to use MPI and multithreading
     // at the same time then (n_mpi_processes_per_node)x(n_threads) should be the
     //  number of processing cores per node.
-    std::vector<std::string> n_threads(2);
-    n_threads[0] = "--n_threads";
-    n_threads[1] = "--n-threads";
+    std::vector<std::string> n_threads_opt(2);
+    n_threads_opt[0] = "--n_threads";
+    n_threads_opt[1] = "--n-threads";
     libMesh::libMeshPrivateData::_n_threads =
-      libMesh::command_line_value (n_threads, 1);
+      libMesh::command_line_value(n_threads_opt, n_threads);
+
+    if (libMesh::libMeshPrivateData::_n_threads == -1)
+      {
+        for (auto & option : n_threads_opt)
+          libmesh_error_msg_if(command_line->search(option),
+                               "Detected option " << option <<
+                               " with no value.  Did you forget '='?");
+
+        libMesh::libMeshPrivateData::_n_threads = 1;
+      }
 
     // If there's no threading model active, force _n_threads==1
 #if !LIBMESH_USING_THREADS
@@ -371,7 +382,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
     omp_set_num_threads(libMesh::libMeshPrivateData::_n_threads);
 #endif
 
-    task_scheduler.reset (new Threads::task_scheduler_init(libMesh::n_threads()));
+    task_scheduler = libmesh_make_unique<Threads::task_scheduler_init>(libMesh::n_threads());
   }
 
   // Construct singletons who may be at risk of the
@@ -389,7 +400,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
       // Check whether the calling program has already initialized
       // MPI, and avoid duplicate Init/Finalize
       int flag;
-      libmesh_call_mpi(MPI_Initialized (&flag));
+      timpi_call_mpi(MPI_Initialized (&flag));
 
       if (!flag)
         {
@@ -398,7 +409,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
             MPI_THREAD_FUNNELED :
             MPI_THREAD_SINGLE;
 
-          libmesh_call_mpi
+          timpi_call_mpi
             (MPI_Init_thread (&argc, const_cast<char ***>(&argv),
                               mpi_thread_requested, &mpi_thread_provided));
 
@@ -421,7 +432,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
               // anyway.
 
               // libMesh::libMeshPrivateData::_n_threads = 1;
-              // task_scheduler.reset (new Threads::task_scheduler_init(libMesh::n_threads()));
+              // task_scheduler = libmesh_make_unique<Threads::task_scheduler_init>(libMesh::n_threads());
             }
           libmesh_initialized_mpi = true;
         }
@@ -429,7 +440,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
       // Duplicate the input communicator for internal use
       // And get a Parallel::Communicator copy too, to use
       // as a default for that API
-      this->_comm = COMM_WORLD_IN;
+      this->_comm = new Parallel::Communicator(COMM_WORLD_IN);
 
       libMesh::GLOBAL_COMM_WORLD = COMM_WORLD_IN;
 
@@ -445,11 +456,11 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
       // into a debugger with a proper stack when an MPI error occurs.
       if (libMesh::on_command_line ("--handle-mpi-errors"))
         {
-          libmesh_call_mpi
+          timpi_call_mpi
             (MPI_Comm_create_errhandler(libMesh_MPI_Handler, &libmesh_errhandler));
-          libmesh_call_mpi
+          timpi_call_mpi
             (MPI_Comm_set_errhandler(libMesh::GLOBAL_COMM_WORLD, libmesh_errhandler));
-          libmesh_call_mpi
+          timpi_call_mpi
             (MPI_Comm_set_errhandler(MPI_COMM_WORLD, libmesh_errhandler));
         }
     }
@@ -463,6 +474,9 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
   // Let's be sure we properly initialize on every processor at once:
   libmesh_parallel_only(this->comm());
 
+#else
+  libmesh_ignore(COMM_WORLD_IN);
+  this->_comm = new Parallel::Communicator(); // So comm() doesn't dereference null
 #endif
 
 #if defined(LIBMESH_HAVE_PETSC)
@@ -480,7 +494,12 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
     {
       int ierr=0;
 
+#ifdef LIBMESH_HAVE_MPI
       PETSC_COMM_WORLD = libMesh::GLOBAL_COMM_WORLD;
+#else
+      // PETSc --with-mpi=0 doesn't like our default "communicator" 0
+      this->_comm->get() = PETSC_COMM_SELF;
+#endif
 
       // Check whether the calling program has already initialized
       // PETSc, and avoid duplicate Initialize/Finalize
@@ -509,15 +528,8 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
           CHKERRABORT(libMesh::GLOBAL_COMM_WORLD,ierr);
         }
 # endif
-#if !PETSC_RELEASE_LESS_THAN(3,3,0)
       // Register the reference implementation of DMlibMesh
-#if PETSC_RELEASE_LESS_THAN(3,4,0)
-      ierr = DMRegister(DMLIBMESH, PETSC_NULL, "DMCreate_libMesh", DMCreate_libMesh); CHKERRABORT(libMesh::GLOBAL_COMM_WORLD,ierr);
-#else
       ierr = DMRegister(DMLIBMESH, DMCreate_libMesh); CHKERRABORT(libMesh::GLOBAL_COMM_WORLD,ierr);
-#endif
-
-#endif
     }
 #endif
 
@@ -537,7 +549,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
   // plus we were doing it wrong for many years and not clearing the
   // existing GetPot object before re-parsing the command line, so all
   // the command line arguments appeared twice in the GetPot object...
-  command_line.reset (new GetPot (argc, argv));
+  command_line = libmesh_make_unique<GetPot>(argc, argv);
 
   // The following line is an optimization when simultaneous
   // C and C++ style access to output streams is not required.
@@ -600,7 +612,7 @@ LibMeshInit::LibMeshInit (int argc, const char * const * argv,
 
       std::ostringstream filename;
       filename << basename << ".processor." << libMesh::global_processor_id();
-      _ofstream.reset (new std::ofstream (filename.str().c_str()));
+      _ofstream = libmesh_make_unique<std::ofstream>(filename.str().c_str());
 
       // Redirect, saving the original streambufs!
       out_buf = libMesh::out.rdbuf (_ofstream->rdbuf());
@@ -771,7 +783,8 @@ LibMeshInit::~LibMeshInit()
   // Allow the user to bypass MPI finalization
   if (!libMesh::on_command_line ("--disable-mpi"))
     {
-      this->_comm.clear();
+      this->comm().clear();
+      delete this->_comm;
 
       if (libmesh_initialized_mpi)
         {
@@ -789,6 +802,8 @@ LibMeshInit::~LibMeshInit()
             }
         }
     }
+#else
+  delete this->_comm;
 #endif
 }
 
@@ -912,8 +927,8 @@ T command_line_value (const std::string & name, T value)
   libmesh_assert(command_line.get());
 
   // only if the variable exists in the file
-  if (command_line->have_variable(name.c_str()))
-    value = (*command_line)(name.c_str(), value);
+  if (command_line->have_variable(name))
+    value = (*command_line)(name, value);
 
   return value;
 }
@@ -926,9 +941,9 @@ T command_line_value (const std::vector<std::string> & name, T value)
 
   // Check for multiple options (return the first that matches)
   for (const auto & entry : name)
-    if (command_line->have_variable(entry.c_str()))
+    if (command_line->have_variable(entry))
       {
-        value = (*command_line)(entry.c_str(), value);
+        value = (*command_line)(entry, value);
         break;
       }
 
@@ -957,13 +972,13 @@ void command_line_vector (const std::string & name, std::vector<T> & vec)
   libmesh_assert(command_line.get());
 
   // only if the variable exists on the command line
-  if (command_line->have_variable(name.c_str()))
+  if (command_line->have_variable(name))
     {
-      unsigned size = command_line->vector_variable_size(name.c_str());
+      unsigned size = command_line->vector_variable_size(name);
       vec.resize(size);
 
       for (unsigned i=0; i<size; ++i)
-        vec[i] = (*command_line)(name.c_str(), vec[i], i);
+        vec[i] = (*command_line)(name, vec[i], i);
     }
 }
 
@@ -1032,8 +1047,10 @@ SolverPackage default_solver_package ()
 
 
 //-------------------------------------------------------------------------------
+template unsigned char  command_line_value<unsigned char>  (const std::string &, unsigned char);
 template unsigned short command_line_value<unsigned short> (const std::string &, unsigned short);
 template unsigned int   command_line_value<unsigned int>   (const std::string &, unsigned int);
+template char           command_line_value<char>           (const std::string &, char);
 template short          command_line_value<short>          (const std::string &, short);
 template int            command_line_value<int>            (const std::string &, int);
 template float          command_line_value<float>          (const std::string &, float);
@@ -1041,8 +1058,10 @@ template double         command_line_value<double>         (const std::string &,
 template long double    command_line_value<long double>    (const std::string &, long double);
 template std::string    command_line_value<std::string>    (const std::string &, std::string);
 
+template unsigned char  command_line_value<unsigned char>  (const std::vector<std::string> &, unsigned char);
 template unsigned short command_line_value<unsigned short> (const std::vector<std::string> &, unsigned short);
 template unsigned int   command_line_value<unsigned int>   (const std::vector<std::string> &, unsigned int);
+template char           command_line_value<char>           (const std::vector<std::string> &, char);
 template short          command_line_value<short>          (const std::vector<std::string> &, short);
 template int            command_line_value<int>            (const std::vector<std::string> &, int);
 template float          command_line_value<float>          (const std::vector<std::string> &, float);
@@ -1050,8 +1069,10 @@ template double         command_line_value<double>         (const std::vector<st
 template long double    command_line_value<long double>    (const std::vector<std::string> &, long double);
 template std::string    command_line_value<std::string>    (const std::vector<std::string> &, std::string);
 
+template unsigned char  command_line_next<unsigned char>   (std::string, unsigned char);
 template unsigned short command_line_next<unsigned short>  (std::string, unsigned short);
 template unsigned int   command_line_next<unsigned int>    (std::string, unsigned int);
+template char           command_line_next<char>            (std::string, char);
 template short          command_line_next<short>           (std::string, short);
 template int            command_line_next<int>             (std::string, int);
 template float          command_line_next<float>           (std::string, float);
@@ -1059,12 +1080,21 @@ template double         command_line_next<double>          (std::string, double)
 template long double    command_line_next<long double>     (std::string, long double);
 template std::string    command_line_next<std::string>     (std::string, std::string);
 
-template void         command_line_vector<unsigned short>  (const std::string &, std::vector<unsigned short> &);
-template void         command_line_vector<unsigned int>    (const std::string &, std::vector<unsigned int> &);
-template void         command_line_vector<short>           (const std::string &, std::vector<short> &);
-template void         command_line_vector<int>             (const std::string &, std::vector<int> &);
-template void         command_line_vector<float>           (const std::string &, std::vector<float> &);
-template void         command_line_vector<double>          (const std::string &, std::vector<double> &);
-template void         command_line_vector<long double>     (const std::string &, std::vector<long double> &);
+template void           command_line_vector<unsigned char> (const std::string &, std::vector<unsigned char> &);
+template void           command_line_vector<unsigned short>(const std::string &, std::vector<unsigned short> &);
+template void           command_line_vector<unsigned int>  (const std::string &, std::vector<unsigned int> &);
+template void           command_line_vector<char>          (const std::string &, std::vector<char> &);
+template void           command_line_vector<short>         (const std::string &, std::vector<short> &);
+template void           command_line_vector<int>           (const std::string &, std::vector<int> &);
+template void           command_line_vector<float>         (const std::string &, std::vector<float> &);
+template void           command_line_vector<double>        (const std::string &, std::vector<double> &);
+template void           command_line_vector<long double>   (const std::string &, std::vector<long double> &);
+
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+template Real           command_line_value<Real>           (const std::string &, Real);
+template Real           command_line_value<Real>           (const std::vector<std::string> &, Real);
+template Real           command_line_next<Real>            (std::string, Real);
+template void           command_line_vector<Real>          (const std::string &, std::vector<Real> &);
+#endif
 
 } // namespace libMesh

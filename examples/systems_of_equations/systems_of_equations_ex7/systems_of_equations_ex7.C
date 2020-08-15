@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -531,13 +531,18 @@ int main (int argc, char ** argv)
   // We use a 3D domain.
   libmesh_example_requires(LIBMESH_DIM > 2, "--disable-1D-only --disable-2D-only");
 
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
+
   GetPot infile("systems_of_equations_ex7.in");
   const Real x_length = infile("x_length", 0.);
   const Real y_length = infile("y_length", 0.);
   const Real z_length = infile("z_length", 0.);
-  const Real n_elem_x = infile("n_elem_x", 0);
-  const Real n_elem_y = infile("n_elem_y", 0);
-  const Real n_elem_z = infile("n_elem_z", 0);
+  const int n_elem_x = infile("n_elem_x", 0);
+  const int n_elem_y = infile("n_elem_y", 0);
+  const int n_elem_z = infile("n_elem_z", 0);
   const std::string approx_order = infile("approx_order", "FIRST");
   const std::string fe_family = infile("fe_family", "LAGRANGE");
 
@@ -607,6 +612,7 @@ int main (int argc, char ** argv)
   equation_systems.parameters.set<Real>("poisson_ratio") = poisson_ratio;
   equation_systems.parameters.set<Real>("forcing_magnitude") = forcing_magnitude;
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
   // Attach Dirichlet boundary conditions
   std::set<boundary_id_type> clamped_boundaries;
   clamped_boundaries.insert(BOUNDARY_ID_MIN_X);
@@ -623,6 +629,9 @@ int main (int argc, char ** argv)
   system.get_dof_map().add_dirichlet_boundary
     (DirichletBoundary (clamped_boundaries, uvw, zero,
                         LOCAL_VARIABLE_ORDER));
+#else
+  libmesh_ignore(u_var, v_var, w_var);
+#endif // LIBMESH_ENABLE_DIRICHLET
 
   equation_systems.init();
   equation_systems.print_info();

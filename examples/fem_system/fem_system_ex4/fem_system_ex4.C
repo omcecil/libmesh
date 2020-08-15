@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -69,6 +69,11 @@ int main (int argc, char ** argv)
 #ifndef LIBMESH_ENABLE_AMR
   libmesh_example_requires(false, "--enable-amr");
 #else
+
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
 
   // This doesn't converge with Eigen BICGSTAB for some reason...
   libmesh_example_requires(libMesh::default_solver_package() != EIGEN_SOLVERS, "--enable-petsc");
@@ -228,7 +233,7 @@ int main (int argc, char ** argv)
           // not in H1 - if we were doing more than a few
           // timesteps we'd need to turn off or limit the
           // maximum level of our adaptivity eventually
-          error_estimator.reset(new KellyErrorEstimator);
+          error_estimator = libmesh_make_unique<KellyErrorEstimator>();
         }
 
       error_estimator->estimate_error(system, error);
@@ -312,12 +317,12 @@ int main (int argc, char ** argv)
   exact_sol.attach_exact_value(0, &exact_func);
   exact_sol.compute_error("Heat", "T");
 
-  Number err = exact_sol.l2_error("Heat", "T");
+  Real err = exact_sol.l2_error("Heat", "T");
 
   // Print out the error value
   libMesh::out << "L2-Error is: " << err << std::endl;
 
-  libmesh_assert_less(libmesh_real(err), 2e-3);
+  libmesh_assert_less(err, 2e-3);
 
 #endif // #ifdef LIBMESH_HAVE_FPARSER
 

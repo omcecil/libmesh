@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -60,22 +60,6 @@ public:
    */
   virtual const T & get () const override
   { libmesh_assert(_ptr); return *_ptr; }
-
-  /**
-   * Reseater: change the location of the parameter we access.
-   *
-   * \deprecated This is included for backward compatibility, but
-   * should no longer be used.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual ParameterAccessor<T> &
-  operator= (T * new_ptr) override
-  {
-    libmesh_deprecated();
-    _ptr = new_ptr;
-    return *this;
-  }
-#endif
 
   /**
    * \returns A new copy of the accessor.

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,7 @@
 #include "libmesh/sibling_coupling.h"
 #include "libmesh/elem.h"
 #include "libmesh/remote_elem.h"
+#include "libmesh/libmesh_logging.h"
 
 namespace libMesh
 {
@@ -33,9 +34,13 @@ void SiblingCoupling::operator()
 {
   LOG_SCOPE("operator()", "SiblingCoupling");
 
+  libmesh_assert(_mesh);
+
   for (const auto & elem : as_range(range_begin, range_end))
     {
       std::vector<const Elem *> active_siblings;
+
+      libmesh_assert(_mesh->query_elem_ptr(elem->id()) == elem);
 
       const Elem * parent = elem->parent();
       if (!parent)
@@ -47,8 +52,7 @@ void SiblingCoupling::operator()
 
       for (const Elem * sibling : active_siblings)
         if (sibling->processor_id() != p)
-          coupled_elements.insert
-            (std::make_pair(sibling, _dof_coupling));
+          coupled_elements.emplace(sibling, _dof_coupling);
     }
 }
 

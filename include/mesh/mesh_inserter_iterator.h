@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,15 +21,18 @@
 #define LIBMESH_MESH_INSERTER_ITERATOR_H
 
 // Local includes
-#include "libmesh/elem.h"
 #include "libmesh/mesh_base.h"
-#include "libmesh/node.h"
 
 // C++ includes
 #include <iterator>
 
 namespace libMesh
 {
+
+// Forward declarations
+class Elem;
+class Node;
+class Point;
 
 /**
  * A class for templated methods that expect output iterator

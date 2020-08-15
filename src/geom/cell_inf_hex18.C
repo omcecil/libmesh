@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -64,6 +64,18 @@ const unsigned int InfHex18::edge_nodes_map[InfHex18::num_edges][InfHex18::nodes
     {3, 7, 99}  // Edge 7
   };
 
+const unsigned int InfHex18::edge_sides_map[InfHex18::num_edges][2] =
+  {
+    {0, 1}, // Edge 0
+    {1, 2}, // Edge 1
+    {0, 3}, // Edge 2
+    {0, 4}, // Edge 3
+    {1, 4}, // Edge 4
+    {1, 2}, // Edge 5
+    {2, 3}, // Edge 6
+    {3, 4}  // Edge 7
+  };
+
 // ------------------------------------------------------------
 // InfHex18 class member functions
 
@@ -112,6 +124,13 @@ InfHex18::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s]) - trim};
 }
 
+std::vector<unsigned>
+InfHex18::nodes_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_nodes_map[e]), std::end(edge_nodes_map[e])};
+}
+
 bool InfHex18::is_node_on_edge(const unsigned int n,
                                const unsigned int e) const
 {
@@ -146,13 +165,13 @@ dof_id_type InfHex18::key (const unsigned int s) const
 
 
 
-unsigned int InfHex18::which_node_am_i(unsigned int side,
+unsigned int InfHex18::local_side_node(unsigned int side,
                                        unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
 
   // Never more than 9 nodes per side.
-  libmesh_assert_less (side_node, 9);
+  libmesh_assert_less (side_node, InfHex18::nodes_per_side);
 
   // Some sides have 6 nodes.
   libmesh_assert(side == 0 || side_node < 6);
@@ -162,25 +181,48 @@ unsigned int InfHex18::which_node_am_i(unsigned int side,
 
 
 
+unsigned int InfHex18::local_edge_node(unsigned int edge,
+                                       unsigned int edge_node) const
+{
+  libmesh_assert_less (edge, this->n_edges());
+
+  // Never more than 3 nodes per edge.
+  libmesh_assert_less (edge_node, InfHex18::nodes_per_edge);
+
+  // Some edges only have 2 nodes.
+  libmesh_assert(edge < 4 || edge_node < 2);
+
+  return InfHex18::edge_nodes_map[edge][edge_node];
+}
+
+
+
 std::unique_ptr<Elem> InfHex18::build_side_ptr (const unsigned int i,
                                                 bool proxy)
 {
   libmesh_assert_less (i, this->n_sides());
 
+  std::unique_ptr<Elem> face;
   if (proxy)
     {
       switch (i)
         {
           // base
         case 0:
-          return libmesh_make_unique<Side<Quad9,InfHex18>>(this,i);
+          {
+            face = libmesh_make_unique<Side<Quad9,InfHex18>>(this,i);
+            break;
+          }
 
           // ifem sides
         case 1:
         case 2:
         case 3:
         case 4:
-          return libmesh_make_unique<Side<InfQuad6,InfHex18>>(this,i);
+          {
+            face = libmesh_make_unique<Side<InfQuad6,InfHex18>>(this,i);
+            break;
+          }
 
         default:
           libmesh_error_msg("Invalid side i = " << i);
@@ -189,16 +231,13 @@ std::unique_ptr<Elem> InfHex18::build_side_ptr (const unsigned int i,
 
   else
     {
-      // Return value
-      std::unique_ptr<Elem> face;
-
       // Think of a unit cube: (-1,1) x (-1,1) x (1,1)
       switch (i)
         {
           // the base face
         case 0:
           {
-            face = libmesh_make_unique<Quad9>();
+            face = libmesh_make_unique<Quad9>(this);
             break;
           }
 
@@ -208,7 +247,7 @@ std::unique_ptr<Elem> InfHex18::build_side_ptr (const unsigned int i,
         case 3:
         case 4:
           {
-            face = libmesh_make_unique<InfQuad6>();
+            face = libmesh_make_unique<InfQuad6>(this);
             break;
           }
 
@@ -216,14 +255,17 @@ std::unique_ptr<Elem> InfHex18::build_side_ptr (const unsigned int i,
           libmesh_error_msg("Invalid side i = " << i);
         }
 
-      face->subdomain_id() = this->subdomain_id();
-
-      // Set the nodes
-      for (unsigned n=0; n<face->n_nodes(); ++n)
+      for (auto n : face->node_index_range())
         face->set_node(n) = this->node_ptr(InfHex18::side_nodes_map[i][n]);
-
-      return face;
     }
+
+#ifdef LIBMESH_ENABLE_DEPRECATED
+  if (!proxy) // proxy sides used to leave parent() set
+#endif
+    face->set_parent(nullptr);
+  face->set_interior_parent(this);
+
+  return face;
 }
 
 

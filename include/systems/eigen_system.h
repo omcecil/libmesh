@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -34,6 +34,7 @@ namespace libMesh
 
 // Forward Declarations
 template <typename T> class SparseMatrix;
+template <typename T> class ShellMatrix;
 
 
 /**
@@ -112,6 +113,12 @@ public:
   virtual std::pair<Real, Real> get_eigenpair (dof_id_type i);
 
   /**
+   * \returns Real and imaginary part of the ith eigenvalue but
+   * does not copy the respective eigen vector to the solution vector.
+   */
+  virtual std::pair<Real, Real> get_eigenvalue (dof_id_type i);
+
+  /**
    * \returns \p "Eigen".  Helps in identifying
    * the system type in an equation system file.
    */
@@ -149,6 +156,26 @@ public:
   bool generalized () const { return _is_generalized_eigenproblem; }
 
   /**
+   * \returns \p true if the shell matrices are used
+   */
+  bool use_shell_matrices() const { return _use_shell_matrices; }
+
+  /**
+   * Set a flag to use shell matrices
+   */
+  void use_shell_matrices(bool use_shell_matrices) { _use_shell_matrices = use_shell_matrices; }
+
+  /**
+   * \returns \p true if a shell preconditioning matrix is used
+   */
+  bool use_shell_precond_matrix() const { return _use_shell_precond_matrix; }
+
+  /**
+   * Set a flag to use a shell preconditioning matrix
+   */
+  void use_shell_precond_matrix(bool use_shell_precond_matrix) { _use_shell_precond_matrix = use_shell_precond_matrix; }
+
+  /**
    * The system matrix for standard eigenvalue problems.
    */
   std::unique_ptr<SparseMatrix<Number>> matrix_A;
@@ -157,6 +184,26 @@ public:
    * A second system matrix for generalized eigenvalue problems.
    */
   std::unique_ptr<SparseMatrix<Number>> matrix_B;
+
+  /**
+   * The system shell matrix for standard eigenvalue problems.
+   */
+  std::unique_ptr<ShellMatrix<Number>> shell_matrix_A;
+
+  /**
+   * A second system shell matrix for generalized eigenvalue problems.
+   */
+  std::unique_ptr<ShellMatrix<Number>> shell_matrix_B;
+
+  /**
+   * A preconditioning matrix
+   */
+  std::unique_ptr<SparseMatrix<Number>> precond_matrix;
+
+  /**
+   * A preconditioning shell matrix
+   */
+  std::unique_ptr<ShellMatrix<Number>> shell_precond_matrix;
 
   /**
    * The EigenSolver, defining which interface, i.e solver
@@ -216,6 +263,16 @@ private:
    * The type of the eigenvalue problem.
    */
   EigenProblemType _eigen_problem_type;
+
+  /**
+   * A boolean flag to indicate whether or not to use shell matrices
+   */
+  bool _use_shell_matrices;
+
+  /**
+   * A boolean flag to indicate whether or not to use a shell preconditioning matrix
+   */
+  bool _use_shell_precond_matrix;
 };
 
 

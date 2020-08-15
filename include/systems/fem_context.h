@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -33,6 +33,7 @@
 
 // C++ includes
 #include <map>
+#include <set>
 
 namespace libMesh
 {
@@ -81,19 +82,21 @@ public:
   virtual ~FEMContext ();
 
   /**
+   * Use quadrature rules designed to over-integrate a mass matrix,
+   * plus \p extra_quadrature_order.
+   */
+  void use_default_quadrature_rules(int extra_quadrature_order=0);
+
+  /**
+   * Use quadrature rules designed to exactly integrate unweighted
+   * undistorted basis functions, plus \p extra_quadrature_order.
+   */
+  void use_unweighted_quadrature_rules(int extra_quadrature_order=0);
+
+  /**
    * Reports if the boundary id is found on the current side
    */
   bool has_side_boundary_id(boundary_id_type id) const;
-
-  /**
-   * Lists the boundary ids found on the current side
-   *
-   * \deprecated Instead, use the version that takes a reference to a
-   * std::set.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  std::vector<boundary_id_type> side_boundary_ids() const;
-#endif
 
   /**
    * As above, but fills in the std::set provided by the user.
@@ -253,25 +256,21 @@ public:
   /**
    * Accessor for interior finite element object for variable var for
    * the largest dimension in the mesh. We default to the largest mesh dim
-   * because this method may be called before the Elem * is set in the FEMContext,
+   * if this method is called before the Elem * is set in the FEMContext,
    * e.g. in FEMSystem::init_context (or a subclass).
-   * If you have lower dimensional elements in the mesh and need to query for
-   * those FE objects, use the alternative get_element_fe method.
    */
   template<typename OutputShape>
   void get_element_fe( unsigned int var, FEGenericBase<OutputShape> *& fe ) const
-  { this->get_element_fe<OutputShape>(var,fe,this->get_dim()); }
+  { this->get_element_fe<OutputShape>(var,fe,this->get_elem_dim()); }
 
   /**
    * Accessor for interior finite element object for scalar-valued variable var
    * for the largest dimension in the mesh. We default to the largest mesh dim
-   * because this method may be called before the Elem * is set in the FEMContext,
+   * if this method is called before the Elem * is set in the FEMContext,
    * e.g. in FEMSystem::init_context (or a subclass).
-   * If you have lower dimensional elements in the mesh and need to query for
-   * those FE objects, use the alternative get_element_fe method.
    */
   FEBase * get_element_fe( unsigned int var ) const
-  { return this->get_element_fe(var,this->get_dim()); }
+  { return this->get_element_fe(var,this->get_elem_dim()); }
 
   /**
    * Accessor for interior finite element object for variable var for
@@ -279,6 +278,13 @@ public:
    */
   template<typename OutputShape>
   void get_element_fe( unsigned int var, FEGenericBase<OutputShape> *& fe,
+                       unsigned short dim ) const;
+
+  /**
+   * Accessor for interior finite element object for variable var for
+   * dimension dim.
+   */
+  void get_element_fe( unsigned int var, FEAbstract *& fe,
                        unsigned short dim ) const;
 
   /**
@@ -290,25 +296,21 @@ public:
   /**
    * Accessor for edge/face (2D/3D) finite element object for variable var
    * for the largest dimension in the mesh. We default to the largest mesh dim
-   * because this method may be called before the Elem * is set in the FEMContext,
+   * if this method is called before the Elem * is set in the FEMContext,
    * e.g. in FEMSystem::init_context (or a subclass).
-   * If you have lower dimensional elements in the mesh and need to query for
-   * those FE objects, use the alternative get_side_fe method.
    */
   template<typename OutputShape>
   void get_side_fe( unsigned int var, FEGenericBase<OutputShape> *& fe ) const
-  { this->get_side_fe<OutputShape>(var,fe,this->get_dim()); }
+  { this->get_side_fe<OutputShape>(var,fe,this->get_elem_dim()); }
 
   /**
    * Accessor for side finite element object for scalar-valued variable var
    * for the largest dimension in the mesh. We default to the largest mesh dim
-   * because this method may be called before the Elem * is set in the FEMContext,
+   * if this method is called before the Elem * is set in the FEMContext,
    * e.g. in FEMSystem::init_context (or a subclass).
-   * If you have lower dimensional elements in the mesh and need to query for
-   * those FE objects, use the alternative get_side_fe method.
    */
   FEBase * get_side_fe( unsigned int var ) const
-  { return this->get_side_fe(var,this->get_dim()); }
+  { return this->get_side_fe(var,this->get_elem_dim()); }
 
   /**
    * Accessor for edge/face (2D/3D) finite element object for variable var
@@ -316,6 +318,13 @@ public:
    */
   template<typename OutputShape>
   void get_side_fe( unsigned int var, FEGenericBase<OutputShape> *& fe,
+                    unsigned short dim ) const;
+
+  /**
+   * Accessor for edge/face (2D/3D) finite element object for variable var
+   * for dimension dim.
+   */
+  void get_side_fe( unsigned int var, FEAbstract *& fe,
                     unsigned short dim ) const;
 
   /**
@@ -329,6 +338,8 @@ public:
    */
   template<typename OutputShape>
   void get_edge_fe( unsigned int var, FEGenericBase<OutputShape> *& fe ) const;
+
+  void get_edge_fe( unsigned int var, FEAbstract *& fe ) const;
 
   /**
    * Accessor for edge (3D only!) finite element object for scalar-valued variable var.
@@ -913,10 +924,11 @@ public:
 
   /**
    * \returns The dimension of this->_elem. For mixed dimension meshes, this
-   * may be different from get_dim().
+   * may be different from get_dim().  If no element init has happened
+   * yet, fall back on get_dim().
    */
   unsigned char get_elem_dim() const
-  { return _elem_dim; }
+  { return this->_elem ? this->_elem_dim : this->_dim; }
 
   /**
    * \returns Set of dimensions of elements present in the mesh at
@@ -976,6 +988,12 @@ public:
   { _custom_solution = custom_sol; }
 
   /**
+   * Calls set_jacobian_tolerance() on all the FE objects controlled
+   * by this class. (Actually, it calls this on the underlying)
+   */
+  void set_jacobian_tolerance(Real tol);
+
+  /**
    * System from which to acquire moving mesh information
    */
   System * _mesh_sys;
@@ -996,12 +1014,26 @@ public:
   unsigned char edge;
 
   /**
+   * Helper function for creating quadrature rules
+   */
+  FEType find_hardest_fe_type();
+
+  /**
+   * Helper function for attaching quadrature rules
+   */
+  void attach_quadrature_rules();
+
+  /**
    * Helper function to reduce some code duplication in the *_point_* methods.
+   *
+   * get_derivative_level should be -1 to get_ everything, 0 to
+   * get_phi, 1 to get_dphi, 2 to get_d2phi, or 3 to get_curl_phi
    */
   template<typename OutputShape>
   FEGenericBase<OutputShape> * build_new_fe(const FEGenericBase<OutputShape> * fe,
                                             const Point & p,
-                                            const Real tolerance = TOLERANCE) const;
+                                            const Real tolerance = TOLERANCE,
+                                            const int get_derivative_level = -1) const;
 
 protected:
 
@@ -1017,6 +1049,8 @@ protected:
 
   mutable std::unique_ptr<FEGenericBase<Real>>         _real_fe;
   mutable std::unique_ptr<FEGenericBase<RealGradient>> _real_grad_fe;
+  mutable int _real_fe_derivative_level;
+  mutable int _real_grad_fe_derivative_level;
 
 #ifdef LIBMESH_ENABLE_INFINITE_ELEMENTS
   mutable bool _real_fe_is_inf;
@@ -1025,7 +1059,8 @@ protected:
 
   template<typename OutputShape>
   FEGenericBase<OutputShape> * cached_fe( const unsigned int elem_dim,
-                                          const FEType fe_type ) const;
+                                          const FEType fe_type,
+                                          const int get_derivative_level ) const;
 
   /**
    * Helper function to promote accessor usage
@@ -1223,6 +1258,15 @@ void FEMContext::get_element_fe( unsigned int var, FEGenericBase<OutputShape> *&
 }
 
 inline
+void FEMContext::get_element_fe( unsigned int var, FEAbstract *& fe,
+                                 unsigned short dim ) const
+{
+  libmesh_assert( !_element_fe_var[dim].empty() );
+  libmesh_assert_less ( var, (_element_fe_var[dim].size() ) );
+  fe = _element_fe_var[dim][var];
+}
+
+inline
 FEBase * FEMContext::get_element_fe( unsigned int var, unsigned short dim ) const
 {
   libmesh_assert( !_element_fe_var[dim].empty() );
@@ -1241,6 +1285,15 @@ void FEMContext::get_side_fe( unsigned int var, FEGenericBase<OutputShape> *& fe
 }
 
 inline
+void FEMContext::get_side_fe( unsigned int var, FEAbstract *& fe,
+                              unsigned short dim ) const
+{
+  libmesh_assert( !_side_fe_var[dim].empty() );
+  libmesh_assert_less ( var, (_side_fe_var[dim].size() ) );
+  fe = _side_fe_var[dim][var];
+}
+
+inline
 FEBase * FEMContext::get_side_fe( unsigned int var, unsigned short dim ) const
 {
   libmesh_assert( !_side_fe_var[dim].empty() );
@@ -1254,6 +1307,13 @@ void FEMContext::get_edge_fe( unsigned int var, FEGenericBase<OutputShape> *& fe
 {
   libmesh_assert_less ( var, _edge_fe_var.size() );
   fe = cast_ptr<FEGenericBase<OutputShape> *>( _edge_fe_var[var] );
+}
+
+inline
+void FEMContext::get_edge_fe( unsigned int var, FEAbstract *& fe ) const
+{
+  libmesh_assert_less ( var, _edge_fe_var.size() );
+  fe = _edge_fe_var[var];
 }
 
 inline

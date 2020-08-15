@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -121,11 +121,10 @@ bool Problem_Interface::computeF(const Epetra_Vector & x,
   // if the user has provided both function pointers and objects only the pointer
   // will be used, so catch that as an error
 
-  if (_solver->residual && _solver->residual_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Residual!");
+  libmesh_error_msg_if(_solver->residual && _solver->residual_object, "ERROR: cannot specify both a function and object to compute the Residual!");
 
-  if (_solver->matvec && _solver->residual_and_jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
+  libmesh_error_msg_if(_solver->matvec && _solver->residual_and_jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
   if (_solver->residual != nullptr)
     _solver->residual(*sys.current_local_solution.get(), R, sys);
@@ -175,11 +174,11 @@ bool Problem_Interface::computeJacobian(const Epetra_Vector & x,
   //-----------------------------------------------------------------------------
   // if the user has provided both function pointers and objects only the pointer
   // will be used, so catch that as an error
-  if (_solver->jacobian && _solver->jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Jacobian!");
+  libmesh_error_msg_if(_solver->jacobian && _solver->jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the Jacobian!");
 
-  if (_solver->matvec && _solver->residual_and_jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
+  libmesh_error_msg_if(_solver->matvec && _solver->residual_and_jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
   if (_solver->jacobian != nullptr)
     _solver->jacobian(*sys.current_local_solution.get(), J, sys);
@@ -239,11 +238,11 @@ bool Problem_Interface::computePreconditioner(const Epetra_Vector & x,
   //-----------------------------------------------------------------------------
   // if the user has provided both function pointers and objects only the pointer
   // will be used, so catch that as an error
-  if (_solver->jacobian && _solver->jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the Jacobian!");
+  libmesh_error_msg_if(_solver->jacobian && _solver->jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the Jacobian!");
 
-  if (_solver->matvec && _solver->residual_and_jacobian_object)
-    libmesh_error_msg("ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
+  libmesh_error_msg_if(_solver->matvec && _solver->residual_and_jacobian_object,
+                       "ERROR: cannot specify both a function and object to compute the combined Residual & Jacobian!");
 
   if (_solver->jacobian != nullptr)
     _solver->jacobian(*sys.current_local_solution.get(), J, sys);
@@ -287,6 +286,8 @@ void NoxNonlinearSolver<T>::init (const char * /*name*/)
 }
 
 
+
+#include <libmesh/ignore_warnings.h> // deprecated-copy in Epetra_Vector
 
 template <typename T>
 std::pair<unsigned int, Real>
@@ -422,6 +423,8 @@ NoxNonlinearSolver<T>::solve (SparseMatrix<T> &  /* jac_in */,  // System Jacobi
 
   return std::make_pair(total_iters, residual_norm);
 }
+
+#include <libmesh/restore_warnings.h>
 
 
 

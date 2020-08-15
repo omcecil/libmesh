@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -293,8 +293,10 @@ bool SolidSystem::side_time_derivative(bool request_jacobian,
   // Get number of BCs to enforce
   boundary_id_type num_bc =
     cast_int<boundary_id_type>(args.vector_variable_size("bc/displacement"));
-  if (num_bc % 4 != 0)
-    libmesh_error_msg("ERROR, Odd number of values in displacement boundary condition.");
+
+  libmesh_error_msg_if(num_bc % 4 != 0,
+                       "ERROR, Odd number of values in displacement boundary condition.");
+
   num_bc /= 4;
 
   // Loop over all BCs

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,7 +27,7 @@
 #include "libmesh/trilinos_aztec_linear_solver.h"
 #include "libmesh/preconditioner.h"
 #include "libmesh/sparse_matrix.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/solver_configuration.h"
 #include "libmesh/enum_solver_package.h"
 #include "libmesh/enum_preconditioner_type.h"
@@ -117,8 +117,8 @@ template <typename T>
 void
 LinearSolver<T>::attach_preconditioner(Preconditioner<T> * preconditioner)
 {
-  if (this->_is_initialized)
-    libmesh_error_msg("Preconditioner must be attached before the solver is initialized!");
+  libmesh_error_msg_if(this->_is_initialized,
+                       "Preconditioner must be attached before the solver is initialized!");
 
   _preconditioner_type = SHELL_PRECOND;
   _preconditioner = preconditioner;

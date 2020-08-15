@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -179,7 +179,11 @@ public:
    * Geometric constants for Edge4.
    */
   static const int num_nodes = 4;
+  static const int num_sides = 2;
+  static const int num_edges = 0;
   static const int num_children = 2;
+  static const int nodes_per_side = 1;
+  static const int nodes_per_edge = invalid_int;
 
 protected:
 

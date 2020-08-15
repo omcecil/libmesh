@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -124,22 +124,13 @@ public:
 private:
 
   /**
-   * In 1D, simply use a Gauss rule.
+   * In 1D, use a Gauss rule.
+   * In 2D, the GM product rule is only defined for Tris.
+   * In 3D, the GM product rule is only defined for Tets.
    */
-  virtual void init_1D (const ElemType,
-                        unsigned int = 0) override;
-
-  /**
-   * Initialize a 3D GM rule.  Only makes sense for Tets.
-   */
-  virtual void init_3D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) override;
-
-  /**
-   * Initialize a 2D GM rule.  Only makes sense for Tris.
-   */
-  virtual void init_2D (const ElemType _type=INVALID_ELEM,
-                        unsigned int p_level=0) override;
+  virtual void init_1D (const ElemType, unsigned int) override;
+  virtual void init_2D (const ElemType, unsigned int) override;
+  virtual void init_3D (const ElemType, unsigned int) override;
 
   /**
    * This routine is called from init_2D() and init_3D().  It actually

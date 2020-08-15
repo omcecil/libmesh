@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,12 @@
 
 // System includes
 #include <complex>
+
+#include "libmesh_config.h"
+
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+#include "libmesh_common.h" // for Real
+#endif
 
 namespace libMesh
 {
@@ -61,6 +67,9 @@ struct ScalarTraits {
 #define ScalarTraits_true(type)                                 \
   template<>                                                    \
   struct ScalarTraits<type> { static const bool value = true; }
+#define RealTraits_true(type)                                   \
+  template<>                                                    \
+  struct RealTraits<type> { static const bool value = true; }
 
 ScalarTraits_true(char);
 ScalarTraits_true(short);
@@ -73,11 +82,27 @@ ScalarTraits_true(unsigned long);
 ScalarTraits_true(float);
 ScalarTraits_true(double);
 ScalarTraits_true(long double);
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+ScalarTraits_true(Real);
+#endif
 
 template<typename T>
 struct ScalarTraits<std::complex<T>> { static const bool value = ScalarTraits<T>::value; };
 
+// List of classes for which instantiations of std::complex are defined, e.g. where
+// TensorTools::MakeNumber will always make sense
+template <typename T>
+struct RealTraits {
+  static const bool value = false;
+};
 
+#define RealTraits_true(type)                                   \
+  template<>                                                    \
+  struct RealTraits<type> { static const bool value = true; }
+
+RealTraits_true(float);
+RealTraits_true(double);
+RealTraits_true(long double);
 
 // Operators using different but compatible types need a return value
 // based on whichever type the other can be upconverted into.  For
@@ -154,6 +179,18 @@ SUPERTYPE(float, double);
 SUPERTYPE(float, long double);
 SUPERTYPE(double, long double);
 
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+SUPERTYPE(unsigned char, Real);
+SUPERTYPE(unsigned short, Real);
+SUPERTYPE(unsigned int, Real);
+SUPERTYPE(char, Real);
+SUPERTYPE(short, Real);
+SUPERTYPE(int, Real);
+SUPERTYPE(float, Real);
+SUPERTYPE(double, Real);
+SUPERTYPE(long double, Real);
+#endif
+
 #undef CompareTypes_super
 #undef SUPERTYPE
 
@@ -180,63 +217,65 @@ SUPERTYPE(double, long double);
 #ifdef LIBMESH_HAVE_METAPHYSICL
 #define LIBMESH_DUAL_NUMBER_COMPARE_TYPES
 
-namespace MetaPhysicL
-{
-template <typename, typename>
-class DualNumber;
-} // namespace MetaPhysicL
+#include "metaphysicl/dualnumber_forward.h"
 
 namespace libMesh
 {
-template <typename T, typename T2, typename D>
-struct CompareTypes<T, MetaPhysicL::DualNumber<T2, D>>
+template <typename T, typename T2, typename D, bool asd>
+struct CompareTypes<T, MetaPhysicL::DualNumber<T2, D, asd>>
 {
   typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other>
+                                  typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other,
+                                  asd>
       supertype;
 };
-template <typename T, typename D, typename T2>
-struct CompareTypes<MetaPhysicL::DualNumber<T, D>, T2>
+template <typename T, typename D, typename T2, bool asd>
+struct CompareTypes<MetaPhysicL::DualNumber<T, D, asd>, T2>
 {
   typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other>
+                                  typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other,
+                                  asd>
       supertype;
 };
-template <typename T, typename D, typename T2, typename D2>
-struct CompareTypes<MetaPhysicL::DualNumber<T, D>, MetaPhysicL::DualNumber<T2, D2>>
+template <typename T, typename D, typename T2, typename D2, bool asd>
+struct CompareTypes<MetaPhysicL::DualNumber<T, D, asd>, MetaPhysicL::DualNumber<T2, D2, asd>>
 {
   typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other>
+                                  typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other,
+                                  asd>
       supertype;
 };
-template <typename T, typename D>
-struct CompareTypes<MetaPhysicL::DualNumber<T, D>, MetaPhysicL::DualNumber<T, D>>
+template <typename T, typename D, bool asd>
+struct CompareTypes<MetaPhysicL::DualNumber<T, D, asd>, MetaPhysicL::DualNumber<T, D, asd>>
 {
-  typedef MetaPhysicL::DualNumber<T, D> supertype;
+  typedef MetaPhysicL::DualNumber<T, D, asd> supertype;
 };
-template <typename T, typename T2>
-struct CompareTypes<T, MetaPhysicL::DualNumber<T2, T2>>
-{
-  typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename CompareTypes<T, T2>::supertype>
-      supertype;
-};
-template <typename T, typename T2>
-struct CompareTypes<MetaPhysicL::DualNumber<T, T>, T2>
+template <typename T, typename T2, bool asd>
+struct CompareTypes<T, MetaPhysicL::DualNumber<T2, T2, asd>>
 {
   typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename CompareTypes<T, T2>::supertype>
+                                  typename CompareTypes<T, T2>::supertype,
+                                  asd>
       supertype;
 };
-template <typename T, typename T2>
-struct CompareTypes<MetaPhysicL::DualNumber<T, T>, MetaPhysicL::DualNumber<T2, T2>>
+template <typename T, typename T2, bool asd>
+struct CompareTypes<MetaPhysicL::DualNumber<T, T, asd>, T2>
 {
   typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename CompareTypes<T, T2>::supertype>
+                                  typename CompareTypes<T, T2>::supertype,
+                                  asd>
       supertype;
 };
-template <typename T, typename D>
-struct ScalarTraits<MetaPhysicL::DualNumber<T, D>>
+template <typename T, typename T2, bool asd>
+struct CompareTypes<MetaPhysicL::DualNumber<T, T, asd>, MetaPhysicL::DualNumber<T2, T2, asd>>
+{
+  typedef MetaPhysicL::DualNumber<typename CompareTypes<T, T2>::supertype,
+                                  typename CompareTypes<T, T2>::supertype,
+                                  asd>
+      supertype;
+};
+template <typename T, typename D, bool asd>
+struct ScalarTraits<MetaPhysicL::DualNumber<T, D, asd>>
 {
   static const bool value = ScalarTraits<T>::value;
 };

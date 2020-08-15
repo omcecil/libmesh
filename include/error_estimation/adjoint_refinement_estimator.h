@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -29,13 +29,13 @@
 #include <cstddef>
 #include <vector>
 
-// Forward declarations
-class DifferentiablePhysics;
-
 #ifdef LIBMESH_ENABLE_AMR
 
 namespace libMesh
 {
+
+// Forward declarations
+class DifferentiablePhysics;
 
 /**
  * This class implements a "brute force" goal-oriented error

@@ -1,9 +1,3 @@
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
-
 #include <libmesh/equation_systems.h>
 #include <libmesh/replicated_mesh.h>
 #include <libmesh/mesh_generation.h>
@@ -16,16 +10,8 @@
 #include <libmesh/mesh_refinement.h>
 
 #include "test_comm.h"
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 using namespace libMesh;
 
@@ -40,7 +26,9 @@ public:
 
 #if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testDofOrdering );
+#endif
   CPPUNIT_TEST( testPointLocatorTree );
 #endif
 
@@ -80,19 +68,19 @@ protected:
     _mesh->add_point( Point(0.0, 0.0), 0 );
 
     {
-      Elem* elem_top = _mesh->add_elem( new Quad4 );
+      Elem * elem_top = _mesh->add_elem(Elem::build(QUAD4));
       elem_top->set_node(0) = _mesh->node_ptr(0);
       elem_top->set_node(1) = _mesh->node_ptr(1);
       elem_top->set_node(2) = _mesh->node_ptr(2);
       elem_top->set_node(3) = _mesh->node_ptr(3);
 
-      Elem* elem_bottom = _mesh->add_elem( new Quad4 );
+      Elem * elem_bottom = _mesh->add_elem(Elem::build(QUAD4));
       elem_bottom->set_node(0) = _mesh->node_ptr(4);
       elem_bottom->set_node(1) = _mesh->node_ptr(5);
       elem_bottom->set_node(2) = _mesh->node_ptr(1);
       elem_bottom->set_node(3) = _mesh->node_ptr(0);
 
-      Elem* edge = _mesh->add_elem( new Edge2 );
+      Elem * edge = _mesh->add_elem(Elem::build(EDGE2));
       edge->set_node(0) = _mesh->node_ptr(0);
       edge->set_node(1) = _mesh->node_ptr(1);
 
@@ -100,10 +88,8 @@ protected:
       edge->subdomain_id() = 1;
     }
 
-    // libMesh will renumber, but we numbered according to its scheme
-    // anyway. We do this because when we call uniformly_refine subsequently,
-    // it's going use skip_renumber=false.
-    _mesh->prepare_for_use(false /*skip_renumber*/);
+    _mesh->allow_renumbering(true);
+    _mesh->prepare_for_use();
   }
 
 public:
@@ -222,7 +208,9 @@ public:
 
 #if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testDofOrdering );
+#endif
 #endif
 
   CPPUNIT_TEST_SUITE_END();
@@ -363,7 +351,9 @@ public:
 
 #if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testDofOrdering );
+#endif
 #endif
 
   CPPUNIT_TEST_SUITE_END();
@@ -452,31 +442,31 @@ protected:
 
 
     {
-      Elem* quad0 = _mesh->add_elem( new Quad4 );
+      Elem * quad0 = _mesh->add_elem(Elem::build(QUAD4));
       quad0->set_node(0) = _mesh->node_ptr(0);
       quad0->set_node(1) = _mesh->node_ptr(1);
       quad0->set_node(2) = _mesh->node_ptr(2);
       quad0->set_node(3) = _mesh->node_ptr(3);
 
-      Elem* quad1 = _mesh->add_elem( new Quad4 );
+      Elem * quad1 = _mesh->add_elem(Elem::build(QUAD4));
       quad1->set_node(0) = _mesh->node_ptr(3);
       quad1->set_node(1) = _mesh->node_ptr(2);
       quad1->set_node(2) = _mesh->node_ptr(5);
       quad1->set_node(3) = _mesh->node_ptr(4);
 
-      Elem* quad2 = _mesh->add_elem( new Quad4 );
+      Elem * quad2 = _mesh->add_elem(Elem::build(QUAD4));
       quad2->set_node(0) = _mesh->node_ptr(6);
       quad2->set_node(1) = _mesh->node_ptr(7);
       quad2->set_node(2) = _mesh->node_ptr(1);
       quad2->set_node(3) = _mesh->node_ptr(0);
 
-      Elem* quad3 = _mesh->add_elem( new Quad4 );
+      Elem * quad3 = _mesh->add_elem(Elem::build(QUAD4));
       quad3->set_node(0) = _mesh->node_ptr(9);
       quad3->set_node(1) = _mesh->node_ptr(8);
       quad3->set_node(2) = _mesh->node_ptr(7);
       quad3->set_node(3) = _mesh->node_ptr(6);
 
-      Elem* edge = _mesh->add_elem( new Edge2 );
+      Elem * edge = _mesh->add_elem(Elem::build(EDGE2));
       edge->set_node(0) = _mesh->node_ptr(0);
       edge->set_node(1) = _mesh->node_ptr(1);
 
@@ -484,10 +474,8 @@ protected:
       edge->subdomain_id() = 1;
     }
 
-    // libMesh will renumber, but we numbered according to its scheme
-    // anyway. We do this because when we call uniformly_refine subsequently,
-    // it's going use skip_renumber=false.
-    _mesh->prepare_for_use(false /*skip_renumber*/);
+    _mesh->allow_renumbering(true);
+    _mesh->prepare_for_use();
 
 
 #ifdef LIBMESH_ENABLE_AMR
@@ -621,7 +609,9 @@ public:
 
 #if LIBMESH_DIM > 1
   CPPUNIT_TEST( testMesh );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testDofOrdering );
+#endif
 #endif
 
   CPPUNIT_TEST_SUITE_END();
@@ -684,27 +674,27 @@ protected:
     _mesh->add_point( Point(0.0, 0.0), 0 );
 
     {
-      Elem* elem0 = _mesh->add_elem( new Tri3 );
+      Elem * elem0 = _mesh->add_elem(Elem::build(TRI3));
       elem0->set_node(0) = _mesh->node_ptr(0);
       elem0->set_node(1) = _mesh->node_ptr(1);
       elem0->set_node(2) = _mesh->node_ptr(2);
 
-      Elem* elem1 = _mesh->add_elem( new Tri3 );
+      Elem * elem1 = _mesh->add_elem(Elem::build(TRI3));
       elem1->set_node(0) = _mesh->node_ptr(2);
       elem1->set_node(1) = _mesh->node_ptr(3);
       elem1->set_node(2) = _mesh->node_ptr(0);
 
-      Elem* elem2 = _mesh->add_elem( new Tri3 );
+      Elem * elem2 = _mesh->add_elem(Elem::build(TRI3));
       elem2->set_node(0) = _mesh->node_ptr(1);
       elem2->set_node(1) = _mesh->node_ptr(0);
       elem2->set_node(2) = _mesh->node_ptr(4);
 
-      Elem* elem3 = _mesh->add_elem( new Tri3 );
+      Elem * elem3 = _mesh->add_elem(Elem::build(TRI3));
       elem3->set_node(0) = _mesh->node_ptr(4);
       elem3->set_node(1) = _mesh->node_ptr(5);
       elem3->set_node(2) = _mesh->node_ptr(1);
 
-      Elem* edge = _mesh->add_elem( new Edge2 );
+      Elem * edge = _mesh->add_elem(Elem::build(EDGE2));
       edge->set_node(0) = _mesh->node_ptr(0);
       edge->set_node(1) = _mesh->node_ptr(1);
 
@@ -713,10 +703,8 @@ protected:
 
     }
 
-    // libMesh will renumber, but we numbered according to its scheme
-    // anyway. We do this because when we call uniformly_refine subsequently,
-    // it's going use skip_renumber=false.
-    _mesh->prepare_for_use(false /*skip_renumber*/);
+    _mesh->allow_renumbering(true);
+    _mesh->prepare_for_use();
 
 #ifdef LIBMESH_ENABLE_AMR
     //Flag the bottom element for refinement
@@ -882,7 +870,9 @@ public:
 
 #if LIBMESH_DIM > 2
   CPPUNIT_TEST( testMesh );
+#ifdef LIBMESH_HAVE_SOLVER
   CPPUNIT_TEST( testDofOrdering );
+#endif
 #endif
 
   CPPUNIT_TEST_SUITE_END();
@@ -918,7 +908,7 @@ protected:
             {
               for (unsigned int x = 0; x < 3; x++)
                 {
-                  Elem* hex = _mesh->add_elem( new Hex8 );
+                  Elem * hex = _mesh->add_elem(Elem::build(HEX8));
                   hex->set_node(0) = _mesh->node_ptr(x+4*y    +16*z        );
                   hex->set_node(1) = _mesh->node_ptr(x+4*y    +16*z     + 1);
                   hex->set_node(2) = _mesh->node_ptr(x+4*(y+1)+16*z     + 1);
@@ -930,7 +920,7 @@ protected:
                 }
             }
         }
-      Elem* quad = _mesh->add_elem( new Quad4 );
+      Elem * quad = _mesh->add_elem(Elem::build(QUAD4));
       unsigned int x=1,y=1,z=2;
       quad->set_node(0) = _mesh->node_ptr(x+4*y    +16*z    );
       quad->set_node(1) = _mesh->node_ptr(x+4*y    +16*z + 1);
@@ -941,10 +931,8 @@ protected:
       quad->subdomain_id() = 1;
     }
 
-    // libMesh will renumber, but we numbered according to its scheme
-    // anyway. We do this because when we call uniformly_refine subsequently,
-    // it's going use skip_renumber=false.
-    _mesh->prepare_for_use(false /*skip_renumber*/);
+    _mesh->allow_renumbering(true);
+    _mesh->prepare_for_use();
 
 #ifdef LIBMESH_ENABLE_AMR
     //Flag the bottom element for refinement

@@ -221,10 +221,27 @@ data = [
     '2018-10-04', 886, 190239, # b7c021ef
     '2018-11-04', 886, 190164, # b68a3414
     '2018-12-04', 886, 190650, # 3134aa86
-#2019
+# 2019
     '2019-01-04', 886, 191341, # 08ea2d6d
     '2019-02-04', 879, 189708, # 3679dac7
     '2019-03-04', 879, 190253, # 0a047066
+    '2019-04-04', 879, 190583, # 260d091f
+    '2019-05-04', 880, 192048, # c4c9fd54
+    '2019-06-04', 880, 192174, # 49e6d8fa
+    '2019-07-04', 885, 192442, # 5469d454
+    '2019-08-04', 886, 191947, # e3f7c8e2
+    '2019-09-04', 893, 194600, # 2d7cfaac
+    '2019-10-04', 898, 195670, # d252e82f
+    '2019-11-04', 899, 195840, # bd0812c7
+    '2019-12-04', 896, 191898, # ac649146
+# 2020
+    '2020-01-04', 900, 192704, # 259ad8f4
+    '2020-02-04', 900, 193538, # 3d4ec1c6
+    '2020-03-04', 901, 194935, # 56ffd2f6
+    '2020-04-04', 904, 196199, # 9ac9b4b9
+    '2020-05-04', 904, 196658, # 6e32c593
+    '2020-06-04', 904, 197092, # f707c65a
+    '2020-07-04', 905, 197773, # b9d342ba
 ]
 
 # Extract the dates from the data array
@@ -244,12 +261,12 @@ n_lines = data[2::3]
 # Get a reference to the figure
 fig = plt.figure()
 
-# 111 is equivalent to Matlab's subplot(1,1,1) command.
-# The colors used come from sns.color_palette("muted").as_hex() They
+# add_subplot(111) is equivalent to Matlab's subplot(1,1,1) command.
+# The colors used come from sns.color_palette("muted").as_hex(). They
 # are the "same basic order of hues as the default matplotlib color
 # cycle but more attractive colors."
 ax1 = fig.add_subplot(111)
-ax1.plot(date_nums, n_files, color=u'#4878cf', marker='o', linestyle='-', markersize=3)
+ax1.plot(date_nums, n_files, color=u'#4878cf', marker='o', linestyle='-', markersize=4, markevery=5)
 ax1.set_ylabel('Files (blue circles)')
 
 # Set up x-tick locations
@@ -266,7 +283,7 @@ ax1.set_xticklabels(ticks_names)
 
 # Use the twinx() command to plot more data on the other axis
 ax2 = ax1.twinx()
-ax2.plot(date_nums, np.divide(n_lines, 1000.), color=u'#6acc65', marker='s', linestyle='-', markersize=3)
+ax2.plot(date_nums, np.divide(n_lines, 1000.), color=u'#6acc65', marker='s', linestyle='-', markersize=4, markevery=5)
 ax2.set_ylabel('Lines of code in thousands (green squares)')
 
 # Create linear curve fits of the data
@@ -278,10 +295,17 @@ files_per_month = files_fit[0]*(365./12.)
 lines_per_month = lines_fit[0]*(365./12.)
 
 # Print curve fit data on the plot , '%.1f'
-files_msg = 'Approx. ' + '%.1f' % files_per_month + ' files added/month'
-lines_msg = 'Approx. ' + '%.1f' % lines_per_month + ' lines added/month'
-ax1.text(date_nums[len(date_nums)/4], 300, files_msg);
-ax1.text(date_nums[len(date_nums)/4], 250, lines_msg);
+# files_msg = 'Approx. ' + '%.1f' % files_per_month + ' files added/month'
+# lines_msg = 'Approx. ' + '%.1f' % lines_per_month + ' lines added/month'
+# ax1.text(date_nums[len(date_nums)/4], 300, files_msg);
+# ax1.text(date_nums[len(date_nums)/4], 250, lines_msg);
+
+# We use the grid lines from the second axis (lines of code) as I think
+# that is generally of more interest than number of files. I ran into
+# an issue using axis='both', but turning on the x-grid on ax1 and the
+# y-grid on ax2 seems to do the trick.
+ax1.grid(b=True, axis='x', color='lightgray', linestyle='--', linewidth=1)
+ax2.grid(b=True, axis='y', color='lightgray', linestyle='--', linewidth=1)
 
 # Save as PDF
 plt.savefig('cloc_libmesh.pdf', format='pdf')

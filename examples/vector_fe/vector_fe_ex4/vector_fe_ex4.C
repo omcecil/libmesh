@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -76,10 +76,9 @@ int main (int argc, char ** argv)
     command_line_value(std::string("element_type"),
                        std::string("HEX27"));
 
-  if (elem_str != "HEX20" && elem_str != "HEX27")
-    libmesh_error_msg("You entered: " \
-                      << elem_str \
-                      << " but this example must be run with HEX20 or HEX27.");
+  libmesh_error_msg_if(elem_str != "HEX20" && elem_str != "HEX27",
+                       "You entered: " << elem_str <<
+                       " but this example must be run with HEX20 or HEX27.");
 
   MeshTools::Generation::build_cube (mesh,
                                      grid_size,

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,23 +17,30 @@
 
 
 
-// Local Includes
+// Local includes
+#include "libmesh/mesh_communication.h"
+
+// libMesh includes
 #include "libmesh/libmesh_config.h"
 #include "libmesh/libmesh_common.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/mesh_tools.h"
-#include "libmesh/mesh_communication.h"
-#include "libmesh/parallel.h"
 #include "libmesh/parallel_hilbert.h"
 #include "libmesh/parallel_sort.h"
-#include "libmesh/parallel_sync.h"
 #include "libmesh/elem.h"
 #include "libmesh/elem_range.h"
 #include "libmesh/node_range.h"
+
+// TIMPI includes
+#include "timpi/parallel_implementation.h"
+#include "timpi/parallel_sync.h"
+
+// C/C++ includes
 #ifdef LIBMESH_HAVE_LIBHILBERT
 #  include "hilbert.h"
 #endif
+
 
 #ifdef LIBMESH_HAVE_LIBHILBERT
 namespace { // anonymous namespace for helper functions
@@ -49,18 +56,21 @@ void get_hilbert_coords (const Point & p,
   static const Hilbert::inttype max_inttype = static_cast<Hilbert::inttype>(-1);
 
   const long double // put (x,y,z) in [0,1]^3 (don't divide by 0)
-    x = ((bbox.first(0) == bbox.second(0)) ? 0. :
+    x = static_cast<long double>
+        ((bbox.first(0) == bbox.second(0)) ? 0. :
          (p(0)-bbox.first(0))/(bbox.second(0)-bbox.first(0))),
 
 #if LIBMESH_DIM > 1
-    y = ((bbox.first(1) == bbox.second(1)) ? 0. :
+    y = static_cast<long double>
+        ((bbox.first(1) == bbox.second(1)) ? 0. :
          (p(1)-bbox.first(1))/(bbox.second(1)-bbox.first(1))),
 #else
     y = 0.,
 #endif
 
 #if LIBMESH_DIM > 2
-    z = ((bbox.first(2) == bbox.second(2)) ? 0. :
+    z = static_cast<long double>
+        ((bbox.first(2) == bbox.second(2)) ? 0. :
          (p(2)-bbox.first(2))/(bbox.second(2)-bbox.first(2)));
 #else
   z = 0.;
@@ -303,7 +313,7 @@ void MeshCommunication::assign_global_indices (MeshBase & mesh) const
     // Be careful here.  The *_upper_bounds will be used to find the processor
     // a given object belongs to.  So, if a processor contains no objects (possible!)
     // then copy the bound from the lower processor id.
-    for (processor_id_type p=0; p<communicator.size(); p++)
+    for (auto p : make_range(communicator.size()))
       {
         node_upper_bounds[p] = my_max[2*p+0];
         elem_upper_bounds[p] = my_max[2*p+1];
@@ -357,7 +367,7 @@ void MeshCommunication::assign_global_indices (MeshBase & mesh) const
 
       // The offset of my first global index
       dof_id_type my_offset = 0;
-      for (processor_id_type pid=0; pid<communicator.rank(); pid++)
+      for (auto pid : make_range(communicator.rank()))
         my_offset += node_bin_sizes[pid];
 
       auto gather_functor =
@@ -473,7 +483,7 @@ void MeshCommunication::assign_global_indices (MeshBase & mesh) const
 
       // The offset of my first global index
       dof_id_type my_offset = 0;
-      for (processor_id_type pid=0; pid<communicator.rank(); pid++)
+      for (auto pid : make_range(communicator.rank()))
         my_offset += elem_bin_sizes[pid];
 
       auto gather_functor =
@@ -528,7 +538,7 @@ void MeshCommunication::assign_global_indices (MeshBase & mesh) const
       {
         std::vector<std::vector<dof_id_type>::const_iterator>
           next_obj_on_proc; next_obj_on_proc.reserve(communicator.size());
-        for (processor_id_type pid=0; pid<communicator.size(); pid++)
+        for (auto pid : make_range(communicator.size()))
           next_obj_on_proc.push_back(filled_request[pid].begin());
 
         for (auto & elem : mesh.element_ptr_range())
@@ -760,7 +770,7 @@ void MeshCommunication::find_global_indices (const Parallel::Communicator & comm
 
   // The offset of my first global index
   unsigned int my_offset = 0;
-  for (unsigned int pid=0; pid<communicator.rank(); pid++)
+  for (auto pid : make_range(communicator.rank()))
     my_offset += bin_sizes[pid];
 
   //-------------------------------------------------------------
@@ -776,7 +786,7 @@ void MeshCommunication::find_global_indices (const Parallel::Communicator & comm
   // Be careful here.  The *_upper_bounds will be used to find the processor
   // a given object belongs to.  So, if a processor contains no objects (possible!)
   // then copy the bound from the lower processor id.
-  for (unsigned int p=1; p<communicator.size(); p++)
+  for (auto p : IntRange<processor_id_type>(1, communicator.size()))
     if (!bin_sizes[p]) upper_bounds[p] = upper_bounds[p-1];
 
 
@@ -930,7 +940,7 @@ void MeshCommunication::find_global_indices (const Parallel::Communicator & comm
     {
       std::vector<std::vector<dof_id_type>::const_iterator>
         next_obj_on_proc; next_obj_on_proc.reserve(communicator.size());
-      for (processor_id_type pid=0; pid<communicator.size(); pid++)
+      for (auto pid : make_range(communicator.size()))
         next_obj_on_proc.push_back(filled_request[pid].begin());
 
       unsigned int cnt=0;

@@ -8,7 +8,6 @@ libmesh_SOURCES =  \
         src/base/ghost_point_neighbors.C \
         src/base/libmesh.C \
         src/base/libmesh_common.C \
-        src/base/libmesh_isnan.c \
         src/base/libmesh_singleton.C \
         src/base/libmesh_version.C \
         src/base/periodic_boundaries.C \
@@ -77,9 +76,15 @@ libmesh_SOURCES =  \
         src/fe/fe_monomial_shape_1D.C \
         src/fe/fe_monomial_shape_2D.C \
         src/fe/fe_monomial_shape_3D.C \
+        src/fe/fe_monomial_vec.C \
         src/fe/fe_nedelec_one.C \
         src/fe/fe_nedelec_one_shape_2D.C \
         src/fe/fe_nedelec_one_shape_3D.C \
+        src/fe/fe_rational.C \
+        src/fe/fe_rational_shape_0D.C \
+        src/fe/fe_rational_shape_1D.C \
+        src/fe/fe_rational_shape_2D.C \
+        src/fe/fe_rational_shape_3D.C \
         src/fe/fe_scalar.C \
         src/fe/fe_scalar_shape_0D.C \
         src/fe/fe_scalar_shape_1D.C \
@@ -175,6 +180,7 @@ libmesh_SOURCES =  \
         src/mesh/boundary_mesh.C \
         src/mesh/checkpoint_io.C \
         src/mesh/distributed_mesh.C \
+        src/mesh/dyna_io.C \
         src/mesh/ensight_io.C \
         src/mesh/exodusII_io.C \
         src/mesh/exodusII_io_helper.C \
@@ -229,6 +235,7 @@ libmesh_SOURCES =  \
         src/numerics/dense_subvector.C \
         src/numerics/dense_vector.C \
         src/numerics/dense_vector_base.C \
+        src/numerics/diagonal_matrix.C \
         src/numerics/distributed_vector.C \
         src/numerics/eigen_preconditioner.C \
         src/numerics/eigen_sparse_matrix.C \
@@ -238,8 +245,10 @@ libmesh_SOURCES =  \
         src/numerics/numeric_vector.C \
         src/numerics/petsc_matrix.C \
         src/numerics/petsc_preconditioner.C \
+        src/numerics/petsc_shell_matrix.C \
         src/numerics/petsc_vector.C \
         src/numerics/preconditioner.C \
+        src/numerics/shell_matrix.C \
         src/numerics/sparse_matrix.C \
         src/numerics/sparse_shell_matrix.C \
         src/numerics/sum_shell_matrix.C \
@@ -250,15 +259,12 @@ libmesh_SOURCES =  \
         src/numerics/trilinos_preconditioner.C \
         src/numerics/type_tensor.C \
         src/numerics/type_vector.C \
-        src/parallel/communicator.C \
-        src/parallel/message_tag.C \
         src/parallel/parallel_bin_sorter.C \
         src/parallel/parallel_elem.C \
         src/parallel/parallel_ghost_sync.C \
         src/parallel/parallel_histogram.C \
         src/parallel/parallel_node.C \
         src/parallel/parallel_sort.C \
-        src/parallel/request.C \
         src/parallel/threads.C \
         src/partitioning/centroid_partitioner.C \
         src/partitioning/linear_partitioner.C \
@@ -303,6 +309,10 @@ libmesh_SOURCES =  \
         src/quadrature/quadrature_monomial_1D.C \
         src/quadrature/quadrature_monomial_2D.C \
         src/quadrature/quadrature_monomial_3D.C \
+        src/quadrature/quadrature_nodal.C \
+        src/quadrature/quadrature_nodal_1D.C \
+        src/quadrature/quadrature_nodal_2D.C \
+        src/quadrature/quadrature_nodal_3D.C \
         src/quadrature/quadrature_simpson.C \
         src/quadrature/quadrature_simpson_1D.C \
         src/quadrature/quadrature_simpson_2D.C \
@@ -323,9 +333,11 @@ libmesh_SOURCES =  \
         src/reduced_basis/rb_evaluation.C \
         src/reduced_basis/rb_parameters.C \
         src/reduced_basis/rb_parametrized.C \
+        src/reduced_basis/rb_parametrized_function.C \
         src/reduced_basis/rb_scm_construction.C \
         src/reduced_basis/rb_scm_evaluation.C \
         src/reduced_basis/rb_temporal_discretization.C \
+        src/reduced_basis/rb_theta.C \
         src/reduced_basis/rb_theta_expansion.C \
         src/reduced_basis/transient_rb_assembly_expansion.C \
         src/reduced_basis/transient_rb_construction.C \
@@ -348,6 +360,7 @@ libmesh_SOURCES =  \
         src/solvers/eigen_time_solver.C \
         src/solvers/euler2_solver.C \
         src/solvers/euler_solver.C \
+        src/solvers/file_solution_history.C \
         src/solvers/first_order_unsteady_solver.C \
         src/solvers/laspack_linear_solver.C \
         src/solvers/linear_solver.C \

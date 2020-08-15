@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -117,6 +117,12 @@ Tri3::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
+std::vector<unsigned>
+Tri3::nodes_on_edge(const unsigned int e) const
+{
+  return nodes_on_side(e);
+}
+
 Order Tri3::default_order() const
 {
   return FIRST;
@@ -125,22 +131,7 @@ Order Tri3::default_order() const
 std::unique_ptr<Elem> Tri3::build_side_ptr (const unsigned int i,
                                             bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Edge2,Tri3>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> edge = libmesh_make_unique<Edge2>();
-      edge->subdomain_id() = this->subdomain_id();
-
-      // Set the nodes
-      for (unsigned n=0; n<edge->n_nodes(); ++n)
-        edge->set_node(n) = this->node_ptr(Tri3::side_nodes_map[i][n]);
-
-      return edge;
-    }
+  return this->simple_build_side_ptr<Edge2, Tri3>(i, proxy);
 }
 
 

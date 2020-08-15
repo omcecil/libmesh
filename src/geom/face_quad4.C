@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -125,6 +125,12 @@ Quad4::nodes_on_side(const unsigned int s) const
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
 }
 
+std::vector<unsigned>
+Quad4::nodes_on_edge(const unsigned int e) const
+{
+  return nodes_on_side(e);
+}
+
 bool Quad4::has_affine_map() const
 {
   Point v = this->point(3) - this->point(0);
@@ -143,22 +149,7 @@ Order Quad4::default_order() const
 std::unique_ptr<Elem> Quad4::build_side_ptr (const unsigned int i,
                                              bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Edge2,Quad4>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> edge = libmesh_make_unique<Edge2>();
-      edge->subdomain_id() = this->subdomain_id();
-
-      // Set the nodes
-      for (unsigned n=0; n<edge->n_nodes(); ++n)
-        edge->set_node(n) = this->node_ptr(Quad4::side_nodes_map[i][n]);
-
-      return edge;
-    }
+  return this->simple_build_side_ptr<Edge2, Quad4>(i, proxy);
 }
 
 
@@ -166,17 +157,7 @@ std::unique_ptr<Elem> Quad4::build_side_ptr (const unsigned int i,
 void Quad4::build_side_ptr (std::unique_ptr<Elem> & side,
                             const unsigned int i)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (!side.get() || side->type() != EDGE2)
-    side = this->build_side_ptr(i, false);
-  else
-    {
-      side->subdomain_id() = this->subdomain_id();
-
-      for (auto n : side->node_index_range())
-        side->set_node(n) = this->node_ptr(Quad4::side_nodes_map[i][n]);
-    }
+  this->simple_build_side_ptr<Quad4>(side, i, EDGE2);
 }
 
 

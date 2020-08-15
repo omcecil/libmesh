@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -56,6 +56,15 @@ const unsigned int Tet10::edge_nodes_map[Tet10::num_edges][Tet10::nodes_per_edge
     {2, 3, 9}  // Edge 5
   };
 
+const unsigned int Tet10::edge_sides_map[Tet10::num_edges][2] =
+  {
+    {0, 1}, // Edge 0
+    {0, 2}, // Edge 1
+    {0, 3}, // Edge 2
+    {1, 3}, // Edge 3
+    {1, 2}, // Edge 4
+    {2, 3}  // Edge 5
+  };
 
 
 // ------------------------------------------------------------
@@ -94,6 +103,13 @@ Tet10::nodes_on_side(const unsigned int s) const
 {
   libmesh_assert_less(s, n_sides());
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
+}
+
+std::vector<unsigned>
+Tet10::nodes_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_nodes_map[e]), std::end(edge_nodes_map[e])};
 }
 
 bool Tet10::is_node_on_edge(const unsigned int n,
@@ -172,7 +188,7 @@ Order Tet10::default_order() const
 
 
 
-unsigned int Tet10::which_node_am_i(unsigned int side,
+unsigned int Tet10::local_side_node(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
@@ -183,24 +199,21 @@ unsigned int Tet10::which_node_am_i(unsigned int side,
 
 
 
+unsigned int Tet10::local_edge_node(unsigned int edge,
+                                    unsigned int edge_node) const
+{
+  libmesh_assert_less (edge, this->n_edges());
+  libmesh_assert_less (edge_node, Tet10::nodes_per_edge);
+
+  return Tet10::edge_nodes_map[edge][edge_node];
+}
+
+
+
 std::unique_ptr<Elem> Tet10::build_side_ptr (const unsigned int i,
                                              bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Tri6,Tet10>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> face = libmesh_make_unique<Tri6>();
-      face->subdomain_id() = this->subdomain_id();
-
-      for (unsigned n=0; n<face->n_nodes(); ++n)
-        face->set_node(n) = this->node_ptr(Tet10::side_nodes_map[i][n]);
-
-      return face;
-    }
+  return this->simple_build_side_ptr<Tri6, Tet10>(i, proxy);
 }
 
 
@@ -710,6 +723,10 @@ float Tet10::embedding_matrix (const unsigned int i,
 
 Real Tet10::volume () const
 {
+  // This specialization is good for Lagrange mappings only
+  if (this->mapping_type() != LAGRANGE_MAP)
+    return this->Elem::volume();
+
   // Make copies of our points.  It makes the subsequent calculations a bit
   // shorter and avoids dereferencing the same pointer multiple times.
   Point

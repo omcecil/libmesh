@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,20 +19,18 @@
 
 // Local includes
 #include "libmesh/quadrature_simpson.h"
+#include "libmesh/enum_to_string.h"
 
 namespace libMesh
 {
 
-
-
-void QSimpson::init_2D(const ElemType type_in,
-                       unsigned int)
+void QSimpson::init_2D(const ElemType, unsigned int)
 {
 #if LIBMESH_DIM > 1
 
   //-----------------------------------------------------------------------
   // 2D quadrature rules
-  switch (type_in)
+  switch (_type)
     {
 
 
@@ -57,6 +55,7 @@ void QSimpson::init_2D(const ElemType type_in,
       // Triangle quadrature rules
     case TRI3:
     case TRISHELL3:
+    case TRI3SUBDIVISION:
     case TRI6:
       {
         // I'm not sure if you would call this Simpson's
@@ -103,7 +102,7 @@ void QSimpson::init_2D(const ElemType type_in,
       //---------------------------------------------
       // Unsupported type
     default:
-      libmesh_error_msg("Element type not supported!:" << type_in);
+      libmesh_error_msg("Element type not supported!:" << Utility::enum_to_string(_type));
     }
 #endif
 }

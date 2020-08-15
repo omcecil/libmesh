@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -64,6 +64,7 @@ Sphere::Sphere(const Point & pa,
                const Point & pc,
                const Point & pd)
 {
+#if LIBMESH_DIM > 2
   Point pad = pa - pd;
   Point pbd = pb - pd;
   Point pcd = pc - pd;
@@ -98,6 +99,10 @@ Sphere::Sphere(const Point & pa,
   Real r = (c-pa).norm();
 
   this->create_from_center_radius(c,r);
+#else // LIBMESH_DIM > 2
+  libmesh_ignore(pa, pb, pc, pd);
+  libmesh_not_implemented();
+#endif
 }
 
 

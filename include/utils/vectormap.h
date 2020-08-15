@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -120,6 +120,17 @@ public:
   }
 
   /**
+   * Inserts \p x into the vector map, using "args" to construct it
+   * in-place.
+   */
+  template<class... Args>
+  void emplace(Args&&... args)
+  {
+    _sorted = false;
+    this->emplace_back(args...);
+  }
+
+  /**
    * Sort & unique the vectormap, preparing for use.
    */
   void sort()
@@ -146,9 +157,9 @@ public:
 
     const_iterator lower_bound = std::lower_bound (this->begin(), this->end(), to_find, FirstOrder());
 
-    if (lower_bound == this->end() || lower_bound->first != key)
-      libmesh_error_msg("Error in vectormap::operator[], key not found. "
-                        "If you are searching for values you aren't sure exist, try vectormap::find() instead.");
+    libmesh_error_msg_if(lower_bound == this->end() || lower_bound->first != key,
+                         "Error in vectormap::operator[], key not found. "
+                         "If you are searching for values you aren't sure exist, try vectormap::find() instead.");
 
     return lower_bound->second;
   }

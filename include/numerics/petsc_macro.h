@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -60,50 +60,32 @@
 // Petsc include files
 // Wrapped to avoid triggering our more paranoid warnings
 #include <libmesh/ignore_warnings.h>
+#ifdef I
+# define LIBMESH_SAW_I
+#endif
 #include <petsc.h>
+#ifndef LIBMESH_SAW_I
+# undef I // Avoid complex.h contamination
+#endif
 #include <libmesh/restore_warnings.h>
 
-#if PETSC_RELEASE_LESS_THAN(3,1,1)
-typedef PetscTruth PetscBool;
-#endif
-
-#if PETSC_RELEASE_LESS_THAN(3,1,1)
-#  define LibMeshVecDestroy(x)         VecDestroy(*(x))
-#  define LibMeshVecScatterDestroy(x)  VecScatterDestroy(*(x))
-#  define LibMeshMatDestroy(x)         MatDestroy(*(x))
-#  define LibMeshISDestroy(x)          ISDestroy(*(x))
-#  define LibMeshKSPDestroy(x)         KSPDestroy(*(x))
-#  define LibMeshSNESDestroy(x)        SNESDestroy(*(x))
-#  define LibMeshPetscViewerDestroy(x) PetscViewerDestroy(*(x))
-#  define LibMeshPCDestroy(x)          PCDestroy(*(x))
-#else
-#  define LibMeshVecDestroy(x)         VecDestroy(x)
-#  define LibMeshVecScatterDestroy(x)  VecScatterDestroy(x)
-#  define LibMeshMatDestroy(x)         MatDestroy(x)
-#  define LibMeshISDestroy(x)          ISDestroy(x)
-#  define LibMeshKSPDestroy(x)         KSPDestroy(x)
-#  define LibMeshSNESDestroy(x)        SNESDestroy(x)
-#  define LibMeshPetscViewerDestroy(x) PetscViewerDestroy(x)
-#  define LibMeshPCDestroy(x)          PCDestroy(x)
-#endif
+// These macros are still around for backwards compatibility, but we
+// no longer use them within the library.
+#define LibMeshVecDestroy(x)         VecDestroy(x)
+#define LibMeshVecScatterDestroy(x)  VecScatterDestroy(x)
+#define LibMeshMatDestroy(x)         MatDestroy(x)
+#define LibMeshISDestroy(x)          ISDestroy(x)
+#define LibMeshKSPDestroy(x)         KSPDestroy(x)
+#define LibMeshSNESDestroy(x)        SNESDestroy(x)
+#define LibMeshPetscViewerDestroy(x) PetscViewerDestroy(x)
+#define LibMeshPCDestroy(x)          PCDestroy(x)
 
 // PETSc devs temporarily considered adding VecScatterCreateWithData, but
 // it was dropped in PETSc-130e142e39 and never made it into any release.
 // We will keep the ifdef for backwards compatibility in case anyone wrote
 // code directly using it, but that should be pretty unlikely.
 #define LibMeshVecScatterCreate(xin,ix,yin,iy,newctx)  VecScatterCreate(xin,ix,yin,iy,newctx)
-
-#if PETSC_RELEASE_LESS_THAN(3,1,1)
-typedef enum { PETSC_COPY_VALUES, PETSC_OWN_POINTER, PETSC_USE_POINTER} PetscCopyMode;
-#  define ISCreateLibMesh(comm,n,idx,mode,is)           \
-  ((mode) == PETSC_USE_POINTER                          \
-   ? ISCreateGeneralWithArray((comm),(n),(idx),(is))    \
-   : ((mode) == PETSC_OWN_POINTER                       \
-      ? ISCreateGeneralNC((comm),(n),(idx),(is))        \
-      : ISCreateGeneral((comm),(n),(idx),(is))))
-#else
-#  define ISCreateLibMesh(comm,n,idx,mode,is) ISCreateGeneral((comm),(n),(idx),(mode),(is))
-#endif
+#define ISCreateLibMesh(comm,n,idx,mode,is) ISCreateGeneral((comm),(n),(idx),(mode),(is))
 
 // As of release 3.8.0, MatGetSubMatrix was renamed to MatCreateSubMatrix.
 #if PETSC_RELEASE_LESS_THAN(3,8,0)
@@ -111,6 +93,120 @@ typedef enum { PETSC_COPY_VALUES, PETSC_OWN_POINTER, PETSC_USE_POINTER} PetscCop
 #else
 # define LibMeshCreateSubMatrix MatCreateSubMatrix
 #endif
+
+// If we're using quad precision, we need to disambiguate std
+// operations on PetscScalar
+
+#if LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+# include <boost/multiprecision/float128.hpp>
+
+namespace std
+{
+inline
+std::ostream & operator<< (std::ostream & os, const PetscScalar in)
+{
+  os << (boost::multiprecision::float128(in));
+  return os;
+}
+
+#define LIBMESH_PETSCSCALAR_UNARY(funcname) \
+inline PetscScalar funcname \
+  (const PetscScalar in) \
+{ \
+  return boost::multiprecision::funcname \
+    (boost::multiprecision::float128(in)).backend().value(); \
+}
+
+LIBMESH_PETSCSCALAR_UNARY(sqrt)
+LIBMESH_PETSCSCALAR_UNARY(exp)
+LIBMESH_PETSCSCALAR_UNARY(log)
+LIBMESH_PETSCSCALAR_UNARY(log10)
+LIBMESH_PETSCSCALAR_UNARY(sin)
+LIBMESH_PETSCSCALAR_UNARY(cos)
+LIBMESH_PETSCSCALAR_UNARY(tan)
+LIBMESH_PETSCSCALAR_UNARY(asin)
+LIBMESH_PETSCSCALAR_UNARY(acos)
+LIBMESH_PETSCSCALAR_UNARY(atan)
+LIBMESH_PETSCSCALAR_UNARY(sinh)
+LIBMESH_PETSCSCALAR_UNARY(cosh)
+LIBMESH_PETSCSCALAR_UNARY(tanh)
+LIBMESH_PETSCSCALAR_UNARY(abs)
+LIBMESH_PETSCSCALAR_UNARY(fabs)
+LIBMESH_PETSCSCALAR_UNARY(ceil)
+LIBMESH_PETSCSCALAR_UNARY(floor)
+
+} // namespace std
+
+// Helper functions for boost float128 compatibility
+namespace libMesh
+{
+template <typename T>
+PetscScalar PS(T val)
+{
+  return val.backend().value();
+}
+
+template <typename T>
+PetscScalar * pPS(T * ptr)
+{
+  return &(ptr->backend().value());
+}
+
+template <typename T>
+const PetscScalar * pPS(const T * ptr)
+{
+  return &(ptr->backend().value());
+}
+
+template <typename T>
+PetscReal * pPR(T * ptr)
+{
+  return &(ptr->backend().value());
+}
+
+template <typename T>
+const PetscReal * pPR(const T * ptr)
+{
+  return &(ptr->backend().value());
+}
+} // namespace libMesh
+
+#else
+
+namespace libMesh
+{
+template <typename T>
+PetscScalar PS(T val)
+{
+  return val;
+}
+
+template <typename T>
+PetscScalar * pPS(T * ptr)
+{
+  return ptr;
+}
+
+template <typename T>
+const PetscScalar * pPS(const T * ptr)
+{
+  return ptr;
+}
+
+template <typename T>
+PetscReal * pPR(T * ptr)
+{
+  return ptr;
+}
+
+template <typename T>
+const PetscReal * pPR(const T * ptr)
+{
+  return ptr;
+}
+} // namespace libMesh
+
+#endif // LIBMESH_ENABLE_QUADRUPLE_PRECISION
 
 #else // LIBMESH_HAVE_PETSC
 

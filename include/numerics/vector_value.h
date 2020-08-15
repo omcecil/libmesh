@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,10 @@
 // Local includes
 #include "libmesh/type_vector.h"
 
+#ifdef LIBMESH_HAVE_METAPHYSICL
+#include "metaphysicl/raw_type.h"
+#endif
+
 // C++ includes
 
 namespace libMesh
@@ -41,6 +45,13 @@ template <typename T>
 class VectorValue : public TypeVector<T>
 {
 public:
+  typedef T value_type;
+
+  template <typename T2>
+  struct rebind
+  {
+    typedef VectorValue<T2> other;
+  };
 
   /**
    * Empty constructor.
@@ -117,8 +128,6 @@ public:
   operator = (const Scalar & libmesh_dbg_var(p))
   { libmesh_assert_equal_to (p, Scalar(0)); this->zero(); return *this; }
 };
-
-
 
 /**
  * Useful typedefs to allow transparent switching
@@ -213,5 +222,25 @@ VectorValue<T>::VectorValue (const TypeVector<Real> & p_re,
 
 
 } // namespace libMesh
+
+#ifdef LIBMESH_HAVE_METAPHYSICL
+namespace MetaPhysicL
+{
+template <typename T>
+struct RawType<libMesh::VectorValue<T>>
+{
+  typedef libMesh::VectorValue<typename RawType<T>::value_type> value_type;
+
+  static value_type value (const libMesh::VectorValue<T> & in)
+    {
+      value_type ret;
+      for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+        ret(i) = raw_value(in(i));
+
+      return ret;
+    }
+};
+}
+#endif
 
 #endif // LIBMESH_VECTOR_VALUE_H

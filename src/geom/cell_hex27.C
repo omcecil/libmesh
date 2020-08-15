@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -64,7 +64,21 @@ const unsigned int Hex27::edge_nodes_map[Hex27::num_edges][Hex27::nodes_per_edge
     {4, 7, 19}  // Edge 11
   };
 
-
+const unsigned int Hex27::edge_sides_map[Hex27::num_edges][2] =
+  {
+    {0, 1}, // Edge 0
+    {0, 2}, // Edge 1
+    {0, 3}, // Edge 2
+    {0, 4}, // Edge 3
+    {1, 4}, // Edge 4
+    {1, 2}, // Edge 5
+    {2, 3}, // Edge 6
+    {3, 4}, // Edge 7
+    {1, 5}, // Edge 8
+    {2, 5}, // Edge 9
+    {3, 5}, // Edge 10
+    {4, 5}  // Edge 11
+  };
 
 // ------------------------------------------------------------
 // Hex27 class member functions
@@ -108,6 +122,13 @@ Hex27::nodes_on_side(const unsigned int s) const
 {
   libmesh_assert_less(s, n_sides());
   return {std::begin(side_nodes_map[s]), std::end(side_nodes_map[s])};
+}
+
+std::vector<unsigned>
+Hex27::nodes_on_edge(const unsigned int e) const
+{
+  libmesh_assert_less(e, n_edges());
+  return {std::begin(edge_nodes_map[e]), std::end(edge_nodes_map[e])};
 }
 
 bool Hex27::is_node_on_edge(const unsigned int n,
@@ -218,7 +239,7 @@ dof_id_type Hex27::key (const unsigned int s) const
 
 
 
-unsigned int Hex27::which_node_am_i(unsigned int side,
+unsigned int Hex27::local_side_node(unsigned int side,
                                     unsigned int side_node) const
 {
   libmesh_assert_less (side, this->n_sides());
@@ -229,24 +250,21 @@ unsigned int Hex27::which_node_am_i(unsigned int side,
 
 
 
+unsigned int Hex27::local_edge_node(unsigned int edge,
+                                    unsigned int edge_node) const
+{
+  libmesh_assert_less (edge, this->n_edges());
+  libmesh_assert_less (edge_node, Hex27::nodes_per_edge);
+
+  return Hex27::edge_nodes_map[edge][edge_node];
+}
+
+
+
 std::unique_ptr<Elem> Hex27::build_side_ptr (const unsigned int i,
                                              bool proxy)
 {
-  libmesh_assert_less (i, this->n_sides());
-
-  if (proxy)
-    return libmesh_make_unique<Side<Quad9,Hex27>>(this,i);
-
-  else
-    {
-      std::unique_ptr<Elem> face = libmesh_make_unique<Quad9>();
-      face->subdomain_id() = this->subdomain_id();
-
-      for (auto n : face->node_index_range())
-        face->set_node(n) = this->node_ptr(Hex27::side_nodes_map[i][n]);
-
-      return face;
-    }
+  return this->simple_build_side_ptr<Quad9, Hex27>(i, proxy);
 }
 
 
@@ -669,6 +687,10 @@ Hex27::second_order_child_vertex (const unsigned int n) const
 
 Real Hex27::volume () const
 {
+  // This specialization is good for Lagrange mappings only
+  if (this->mapping_type() != LAGRANGE_MAP)
+    return this->Elem::volume();
+
   // Make copies of our points.  It makes the subsequent calculations a bit
   // shorter and avoids dereferencing the same pointer multiple times.
   Point

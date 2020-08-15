@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,9 @@
 // Local includes
 #include "libmesh/type_tensor.h"
 
-// C++ includes
+#ifdef LIBMESH_HAVE_METAPHYSICL
+#include "metaphysicl/raw_type.h"
+#endif
 
 namespace libMesh
 {
@@ -41,6 +43,13 @@ template <typename T>
 class TensorValue : public TypeTensor<T>
 {
 public:
+  typedef T value_type;
+
+  template <typename T2>
+  struct rebind
+  {
+    typedef TensorValue<T2> other;
+  };
 
   /**
    * Empty constructor.
@@ -268,5 +277,26 @@ TensorValue<T>::TensorValue (const TypeTensor<Real> & p_re,
 
 
 } // namespace libMesh
+
+#ifdef LIBMESH_HAVE_METAPHYSICL
+namespace MetaPhysicL
+{
+template <typename T>
+struct RawType<libMesh::TensorValue<T>>
+{
+  typedef libMesh::TensorValue<typename RawType<T>::value_type> value_type;
+
+  static value_type value (const libMesh::TensorValue<T> & in)
+    {
+      value_type ret;
+      for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+        for (unsigned int j = 0; j < LIBMESH_DIM; ++j)
+          ret(i,j) = raw_value(in(i,j));
+
+      return ret;
+    }
+};
+}
+#endif
 
 #endif // LIBMESH_TENSOR_VALUE_H

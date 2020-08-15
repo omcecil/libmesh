@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -58,16 +58,34 @@ template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
 unsigned int InfFE<Dim,T_radial,T_map>::n_dofs (const FEType & fet,
                                                 const ElemType inf_elem_type)
 {
-  const ElemType base_et (Base::get_elem_type(inf_elem_type));
+  libmesh_deprecated();
+
+  const ElemType base_et (InfFEBase::get_elem_type(inf_elem_type));
 
   if (Dim > 1)
-    return FEInterface::n_dofs(Dim-1, fet, base_et) * Radial::n_dofs(fet.radial_order);
+    return FEInterface::n_dofs(Dim-1, fet, base_et) *
+      InfFERadial::n_dofs(fet.radial_order);
   else
-    return Radial::n_dofs(fet.radial_order);
+    return InfFERadial::n_dofs(fet.radial_order);
 }
 
 
 
+template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
+unsigned int InfFE<Dim,T_radial,T_map>::n_dofs(const FEType & fet,
+                                               const Elem * inf_elem)
+{
+  // The "base" Elem is a non-infinite Elem corresponding to side 0 of
+  // the InfElem. This builds a "lightweight" proxy and so should be
+  // relatively fast.
+  auto base_elem = inf_elem->build_side_ptr(0);
+
+  if (Dim > 1)
+    return FEInterface::n_dofs(fet, base_elem.get()) *
+      InfFERadial::n_dofs(fet.radial_order);
+  else
+    return InfFERadial::n_dofs(fet.radial_order);
+}
 
 
 
@@ -76,7 +94,10 @@ unsigned int InfFE<Dim,T_radial,T_map>::n_dofs_at_node (const FEType & fet,
                                                         const ElemType inf_elem_type,
                                                         const unsigned int n)
 {
-  const ElemType base_et (Base::get_elem_type(inf_elem_type));
+  // TODO:
+  // libmesh_deprecated();
+
+  const ElemType base_et (InfFEBase::get_elem_type(inf_elem_type));
 
   unsigned int n_base, n_radial;
   compute_node_indices(inf_elem_type, n, n_base, n_radial);
@@ -90,13 +111,32 @@ unsigned int InfFE<Dim,T_radial,T_map>::n_dofs_at_node (const FEType & fet,
 
   if (Dim > 1)
     return FEInterface::n_dofs_at_node(Dim-1, fet, base_et, n_base)
-      * Radial::n_dofs_at_node(fet.radial_order, n_radial);
+      * InfFERadial::n_dofs_at_node(fet.radial_order, n_radial);
   else
-    return Radial::n_dofs_at_node(fet.radial_order, n_radial);
+    return InfFERadial::n_dofs_at_node(fet.radial_order, n_radial);
 }
 
 
 
+template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
+unsigned int InfFE<Dim,T_radial,T_map>::n_dofs_at_node (const FEType & fet,
+                                                        const Elem * inf_elem,
+                                                        const unsigned int n)
+{
+  // The "base" Elem is a non-infinite Elem corresponding to side 0 of
+  // the InfElem. This builds a "lightweight" proxy and so should be
+  // relatively fast.
+  auto base_elem = inf_elem->build_side_ptr(0);
+
+  unsigned int n_base, n_radial;
+  compute_node_indices(inf_elem->type(), n, n_base, n_radial);
+
+  if (Dim > 1)
+    return FEInterface::n_dofs_at_node(fet, base_elem.get(), n_base)
+      * InfFERadial::n_dofs_at_node(fet.radial_order, n_radial);
+  else
+    return InfFERadial::n_dofs_at_node(fet.radial_order, n_radial);
+}
 
 
 
@@ -104,17 +144,35 @@ template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
 unsigned int InfFE<Dim,T_radial,T_map>::n_dofs_per_elem (const FEType & fet,
                                                          const ElemType inf_elem_type)
 {
-  const ElemType base_et (Base::get_elem_type(inf_elem_type));
+  // TODO:
+  // libmesh_deprecated();
+
+  const ElemType base_et (InfFEBase::get_elem_type(inf_elem_type));
 
   if (Dim > 1)
     return FEInterface::n_dofs_per_elem(Dim-1, fet, base_et)
-      * Radial::n_dofs_per_elem(fet.radial_order);
+      * InfFERadial::n_dofs_per_elem(fet.radial_order);
   else
-    return Radial::n_dofs_per_elem(fet.radial_order);
+    return InfFERadial::n_dofs_per_elem(fet.radial_order);
 }
 
 
 
+template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
+unsigned int InfFE<Dim,T_radial,T_map>::n_dofs_per_elem (const FEType & fet,
+                                                         const Elem * inf_elem)
+{
+  // The "base" Elem is a non-infinite Elem corresponding to side 0 of
+  // the InfElem. This builds a "lightweight" proxy and so should be
+  // relatively fast.
+  auto base_elem = inf_elem->build_side_ptr(0);
+
+  if (Dim > 1)
+    return FEInterface::n_dofs_per_elem(fet, base_elem.get())
+      * InfFERadial::n_dofs_per_elem(fet.radial_order);
+  else
+    return InfFERadial::n_dofs_per_elem(fet.radial_order);
+}
 
 
 
@@ -159,6 +217,9 @@ Real InfFE<Dim,T_radial,T_map>::shape(const FEType & fet,
                                       const unsigned int i,
                                       const Point & p)
 {
+  // TODO - if possible, not sure if we can easily fully remove this function.
+  // libmesh_deprecated();
+
   libmesh_assert_not_equal_to (Dim, 0);
 
 #ifdef DEBUG
@@ -173,7 +234,7 @@ Real InfFE<Dim,T_radial,T_map>::shape(const FEType & fet,
     }
 #endif
 
-  const ElemType     base_et  (Base::get_elem_type(inf_elem_type));
+  const ElemType     base_et  (InfFEBase::get_elem_type(inf_elem_type));
   const Order        o_radial (fet.radial_order);
   const Real         v        (p(Dim-1));
 
@@ -186,10 +247,10 @@ Real InfFE<Dim,T_radial,T_map>::shape(const FEType & fet,
   if (Dim > 1)
     return FEInterface::shape(Dim-1, fet, base_et, i_base, p)
       * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-      * InfFE<Dim,T_radial,T_map>::Radial::decay(v);
+      * InfFERadial::decay(Dim,v);
   else
     return InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-      * InfFE<Dim,T_radial,T_map>::Radial::decay(v);
+      * InfFERadial::decay(Dim,v);
 }
 
 
@@ -223,15 +284,33 @@ Real InfFE<Dim,T_radial,T_map>::shape(const FEType & fet,
   std::unique_ptr<const Elem> base_el (inf_elem->build_side_ptr(0));
 
   unsigned int i_base, i_radial;
-  compute_shape_indices(fet, inf_elem->type(), i, i_base, i_radial);
+  compute_shape_indices(fet, inf_elem, i, i_base, i_radial);
 
   if (Dim > 1)
-    return FEInterface::shape(Dim-1, fet, base_el.get(), i_base, p)
+    return FEInterface::shape(fet, base_el.get(), i_base, p)
       * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-      * InfFE<Dim,T_radial,T_map>::Radial::decay(v);
+      * InfFERadial::decay(Dim,v);
   else
     return InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-      * InfFE<Dim,T_radial,T_map>::Radial::decay(v);
+      * InfFERadial::decay(Dim,v);
+}
+
+
+
+template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
+Real InfFE<Dim,T_radial,T_map>::shape(const FEType fet,
+                                      const Elem * inf_elem,
+                                      const unsigned int i,
+                                      const Point & p,
+                                      const bool add_p_level)
+{
+  if (add_p_level)
+    {
+      FEType tmp_fet=fet;
+      tmp_fet = static_cast<Order>(fet.order + add_p_level * inf_elem->p_level());
+      return InfFE<Dim,T_radial,T_map>::shape(tmp_fet, inf_elem, i, p);
+    }
+  return InfFE<Dim,T_radial,T_map>::shape(fet, inf_elem, i, p);
 }
 
 
@@ -242,6 +321,9 @@ Real InfFE<Dim,T_radial,T_map>::shape_deriv (const FEType & fe_t,
                                              const unsigned int j,
                                              const Point & p)
 {
+  // TODO - if possible, not sure if we can easily fully remove this function.
+  // libmesh_deprecated();
+
   libmesh_assert_not_equal_to (Dim, 0);
   libmesh_assert_greater (Dim,j);
 #ifdef DEBUG
@@ -256,7 +338,7 @@ Real InfFE<Dim,T_radial,T_map>::shape_deriv (const FEType & fe_t,
     }
 #endif
 
-  const ElemType     base_et  (Base::get_elem_type(inf_elem_type));
+  const ElemType     base_et  (InfFEBase::get_elem_type(inf_elem_type));
   const Order o_radial (fe_t.radial_order);
   const Real v (p(Dim-1));
 
@@ -266,16 +348,16 @@ Real InfFE<Dim,T_radial,T_map>::shape_deriv (const FEType & fe_t,
   if (j== Dim -1)
     {
       Real RadialDeriv = InfFE<Dim,T_radial,T_map>::eval_deriv(v, o_radial, i_radial)
-        * InfFE<Dim,T_radial,T_map>::Radial::decay(v)
+        * InfFERadial::decay(Dim,v)
         + InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-        * InfFE<Dim,T_radial,T_map>::Radial::decay_deriv(v);
+        * InfFERadial::decay_deriv(v);
 
       return FEInterface::shape(Dim-1, fe_t, base_et, i_base, p)*RadialDeriv;
     }
 
   return FEInterface::shape_deriv(Dim-1, fe_t, base_et, i_base, j, p)
     * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-    * InfFE<Dim,T_radial,T_map>::Radial::decay(v);
+    * InfFERadial::decay(Dim,v);
 }
 
 
@@ -312,20 +394,20 @@ Real InfFE<Dim,T_radial,T_map>::shape_deriv (const FEType & fe_t,
       //   Therefore we can do very useless things then:
       i_base=0;
     }
-  compute_shape_indices(fe_t, inf_elem->type(), i, i_base, i_radial);
+  compute_shape_indices(fe_t, inf_elem, i, i_base, i_radial);
 
   if (j== Dim -1)
     {
       Real RadialDeriv = InfFE<Dim,T_radial,T_map>::eval_deriv(v, o_radial, i_radial)
-        * InfFE<Dim,T_radial,T_map>::Radial::decay(v)
+        * InfFERadial::decay(Dim,v)
         + InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-        * InfFE<Dim,T_radial,T_map>::Radial::decay_deriv(v);
+        * InfFERadial::decay_deriv(v);
 
-      return FEInterface::shape(Dim-1, fe_t, base_el.get(), i_base, p)*RadialDeriv;
+      return FEInterface::shape(fe_t, base_el.get(), i_base, p)*RadialDeriv;
     }
-  return FEInterface::shape_deriv(Dim-1, fe_t, base_el.get(), i_base, j, p)
+  return FEInterface::shape_deriv(fe_t, base_el.get(), i_base, j, p)
     * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-    * InfFE<Dim,T_radial,T_map>::Radial::decay(v);
+    * InfFERadial::decay(Dim,v);
 }
 
 
@@ -341,7 +423,7 @@ void InfFE<Dim,T_radial,T_map>::compute_data(const FEType & fet,
   libmesh_assert_not_equal_to (Dim, 0);
 
   const Order        o_radial             (fet.radial_order);
-  const Order        radial_mapping_order (Radial::mapping_order());
+  const Order        radial_mapping_order (InfFERadial::mapping_order());
   const Point &      p                    (data.p);
   const Real         v                    (p(Dim-1));
   std::unique_ptr<const Elem> base_el (inf_elem->build_side_ptr(0));
@@ -465,32 +547,32 @@ void InfFE<Dim,T_radial,T_map>::compute_data(const FEType & fet,
         {
           // compute base and radial shape indices
           unsigned int i_base, i_radial;
-          compute_shape_indices(fet, inf_elem->type(), i, i_base, i_radial);
+          compute_shape_indices(fet, inf_elem, i, i_base, i_radial);
 
-          data.shape[i] = (InfFE<Dim,T_radial,T_map>::Radial::decay(v)                  /* (1.-v)/2. in 3D          */
-                           * FEInterface::shape(Dim-1, fet, base_el.get(), i_base, p)   /* S_n(s,t)                 */
+          data.shape[i] = (InfFERadial::decay(Dim,v)                                    /* (1.-v)/2. in 3D          */
+                           * FEInterface::shape(fet, base_el.get(), i_base, p)          /* S_n(s,t)                 */
                            * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial))    /* L_n(v)                   */
                            * time_harmonic;                                             /* e^(i*k*phase(s,t,v)      */
 
           // use differentiation of the above equation
           if (data.need_derivative())
             {
-              data.dshape[i](0)     = (InfFE<Dim,T_radial,T_map>::Radial::decay(v)
-                                       * FEInterface::shape_deriv(Dim-1, fet, base_el.get(), i_base, 0, p)
+              data.dshape[i](0)     = (InfFERadial::decay(Dim,v)
+                                       * FEInterface::shape_deriv(fet, base_el.get(), i_base, 0, p)
                                        * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial))
                                        * time_harmonic;
 
               if (Dim > 2)
                 {
-                  data.dshape[i](1)   = (InfFE<Dim,T_radial,T_map>::Radial::decay(v)
-                                         * FEInterface::shape_deriv(Dim-1, fet, base_el.get(), i_base, 1, p)
+                  data.dshape[i](1)   = (InfFERadial::decay(Dim,v)
+                                         * FEInterface::shape_deriv(fet, base_el.get(), i_base, 1, p)
                                          * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial))
                                          * time_harmonic;
 
                 }
-              data.dshape[i](Dim-1)  = (InfFE<Dim,T_radial,T_map>::Radial::decay_deriv(v) * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
-                                        +InfFE<Dim,T_radial,T_map>::Radial::decay(v) * InfFE<Dim,T_radial,T_map>::eval_deriv(v, o_radial, i_radial))
-                                        * FEInterface::shape(Dim-1, fet, base_el.get(), i_base, p) * time_harmonic;
+              data.dshape[i](Dim-1)  = (InfFERadial::decay_deriv(v) * InfFE<Dim,T_radial,T_map>::eval(v, o_radial, i_radial)
+                                        +InfFERadial::decay(Dim,v) * InfFE<Dim,T_radial,T_map>::eval_deriv(v, o_radial, i_radial))
+                                        * FEInterface::shape(fet, base_el.get(), i_base, p) * time_harmonic;
 
 #ifdef LIBMESH_USE_COMPLEX_NUMBERS
               // derivative of time_harmonic (works for harmonic behavior only):
@@ -511,6 +593,24 @@ void InfFE<Dim,T_radial,T_map>::compute_data(const FEType & fet,
 
   else
     libmesh_error_msg("compute_data() for 1-dimensional InfFE not implemented.");
+}
+
+
+template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
+Real InfFE<Dim,T_radial,T_map>::shape_deriv(const FEType fet,
+                                            const Elem * inf_elem,
+                                            const unsigned int i,
+                                            const unsigned int j,
+                                            const Point & p,
+                                            const bool add_p_level)
+{
+  if (add_p_level)
+    {
+      FEType tmp_fet=fet;
+      tmp_fet = static_cast<Order>(fet.order + add_p_level * inf_elem->p_level());
+      return InfFE<Dim,T_radial,T_map>::shape_deriv(tmp_fet, inf_elem, i, j, p);
+    }
+  return InfFE<Dim,T_radial,T_map>::shape_deriv(fet, inf_elem, i, j, p);
 }
 
 
@@ -836,41 +936,59 @@ void InfFE<Dim,T_radial,T_map>::compute_node_indices_fast (const ElemType inf_el
 
 template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
 void InfFE<Dim,T_radial,T_map>::compute_shape_indices (const FEType & fet,
+                                                       const Elem * inf_elem,
+                                                       const unsigned int i,
+                                                       unsigned int & base_shape,
+                                                       unsigned int & radial_shape)
+{
+  // (Temporarily) call version of this function taking an
+  // ElemType. Eventually there should only be one version of this
+  // function that takes an Elem*.
+  compute_shape_indices(fet, inf_elem->type(), i, base_shape, radial_shape);
+}
+
+
+
+template <unsigned int Dim, FEFamily T_radial, InfMapType T_map>
+void InfFE<Dim,T_radial,T_map>::compute_shape_indices (const FEType & fet,
                                                        const ElemType inf_elem_type,
                                                        const unsigned int i,
                                                        unsigned int & base_shape,
                                                        unsigned int & radial_shape)
 {
+  // TODO: eventually figure out a way to deprecated this
+  // function. Note that we can't go the other way around and have
+  // this function call the Elem* version because there's not really a
+  // clean way to create the required Elem object on the fly...
+  // libmesh_deprecated();
 
-  /*
-   * An example is provided:  the numbers in comments refer to
-   * a fictitious InfHex18.  The numbers are chosen as exemplary
-   * values.  There is currently no base approximation that
-   * requires this many dof's at nodes, sides, faces and in the element.
-   *
-   * the order of the shape functions is heavily related with the
-   * order the dofs are assigned in \p DofMap::distributed_dofs().
-   * Due to the infinite elements with higher-order base approximation,
-   * some more effort is necessary.
-   *
-   * numbering scheme:
-   * 1. all vertices in the base, assign node->n_comp() dofs to each vertex
-   * 2. all vertices further out: innermost loop: radial shapes,
-   *    then the base approximation shapes
-   * 3. all side nodes in the base, assign node->n_comp() dofs to each side node
-   * 4. all side nodes further out: innermost loop: radial shapes,
-   *    then the base approximation shapes
-   * 5. (all) face nodes in the base, assign node->n_comp() dofs to each face node
-   * 6. (all) face nodes further out: innermost loop: radial shapes,
-   *    then the base approximation shapes
-   * 7. element-associated dof in the base
-   * 8. element-associated dof further out
-   */
+  // An example is provided:  the numbers in comments refer to
+  // a fictitious InfHex18.  The numbers are chosen as exemplary
+  // values.  There is currently no base approximation that
+  // requires this many dof's at nodes, sides, faces and in the element.
+  //
+  // the order of the shape functions is heavily related with the
+  // order the dofs are assigned in \p DofMap::distributed_dofs().
+  // Due to the infinite elements with higher-order base approximation,
+  // some more effort is necessary.
+  //
+  // numbering scheme:
+  // 1. all vertices in the base, assign node->n_comp() dofs to each vertex
+  // 2. all vertices further out: innermost loop: radial shapes,
+  //    then the base approximation shapes
+  // 3. all side nodes in the base, assign node->n_comp() dofs to each side node
+  // 4. all side nodes further out: innermost loop: radial shapes,
+  //    then the base approximation shapes
+  // 5. (all) face nodes in the base, assign node->n_comp() dofs to each face node
+  // 6. (all) face nodes further out: innermost loop: radial shapes,
+  //    then the base approximation shapes
+  // 7. element-associated dof in the base
+  // 8. element-associated dof further out
 
   const unsigned int radial_order       = static_cast<unsigned int>(fet.radial_order.get_order()); // 4
   const unsigned int radial_order_p_one = radial_order+1;                                          // 5
 
-  const ElemType base_elem_type           (Base::get_elem_type(inf_elem_type));                    // QUAD9
+  const ElemType base_elem_type           (InfFEBase::get_elem_type(inf_elem_type));               // QUAD9
 
   // assume that the number of dof is the same for all vertices
   unsigned int n_base_vertices         = libMesh::invalid_uint;                                    // 4
@@ -1077,21 +1195,36 @@ void InfFE<Dim,T_radial,T_map>::compute_shape_indices (const FEType & fet,
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, unsigned int, n_dofs(const FEType &, const ElemType));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, unsigned int, n_dofs(const FEType &, const ElemType));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, unsigned int, n_dofs(const FEType &, const ElemType));
+INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, unsigned int, n_dofs(const FEType &, const Elem*));
+INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, unsigned int, n_dofs(const FEType &, const Elem*));
+INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, unsigned int, n_dofs(const FEType &, const Elem*));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, unsigned int, n_dofs_per_elem(const FEType &, const ElemType));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, unsigned int, n_dofs_per_elem(const FEType &, const ElemType));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, unsigned int, n_dofs_per_elem(const FEType &, const ElemType));
+INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, unsigned int, n_dofs_per_elem(const FEType &, const Elem *));
+INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, unsigned int, n_dofs_per_elem(const FEType &, const Elem *));
+INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, unsigned int, n_dofs_per_elem(const FEType &, const Elem *));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, unsigned int, n_dofs_at_node(const FEType &, const ElemType, const unsigned int));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, unsigned int, n_dofs_at_node(const FEType &, const ElemType, const unsigned int));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, unsigned int, n_dofs_at_node(const FEType &, const ElemType, const unsigned int));
+INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, unsigned int, n_dofs_at_node(const FEType &, const Elem *, const unsigned int));
+INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, unsigned int, n_dofs_at_node(const FEType &, const Elem *, const unsigned int));
+INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, unsigned int, n_dofs_at_node(const FEType &, const Elem *, const unsigned int));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, void, compute_shape_indices(const FEType &, const ElemType, const unsigned int, unsigned int &, unsigned int &));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, void, compute_shape_indices(const FEType &, const ElemType, const unsigned int, unsigned int &, unsigned int &));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, void, compute_shape_indices(const FEType &, const ElemType, const unsigned int, unsigned int &, unsigned int &));
+INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, void, compute_shape_indices(const FEType &, const Elem *, const unsigned int, unsigned int &, unsigned int &));
+INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, void, compute_shape_indices(const FEType &, const Elem *, const unsigned int, unsigned int &, unsigned int &));
+INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, void, compute_shape_indices(const FEType &, const Elem *, const unsigned int, unsigned int &, unsigned int &));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, void, compute_node_indices(const ElemType, const unsigned int, unsigned int &, unsigned int &));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, void, compute_node_indices(const ElemType, const unsigned int, unsigned int &, unsigned int &));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, void, compute_node_indices(const ElemType, const unsigned int, unsigned int &, unsigned int &));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, Real, shape(const FEType &, const Elem *, const unsigned int, const Point & p));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, Real, shape(const FEType &, const Elem *, const unsigned int, const Point & p));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, Real, shape(const FEType &, const Elem *, const unsigned int, const Point & p));
+INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, Real, shape(const FEType, const Elem *, const unsigned int, const Point &, const bool));
+INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, Real, shape(const FEType, const Elem *, const unsigned int, const Point &, const bool));
+INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, Real, shape(const FEType, const Elem *, const unsigned int, const Point &, const bool));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, Real, shape(const FEType &, const ElemType, const unsigned int, const Point &));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, Real, shape(const FEType &, const ElemType, const unsigned int, const Point &));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, Real, shape(const FEType &, const ElemType, const unsigned int, const Point &));
@@ -1101,6 +1234,9 @@ INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, Real, shape_deriv(const FEType &, const El
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, Real, shape_deriv(const FEType &, const ElemType, const unsigned int, const unsigned int, const Point &));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, Real, shape_deriv(const FEType &, const ElemType, const unsigned int, const unsigned int, const Point &));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, Real, shape_deriv(const FEType &, const ElemType, const unsigned int, const unsigned int, const Point &));
+INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, Real, shape_deriv(const FEType, const Elem *, const unsigned int, const unsigned int, const Point &, const bool));
+INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, Real, shape_deriv(const FEType, const Elem *, const unsigned int, const unsigned int, const Point &, const bool));
+INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, Real, shape_deriv(const FEType, const Elem *, const unsigned int, const unsigned int, const Point &, const bool));
 INSTANTIATE_INF_FE_MBRF(1, CARTESIAN, void, compute_data(const FEType &, const Elem *, FEComputeData &));
 INSTANTIATE_INF_FE_MBRF(2, CARTESIAN, void, compute_data(const FEType &, const Elem *, FEComputeData &));
 INSTANTIATE_INF_FE_MBRF(3, CARTESIAN, void, compute_data(const FEType &, const Elem *, FEComputeData &));

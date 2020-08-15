@@ -33,7 +33,6 @@
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/equation_systems.h"
 #include "libmesh/getpot.h"
-#include "libmesh/parallel.h"
 #include "libmesh/dof_map.h"
 #include "libmesh/enum_eigen_solver_type.h"
 
@@ -81,8 +80,7 @@ void RBSCMConstruction::set_rb_scm_evaluation(RBSCMEvaluation & rb_scm_eval_in)
 
 RBSCMEvaluation & RBSCMConstruction::get_rb_scm_evaluation()
 {
-  if (!rb_scm_eval)
-    libmesh_error_msg("Error: RBSCMEvaluation object hasn't been initialized yet");
+  libmesh_error_msg_if(!rb_scm_eval, "Error: RBSCMEvaluation object hasn't been initialized yet");
 
   return *rb_scm_eval;
 }
@@ -234,6 +232,7 @@ void RBSCMConstruction::perform_SCM_greedy()
   // initialize rb_scm_eval's parameters
   rb_scm_eval->initialize_parameters(*this);
 
+#ifdef LIBMESH_ENABLE_CONSTRAINTS
   // Get a list of constrained dofs from rb_system
   std::set<dof_id_type> constrained_dofs_set;
   EquationSystems & es = this->get_equation_systems();
@@ -250,6 +249,7 @@ void RBSCMConstruction::perform_SCM_greedy()
   // Use these constrained dofs to identify which dofs we want to "get rid of"
   // (i.e. condense) in our eigenproblems.
   this->initialize_condensed_dofs(constrained_dofs_set);
+#endif // LIBMESH_ENABLE_CONSTRAINTS
 
   // Copy the inner product matrix over from rb_system to be used as matrix_B
   load_matrix_B();
@@ -410,8 +410,8 @@ Number RBSCMConstruction::Aq_inner_product(unsigned int q,
                                            const NumericVector<Number> & v,
                                            const NumericVector<Number> & w)
 {
-  if (q >= get_rb_theta_expansion().get_n_A_terms())
-    libmesh_error_msg("Error: We must have q < Q_a in Aq_inner_product.");
+  libmesh_error_msg_if(q >= get_rb_theta_expansion().get_n_A_terms(),
+                       "Error: We must have q < Q_a in Aq_inner_product.");
 
   matrix_A->zero();
   add_scaled_symm_Aq(q, 1.);

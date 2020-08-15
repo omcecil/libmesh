@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,8 +22,13 @@
 #include "libmesh/fe.h"
 #include "libmesh/elem.h"
 
+
 namespace libMesh
 {
+
+
+LIBMESH_DEFAULT_VECTORIZED_FE(0,SCALAR)
+
 
 template <>
 Real FE<0,SCALAR>::shape(const ElemType,
@@ -38,7 +43,18 @@ template <>
 Real FE<0,SCALAR>::shape(const Elem *,
                          const Order,
                          const unsigned int,
-                         const Point &)
+                         const Point &,
+                         const bool)
+{
+  return 1.;
+}
+
+template <>
+Real FE<0,SCALAR>::shape(const FEType,
+                         const Elem *,
+                         const unsigned int,
+                         const Point &,
+                         const bool)
 {
   return 1.;
 }
@@ -58,10 +74,24 @@ Real FE<0,SCALAR>::shape_deriv(const Elem *,
                                const Order,
                                const unsigned int,
                                const unsigned int,
-                               const Point &)
+                               const Point &,
+                               const bool)
 {
   return 0.;
 }
+
+
+template <>
+Real FE<0,SCALAR>::shape_deriv(const FEType,
+                               const Elem *,
+                               const unsigned int,
+                               const unsigned int,
+                               const Point &,
+                               const bool)
+{
+  return 0.;
+}
+
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
@@ -80,7 +110,19 @@ Real FE<0,SCALAR>::shape_second_deriv(const Elem *,
                                       const Order,
                                       const unsigned int,
                                       const unsigned int,
-                                      const Point &)
+                                      const Point &,
+                                      const bool)
+{
+  return 0.;
+}
+
+template <>
+Real FE<0,SCALAR>::shape_second_deriv(const FEType,
+                                      const Elem *,
+                                      const unsigned int,
+                                      const unsigned int,
+                                      const Point &,
+                                      const bool)
 {
   return 0.;
 }

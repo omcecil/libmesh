@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -353,8 +353,9 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
                   const unsigned int psi_size = cast_int<unsigned int>(psi.size());
 
                   // Patch matrix contribution
-                  for (unsigned int i=0; i<Kp.m(); i++)
-                    for (unsigned int j=0; j<Kp.n(); j++)
+                  const unsigned int m = Kp.m(), n = Kp.n();
+                  for (unsigned int i=0; i<m; i++)
+                    for (unsigned int j=0; j<n; j++)
                       Kp(i,j) += JxW[qp]*psi[i]*psi[j];
 
                   if (error_estimator.error_norm.type(var) == L2 ||
@@ -415,6 +416,7 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
                           Fx(i) += JxW[qp]*grad_u_h(0)*psi[i];
                         }
                     }
+#if LIBMESH_DIM > 1
                   else if (error_estimator.error_norm.type(var) == H1_Y_SEMINORM)
                     {
                       // Compute the gradient on the current patch element
@@ -433,6 +435,8 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
                           Fy(i) += JxW[qp]*grad_u_h(1)*psi[i];
                         }
                     }
+#endif // LIBMESH_DIM > 1
+#if LIBMESH_DIM > 2
                   else if (error_estimator.error_norm.type(var) == H1_Z_SEMINORM)
                     {
                       // Compute the gradient on the current patch element
@@ -451,6 +455,7 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
                           Fz(i) += JxW[qp]*grad_u_h(2)*psi[i];
                         }
                     }
+#endif // LIBMESH_DIM > 2
                   else if (error_estimator.error_norm.type(var) == H2_SEMINORM ||
                            error_estimator.error_norm.type(var) == W2_INF_SEMINORM)
                     {
@@ -701,6 +706,7 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
 
                       temperr[0] -= grad_u_h(0);
                     }
+#if LIBMESH_DIM > 1
                   else if (error_estimator.error_norm.type(var) == H1_Y_SEMINORM)
                     {
                       // Compute the gradient at the current sample point
@@ -719,6 +725,8 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
 
                       temperr[1] -= grad_u_h(1);
                     }
+#endif // LIBMESH_DIM > 1
+#if LIBMESH_DIM > 2
                   else if (error_estimator.error_norm.type(var) == H1_Z_SEMINORM)
                     {
                       // Compute the gradient at the current sample point
@@ -737,6 +745,7 @@ void WeightedPatchRecoveryErrorEstimator::EstimateError::operator()(const ConstE
 
                       temperr[2] -= grad_u_h(2);
                     }
+#endif // LIBMESH_DIM > 2
                   else if (error_estimator.error_norm.type(var) == H2_SEMINORM ||
                            error_estimator.error_norm.type(var) == W2_INF_SEMINORM)
                     {

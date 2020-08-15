@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,18 +17,12 @@
 
 
 
-// C++ includes
-#include <fstream>
-#include <iomanip>
-#include <sstream>
-
 // Local includes
 #include "libmesh/libmesh_config.h"
 #include "libmesh/libmesh_logging.h"
 #include "libmesh/tecplot_io.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/elem.h"
-#include "libmesh/parallel.h"
 #include "libmesh/enum_io_package.h"
 #include "libmesh/int_range.h"
 
@@ -38,6 +32,10 @@ extern "C" {
 }
 #endif
 
+// C++ includes
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 
 namespace libMesh
 {
@@ -216,8 +214,8 @@ unsigned TecplotIO::elem_dimension()
     elem_dims[elem->dim() - 1] = 1;
 
   // Detect and disallow (for now) the writing of mixed dimension meshes.
-  if (std::count(elem_dims.begin(), elem_dims.end(), 1) > 1)
-    libmesh_error_msg("Error, cannot write Mesh with mixed element dimensions to Tecplot file!");
+  libmesh_error_msg_if(std::count(elem_dims.begin(), elem_dims.end(), 1) > 1,
+                       "Error, cannot write Mesh with mixed element dimensions to Tecplot file!");
 
   if (elem_dims[0])
     return 1;
@@ -312,7 +310,7 @@ void TecplotIO::write_ascii (const std::string & fname,
 
   } // finished writing header
 
-  for (unsigned int i=0; i<the_mesh.n_nodes(); i++)
+  for (auto i : make_range(the_mesh.n_nodes()))
     {
       // Print the point without a newline
       the_mesh.point(i).write_unformatted(out_stream, false);
@@ -461,7 +459,7 @@ void TecplotIO::write_binary (const std::string & fname,
   // Copy the nodes and data to the TecplotMacros class. Note that we store
   // everything as a float here since the eye doesn't require a double to
   // understand what is going on
-  for (unsigned int v=0; v<the_mesh.n_nodes(); v++)
+  for (auto v : make_range(the_mesh.n_nodes()))
     {
       tm.nd(0,v) = static_cast<float>(the_mesh.point(v)(0));
       tm.nd(1,v) = static_cast<float>(the_mesh.point(v)(1));
@@ -522,7 +520,7 @@ void TecplotIO::write_binary (const std::string & fname,
                         the_mesh.active_subdomain_elements_end(sbd_id)))
           {
             std::vector<dof_id_type> conn;
-            for (unsigned int se=0; se<elem->n_sub_elem(); se++)
+            for (auto se : make_range(elem->n_sub_elem()))
               {
                 elem->connectivity(se, TECPLOT, conn);
 
@@ -713,7 +711,7 @@ void TecplotIO::write_binary (const std::string & fname,
   // Copy the nodes and data to the TecplotMacros class. Note that we store
   // everything as a float here since the eye doesn't require a double to
   // understand what is going on
-  for (unsigned int v=0; v<the_mesh.n_nodes(); v++)
+  for (auto v : make_range(the_mesh.n_nodes()))
     {
       tm.nd(0,v) = static_cast<float>(the_mesh.point(v)(0));
       tm.nd(1,v) = static_cast<float>(the_mesh.point(v)(1));
@@ -746,7 +744,7 @@ void TecplotIO::write_binary (const std::string & fname,
     for (const auto & elem : the_mesh.active_element_ptr_range())
       {
         std::vector<dof_id_type> conn;
-        for (unsigned int se=0; se<elem->n_sub_elem(); se++)
+        for (auto se : make_range(elem->n_sub_elem()))
           {
             elem->connectivity(se, TECPLOT, conn);
 

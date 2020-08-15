@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -18,21 +18,19 @@
 
 // Local includes
 #include "libmesh/quadrature_conical.h"
+#include "libmesh/enum_to_string.h"
 
 namespace libMesh
 {
 
-
-
-void QConical::init_3D(const ElemType type_in,
-                       unsigned int p)
+void QConical::init_3D(const ElemType, unsigned int)
 {
-  switch (type_in)
+  switch (_type)
     {
     case TET4:
     case TET10:
       {
-        this->conical_product_tet(p);
+        this->conical_product_tet();
         return;
       } // end case TET4, TET10
 
@@ -40,7 +38,7 @@ void QConical::init_3D(const ElemType type_in,
     case PYRAMID13:
     case PYRAMID14:
       {
-        this->conical_product_pyramid(p);
+        this->conical_product_pyramid();
         return;
       } // end case PYRAMID5
 
@@ -48,8 +46,8 @@ void QConical::init_3D(const ElemType type_in,
       //---------------------------------------------
       // Unsupported element type
     default:
-      libmesh_error_msg("ERROR: Unsupported element type: " << type_in);
-    } // end switch (type_in)
+      libmesh_error_msg("ERROR: Unsupported element type: " << Utility::enum_to_string(_type));
+    } // end switch (_type)
 }
 
 } // namespace libMesh

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,8 +21,6 @@
 #define LIBMESH_DIFF_QOI_H
 
 // Local Includes
-#include "libmesh/auto_ptr.h" // deprecated
-#include "libmesh/parallel.h"
 #include "libmesh/diff_context.h"
 
 // C++ includes
@@ -34,6 +32,10 @@ namespace libMesh
 // Forward declarations
 class DiffContext;
 class QoISet;
+
+namespace Parallel {
+  class Communicator;
+}
 
 /**
  * This class provides a specific system class.  It aims
@@ -147,10 +149,12 @@ public:
   /**
    * Prepares the result of a build_context() call for use.
    *
-   * Most FEMSystem-based problems will need to reimplement this in order to
-   * call FE::get_*() as their particular QoI requires.
+   * FEMSystem-based problems will need to reimplement this in order to
+   * call FE::get_*() as their particular QoI requires.  Trying to
+   * evaluate a QoI without overriding init_context is both
+   * inefficient and deprecated.
    */
-  virtual void init_context(DiffContext &) {}
+  virtual void init_context(DiffContext &) { libmesh_deprecated(); }
 
   /**
    * Copy of this object. User should override to copy any needed state.

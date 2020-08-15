@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -137,18 +137,14 @@ int main (int argc, char** argv)
   LibMeshInit init (argc, argv);
 
   // Check for proper usage first.
-  if (argc < 2)
-    libmesh_error_msg("\nUsage: " << argv[0] << " <input-filename>");
+  libmesh_error_msg_if(argc < 2, "\nUsage: " << argv[0] << " <input-filename>");
 
   // Tell the user what we are doing.
-  else
-    {
-      std::cout << "Running " << argv[0];
+  std::cout << "Running " << argv[0];
 
-      for (int i=1; i<argc; i++)
-        std::cout << " " << argv[i];
-      std::cout << std::endl << std::endl;
-    }
+  for (int i=1; i<argc; i++)
+    std::cout << " " << argv[i];
+  std::cout << std::endl << std::endl;
 
   // Skip SLEPc examples on a non-SLEPc libMesh build
 #ifndef LIBMESH_HAVE_SLEPC
@@ -200,7 +196,7 @@ int main (int argc, char** argv)
       {
         elem->subdomain_id() = 1;
         // the base elements are always the 0-th neighor.
-        elem->neighbor(0)->subdomain_id()=2;
+        elem->neighbor_ptr(0)->subdomain_id()=2;
       }
 
   // find the neighbours; for correct linking the two areas
@@ -576,7 +572,7 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
          unsigned int num_neighbors=0;
 
          for (unsigned int i=0; i<elem->n_neighbors(); i++){
-            if (elem->neighbor(i)->infinite()){
+            if (elem->neighbor_ptr(i)->infinite()){
                num_neighbors++;
             }
          }
@@ -595,14 +591,14 @@ void assemble_SchroedingerEquation(EquationSystems &es, const std::string &syste
             const std::vector<std::vector<Real> >& phi = face_fe->get_phi();
             const std::vector<Point>& normal = face_fe->get_normals();
 
-            Elem* relevant_neighbor=elem->neighbor(prev_neighbor);
+            const Elem* relevant_neighbor=elem->neighbor_ptr(prev_neighbor);
 
             // Get the correct face to the finite element; for thise, continue looping
             // until a neighbor is an infinite element.
             // If none is found, we leave this loop
             for (; prev_neighbor<elem->n_neighbors(); prev_neighbor++){
-               if (elem->neighbor(prev_neighbor)->infinite()){
-                  relevant_neighbor=elem->neighbor(prev_neighbor);
+               if (elem->neighbor_ptr(prev_neighbor)->infinite()){
+                  relevant_neighbor=elem->neighbor_ptr(prev_neighbor);
                   break;
                }
             }
@@ -685,7 +681,8 @@ void SlepcSolverConfiguration::configure_solver()
       // initialise the st with the default values and change the spectral transformation value.
       ST st;
       PetscErrorCode ierr = EPSGetST(_slepc_solver.eps(), &st);
-      LIBMESH_CHKERR(ierr);
+      if (ierr)
+        libmesh_error();
 
       // Set it to the desired type of spectral transformation.
       // The value of the respective shift is chosen to be the target
@@ -710,7 +707,8 @@ void SlepcSolverConfiguration::configure_solver()
           // print a warning but do nothing more.
           break;
         }
-      LIBMESH_CHKERR(ierr);
+      if (ierr)
+        libmesh_error();
 
       // since st is a reference to the particular object used by \p _slepc_solver,
       // we don't need to hand back the manipulated object. It will be applied before

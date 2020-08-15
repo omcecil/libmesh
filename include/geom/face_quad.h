@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -148,8 +148,16 @@ public:
   /**
    * \returns \p Quad4::side_nodes_map[side][side_node] after doing some range checking.
    */
-  virtual unsigned int which_node_am_i(unsigned int side,
+  virtual unsigned int local_side_node(unsigned int side,
                                        unsigned int side_node) const override;
+
+  /**
+   * Calls local_side_node(edge, edge_node). For 2D elements, there is an implied
+   * equivalence between edges and sides, e.g. n_edges() == n_sides(), so we treat
+   * these two functions the same.
+   */
+  virtual unsigned int local_edge_node(unsigned int edge,
+                                       unsigned int edge_node) const override;
 
   /**
    * \returns A primitive (2-noded) edge for edge i.

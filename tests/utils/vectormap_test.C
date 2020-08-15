@@ -1,20 +1,7 @@
 #include "libmesh/vectormap.h"
 
-// Ignore unused parameter warnings coming from cppunit headers
-#include <libmesh/ignore_warnings.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestCase.h>
-#include <libmesh/restore_warnings.h>
+#include "libmesh_cppunit.h"
 
-// THE CPPUNIT_TEST_SUITE_END macro expands to code that involves
-// std::auto_ptr, which in turn produces -Wdeprecated-declarations
-// warnings.  These can be ignored in GCC as long as we wrap the
-// offending code in appropriate pragmas.  We can't get away with a
-// single ignore_warnings.h inclusion at the beginning of this file,
-// since the libmesh headers pull in a restore_warnings.h at some
-// point.  We also don't bother restoring warnings at the end of this
-// file since it's not a header.
-#include <libmesh/ignore_warnings.h>
 
 #define VECTORMAPOBJECTTEST                     \
   CPPUNIT_TEST( testCreate );                   \
@@ -28,6 +15,7 @@ public:
 
   CPPUNIT_TEST( testCreate );
   CPPUNIT_TEST( testInsert );
+  CPPUNIT_TEST( testEmplace );
   CPPUNIT_TEST( testIterate );
   CPPUNIT_TEST( testFind );
 
@@ -50,6 +38,19 @@ private:
 
     for (Key key=1; key<32; key*=2)
       vm.insert (std::make_pair(key,val));
+
+    vm.sort();
+  }
+
+  template <typename Key, typename Val>
+  void emplace()
+  {
+    vectormap<Key,Val> vm;
+
+    Val val(0); // requires default constructor for val type.
+
+    for (Key key=1; key<32; key*=2)
+      vm.emplace(key, val);
 
     vm.sort();
   }
@@ -101,6 +102,14 @@ public:
     insert<char,int> ();
     insert<long,int*>();
     insert<int, std::vector<int>>();
+  }
+
+  void testEmplace()
+  {
+    emplace<int, int> ();
+    emplace<char,int> ();
+    emplace<long,int*>();
+    emplace<int, std::vector<int>>();
   }
 
   void testIterate()

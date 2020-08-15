@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,6 @@
 
 
 
-// C++ includes
-
 // Local includes
 #include "libmesh/libmesh_config.h"
 
@@ -29,6 +27,7 @@
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dof_map.h"
 #include "libmesh/sparsity_pattern.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 namespace libMesh
 {
@@ -60,7 +59,7 @@ void EigenSparseMatrix<T>::init (const numeric_index_type m_in,
 
 
 template <typename T>
-void EigenSparseMatrix<T>::init ()
+void EigenSparseMatrix<T>::init (const ParallelType)
 {
   // Ignore calls on initialized objects
   if (this->initialized())
@@ -186,6 +185,29 @@ void EigenSparseMatrix<T>::zero ()
 
 
 template <typename T>
+std::unique_ptr<SparseMatrix<T>> EigenSparseMatrix<T>::zero_clone () const
+{
+  // TODO: If there is a more efficient way to make a zeroed-out copy
+  // of an EigenSM, we should call that instead.
+  auto ret = libmesh_make_unique<EigenSparseMatrix<T>>(*this);
+  ret->zero();
+
+  // Work around an issue on older compilers.  We are able to simply
+  // "return ret;" on newer compilers
+  return std::unique_ptr<SparseMatrix<T>>(ret.release());
+}
+
+
+
+template <typename T>
+std::unique_ptr<SparseMatrix<T>> EigenSparseMatrix<T>::clone () const
+{
+  return libmesh_make_unique<EigenSparseMatrix<T>>(*this);
+}
+
+
+
+template <typename T>
 numeric_index_type EigenSparseMatrix<T>::m () const
 {
   libmesh_assert (this->initialized());
@@ -298,7 +320,7 @@ Real EigenSparseMatrix<T>::l1_norm () const
 
   // For a row-major Eigen SparseMatrix like we're using, the
   // InnerIterator iterates over the non-zero entries of rows.
-  for (unsigned row=0; row<this->m(); ++row)
+  for (auto row : make_range(this->m()))
     {
       EigenSM::InnerIterator it(_mat, row);
       for (; it; ++it)
@@ -317,7 +339,7 @@ Real EigenSparseMatrix<T>::linfty_norm () const
 
   // For a row-major Eigen SparseMatrix like we're using, the
   // InnerIterator iterates over the non-zero entries of rows.
-  for (unsigned row=0; row<this->m(); ++row)
+  for (auto row : make_range(this->m()))
     {
       Real current_abs_row_sum = 0.;
       EigenSM::InnerIterator it(_mat, row);

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -20,7 +20,6 @@
 // C++ includes
 #include <sstream>   // for std::ostringstream
 
-
 // Local includes
 #include "libmesh/dof_map.h"
 #include "libmesh/equation_systems.h"
@@ -32,7 +31,7 @@
 #include "libmesh/point.h"              // For point_value
 #include "libmesh/point_locator_base.h" // For point_value
 #include "libmesh/qoi_set.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/system.h"
 #include "libmesh/system_norm.h"
 #include "libmesh/utility.h"
@@ -40,6 +39,7 @@
 #include "libmesh/fe_type.h"
 #include "libmesh/fe_interface.h"
 #include "libmesh/fe_compute_data.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 // includes for calculate_norm, point_*
 #include "libmesh/fe_base.h"
@@ -80,7 +80,7 @@ System::System (EquationSystems & es,
   _qoi_evaluate_object              (nullptr),
   _qoi_evaluate_derivative_function (nullptr),
   _qoi_evaluate_derivative_object   (nullptr),
-  _dof_map                          (new DofMap(number_in, es.get_mesh())),
+  _dof_map                          (libmesh_make_unique<DofMap>(number_in, es.get_mesh())),
   _equation_systems                 (es),
   _mesh                             (es.get_mesh()),
   _sys_name                         (name_in),
@@ -92,7 +92,8 @@ System::System (EquationSystems & es,
   _identify_variable_groups         (true),
   _additional_data_written          (false),
   adjoint_already_solved            (false),
-  _hide_output                      (false)
+  _hide_output                      (false),
+  project_with_constraints          (true)
 {
 }
 
@@ -264,7 +265,7 @@ void System::init_data ()
   MeshBase & mesh = this->get_mesh();
 
   // Add all variable groups to our underlying DofMap
-  for (unsigned int vg=0; vg<this->n_variable_groups(); vg++)
+  for (auto vg : make_range(this->n_variable_groups()))
     _dof_map->add_variable_group(this->variable_group(vg));
 
   // Distribute the degrees of freedom on the mesh
@@ -668,13 +669,12 @@ NumericVector<Number> & System::add_vector (const std::string & vec_name,
 
   // Otherwise build the vector
   NumericVector<Number> * buf = NumericVector<Number>::build(this->comm()).release();
-  _vectors.insert (std::make_pair (vec_name, buf));
-  _vector_projections.insert (std::make_pair (vec_name, projections));
-
-  _vector_types.insert (std::make_pair (vec_name, type));
+  _vectors.emplace(vec_name, buf);
+  _vector_projections.emplace(vec_name, projections);
+  _vector_types.emplace(vec_name, type);
 
   // Vectors are primal by default
-  _vector_is_adjoint.insert (std::make_pair (vec_name, -1));
+  _vector_is_adjoint.emplace(vec_name, -1);
 
   // Initialize it if necessary
   if (_is_initialized)
@@ -773,26 +773,14 @@ NumericVector<Number> * System::request_vector (const unsigned int vec_num)
 
 const NumericVector<Number> & System::get_vector (const std::string & vec_name) const
 {
-  // Make sure the vector exists
-  const_vectors_iterator pos = _vectors.find(vec_name);
-
-  if (pos == _vectors.end())
-    libmesh_error_msg("ERROR: vector " << vec_name << " does not exist in this system!");
-
-  return *(pos->second);
+  return *(libmesh_map_find(_vectors, vec_name));
 }
 
 
 
 NumericVector<Number> & System::get_vector (const std::string & vec_name)
 {
-  // Make sure the vector exists
-  vectors_iterator pos = _vectors.find(vec_name);
-
-  if (pos == _vectors.end())
-    libmesh_error_msg("ERROR: vector " << vec_name << " does not exist in this system!");
-
-  return *(pos->second);
+  return *(libmesh_map_find(_vectors, vec_name));
 }
 
 
@@ -1086,7 +1074,7 @@ unsigned int System::add_variable (const std::string & var,
 
   // Make sure the variable isn't there already
   // or if it is, that it's the type we want
-  for (unsigned int v=0; v<this->n_vars(); v++)
+  for (auto v : make_range(this->n_vars()))
     if (this->variable_name(v) == var)
       {
         if (this->variable_type(v) == type)
@@ -1121,11 +1109,12 @@ unsigned int System::add_variable (const std::string & var,
         should_be_in_vg = false;
 
       // they are restricted, we aren't?
-      if (their_active_subdomains && !active_subdomains)
+      if (their_active_subdomains &&
+          (!active_subdomains || (active_subdomains && active_subdomains->empty())))
         should_be_in_vg = false;
 
       // they aren't restricted, we are?
-      if (!their_active_subdomains && active_subdomains)
+      if (!their_active_subdomains && (active_subdomains && !active_subdomains->empty()))
         should_be_in_vg = false;
 
       if (their_active_subdomains && active_subdomains)
@@ -1176,22 +1165,81 @@ unsigned int System::add_variables (const std::vector<std::string> & vars,
 
   // Make sure the variable isn't there already
   // or if it is, that it's the type we want
-  for (std::size_t ov=0; ov<vars.size(); ov++)
-    for (unsigned int v=0; v<this->n_vars(); v++)
-      if (this->variable_name(v) == vars[ov])
+  for (auto ovar : vars)
+    for (auto v : make_range(this->n_vars()))
+      if (this->variable_name(v) == ovar)
         {
           if (this->variable_type(v) == type)
             return _variables[v].number();
 
-          libmesh_error_msg("ERROR: incompatible variable " << vars[ov] << " has already been added for this system!");
+          libmesh_error_msg("ERROR: incompatible variable " << ovar << " has already been added for this system!");
         }
+
+  // Optimize for VariableGroups here - if the user is adding multiple
+  // variables of the same FEType and subdomain restriction, catch
+  // that here and add them as members of the same VariableGroup.
+  //
+  // start by setting this flag to whatever the user has requested
+  // and then consider the conditions which should negate it.
+  bool should_be_in_vg = this->identify_variable_groups();
+
+  // No variable groups, nothing to add to
+  if (!this->n_variable_groups())
+    should_be_in_vg = false;
+  else
+    {
+      VariableGroup & vg(_variable_groups.back());
+
+      // get a pointer to their subdomain restriction, if any.
+      const std::set<subdomain_id_type> * const
+        their_active_subdomains (vg.implicitly_active() ?
+                                 nullptr : &vg.active_subdomains());
+
+      // Different types?
+      if (vg.type() != type)
+        should_be_in_vg = false;
+
+      // they are restricted, we aren't?
+      if (their_active_subdomains &&
+          (!active_subdomains || (active_subdomains && active_subdomains->empty())))
+        should_be_in_vg = false;
+
+      // they aren't restricted, we are?
+      if (!their_active_subdomains && (active_subdomains && !active_subdomains->empty()))
+        should_be_in_vg = false;
+
+      if (their_active_subdomains && active_subdomains)
+        // restricted to different sets?
+        if (*their_active_subdomains != *active_subdomains)
+          should_be_in_vg = false;
+
+      // If after all that none of the conditions were violated,
+      // append the variables to the vg and we're done
+      if (should_be_in_vg)
+        {
+          unsigned short curr_n_vars = cast_int<unsigned short>
+            (this->n_vars());
+
+          for (auto ovar : vars)
+            {
+              curr_n_vars = cast_int<unsigned short> (this->n_vars());
+
+              vg.append (ovar);
+
+              _variables.push_back(vg(vg.n_variables()-1));
+              _variable_numbers[ovar] = curr_n_vars;
+            }
+          return curr_n_vars;
+        }
+    }
 
   const unsigned short curr_n_vars = cast_int<unsigned short>
     (this->n_vars());
 
   const unsigned int next_first_component = this->n_components();
 
-  // Add the variable group to the list
+  // We weren't able to add to an existing variable group, so
+  // add a new variable group to the list
   _variable_groups.push_back((active_subdomains == nullptr) ?
                              VariableGroup(this, vars, curr_n_vars,
                                            next_first_component, type) :
@@ -1201,7 +1249,7 @@ unsigned int System::add_variables (const std::vector<std::string> & vars,
   const VariableGroup & vg (_variable_groups.back());
 
   // Add each component of the group individually
-  for (auto v : IntRange<unsigned int>(0, vars.size()))
+  for (auto v : make_range(vars.size()))
     {
       _variables.push_back (vg(v));
       _variable_numbers[vars[v]] = cast_int<unsigned short>
@@ -1242,16 +1290,9 @@ bool System::has_variable (const std::string & var) const
 
 unsigned short int System::variable_number (const std::string & var) const
 {
-  // Make sure the variable exists
-  std::map<std::string, unsigned short int>::const_iterator
-    pos = _variable_numbers.find(var);
-
-  if (pos == _variable_numbers.end())
-    libmesh_error_msg("ERROR: variable " << var << " does not exist in this system!");
-
-  libmesh_assert_equal_to (_variables[pos->second].name(), var);
-
-  return pos->second;
+  auto var_num = libmesh_map_find(_variable_numbers, var);
+  libmesh_assert_equal_to (_variables[var_num].name(), var);
+  return var_num;
 }
 
 
@@ -1291,14 +1332,10 @@ void System::local_dof_indices(const unsigned int var,
     {
       this->get_dof_map().dof_indices (elem, dof_indices, var);
 
-      for (std::size_t i=0; i<dof_indices.size(); i++)
-        {
-          dof_id_type dof = dof_indices[i];
-
-          //If the dof is owned by the local processor
-          if (first_local <= dof && dof < end_local)
-            var_indices.insert(dof_indices[i]);
-        }
+      for (dof_id_type dof : dof_indices)
+        //If the dof is owned by the local processor
+        if (first_local <= dof && dof < end_local)
+          var_indices.insert(dof);
     }
 
   // we may have missed assigning DOFs to nodes that we own
@@ -1413,8 +1450,8 @@ Real System::calculate_norm(const NumericVector<Number> & v,
     {
       //Check to see if all weights are 1.0 and all types are equal
       FEMNormType norm_type0 = norm.type(0);
-      unsigned int check_var = 0;
-      for (; check_var != this->n_vars(); ++check_var)
+      unsigned int check_var = 0, check_end = this->n_vars();
+      for (; check_var != check_end; ++check_var)
         if ((norm.weight(check_var) != 1.0) || (norm.type(check_var) != norm_type0))
           break;
 
@@ -1431,7 +1468,7 @@ Real System::calculate_norm(const NumericVector<Number> & v,
             libmesh_error_msg("Invalid norm_type0 = " << norm_type0);
         }
 
-      for (unsigned int var=0; var != this->n_vars(); ++var)
+      for (auto var : make_range(this->n_vars()))
         {
           // Skip any variables we don't need to integrate
           if (norm.weight(var) == 0.0)
@@ -1445,7 +1482,8 @@ Real System::calculate_norm(const NumericVector<Number> & v,
 
   // Localize the potentially parallel vector
   std::unique_ptr<NumericVector<Number>> local_v = NumericVector<Number>::build(this->comm());
-  local_v->init(v.size(), true, SERIAL);
+  local_v->init(v.size(), v.local_size(), _dof_map->get_send_list(),
+                true, GHOSTED);
   v.localize (*local_v, _dof_map->get_send_list());
 
   // I'm not sure how best to mix Hilbert norms on some variables (for
@@ -1456,7 +1494,7 @@ Real System::calculate_norm(const NumericVector<Number> & v,
     using_nonhilbert_norm = true;
 
   // Loop over all variables
-  for (unsigned int var=0; var != this->n_vars(); ++var)
+  for (auto var : make_range(this->n_vars()))
     {
       // Skip any variables we don't need to integrate
       Real norm_weight_sq = norm.weight_sq(var);
@@ -1666,12 +1704,12 @@ std::string System::get_info() const
       << "    Type \""  << this->system_type() << "\"\n"
       << "    Variables=";
 
-  for (unsigned int vg=0; vg<this->n_variable_groups(); vg++)
+  for (auto vg : make_range(this->n_variable_groups()))
     {
       const VariableGroup & vg_description (this->variable_group(vg));
 
       if (vg_description.n_variables() > 1) oss << "{ ";
-      for (unsigned int vn=0; vn<vg_description.n_variables(); vn++)
+      for (auto vn : make_range(vg_description.n_variables()))
         oss << "\"" << vg_description.name(vn) << "\" ";
       if (vg_description.n_variables() > 1) oss << "} ";
     }
@@ -1680,12 +1718,12 @@ std::string System::get_info() const
 
   oss << "    Finite Element Types=";
 #ifndef LIBMESH_ENABLE_INFINITE_ELEMENTS
-  for (unsigned int vg=0; vg<this->n_variable_groups(); vg++)
+  for (auto vg : make_range(this->n_variable_groups()))
     oss << "\""
         << Utility::enum_to_string<FEFamily>(this->get_dof_map().variable_group(vg).type().family)
         << "\" ";
 #else
-  for (unsigned int vg=0; vg<this->n_variable_groups(); vg++)
+  for (auto vg : make_range(this->n_variable_groups()))
     {
       oss << "\""
           << Utility::enum_to_string<FEFamily>(this->get_dof_map().variable_group(vg).type().family)
@@ -1695,7 +1733,7 @@ std::string System::get_info() const
     }
 
   oss << '\n' << "    Infinite Element Mapping=";
-  for (unsigned int vg=0; vg<this->n_variable_groups(); vg++)
+  for (auto vg : make_range(this->n_variable_groups()))
     oss << "\""
         << Utility::enum_to_string<InfMapType>(this->get_dof_map().variable_group(vg).type().inf_map)
         << "\" ";
@@ -1704,7 +1742,7 @@ std::string System::get_info() const
   oss << '\n';
 
   oss << "    Approximation Orders=";
-  for (unsigned int vg=0; vg<this->n_variable_groups(); vg++)
+  for (auto vg : make_range(this->n_variable_groups()))
     {
 #ifndef LIBMESH_ENABLE_INFINITE_ELEMENTS
       oss << "\""
@@ -2082,8 +2120,8 @@ Number System::point_value(unsigned int var,
 
   FEType fe_type = dof_map.variable_type(var);
 
-  // Map the physical co-ordinates to the master co-ordinates using the inverse_map from fe_interface.h.
-  Point coor = FEInterface::inverse_map(e.dim(), fe_type, &e, p);
+  // Map the physical co-ordinates to the master co-ordinates
+  Point coor = FEMap::inverse_map(e.dim(), &e, p);
 
   // get the shape function value via the FEInterface to also handle the case
   // of infinite elements correcly, the shape function is not fe->phi().
@@ -2215,8 +2253,8 @@ Gradient System::point_gradient(unsigned int var,
 
   FEType fe_type = dof_map.variable_type(var);
 
-  // Map the physical co-ordinates to the master co-ordinates using the inverse_map from fe_interface.h.
-  Point coor = FEInterface::inverse_map(dim, fe_type, &e, p);
+  // Map the physical co-ordinates to the master co-ordinates
+  Point coor = FEMap::inverse_map(dim, &e, p);
 
   // get the shape function value via the FEInterface to also handle the case
   // of infinite elements correcly, the shape function is not fe->phi().
@@ -2363,9 +2401,9 @@ Tensor System::point_hessian(unsigned int var,
   // Build a FE again so we can calculate u(p)
   std::unique_ptr<FEBase> fe (FEBase::build(e.dim(), fe_type));
 
-  // Map the physical co-ordinates to the master co-ordinates using the inverse_map from fe_interface.h
+  // Map the physical co-ordinates to the master co-ordinates
   // Build a vector of point co-ordinates to send to reinit
-  std::vector<Point> coor(1, FEInterface::inverse_map(e.dim(), fe_type, &e, p));
+  std::vector<Point> coor(1, FEMap::inverse_map(e.dim(), &e, p));
 
   // Get the values of the shape function derivatives
   const std::vector<std::vector<RealTensor>> &  d2phi = fe->get_d2phi();

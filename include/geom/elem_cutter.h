@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,11 +24,12 @@
 
 #if defined(LIBMESH_HAVE_TRIANGLE) && defined(LIBMESH_HAVE_TETGEN)
 
-// Local includes
+// libMesh includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/point.h"
-#include "libmesh/auto_ptr.h" // deprecated
-#include "libmesh/parallel.h"
+
+// TIMPI includes
+#include "timpi/communicator.h"
 
 // C++ includes
 #include <vector>

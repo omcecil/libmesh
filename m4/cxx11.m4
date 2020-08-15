@@ -180,6 +180,59 @@ AC_DEFUN([LIBMESH_TEST_CXX11_CONTAINER_ERASE],
     AC_LANG_POP([C++])
   ])
 
+dnl Test C++11 std::map,set,multimap,multiset emplace APIs.
+AC_DEFUN([LIBMESH_TEST_CXX11_CONTAINER_EMPLACE],
+  [
+    have_cxx11_container_emplace=no
+
+    AC_MSG_CHECKING(for C++11 std container emplace() functions)
+    AC_LANG_PUSH([C++])
+
+    old_CXXFLAGS="$CXXFLAGS"
+    CXXFLAGS="$CXXFLAGS $switch $libmesh_CXXFLAGS"
+
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+    @%:@include <map>
+    @%:@include <set>
+    @%:@include <vector>
+    ]], [[
+    {
+      std::map<int, int> m;
+      m.emplace(1,2);
+      m.emplace_hint(m.begin(), 0, 3);
+    }
+    {
+      std::set<int> s;
+      s.emplace(1);
+      s.emplace_hint(s.begin(), 0);
+    }
+    {
+      std::multimap<int, int> m;
+      m.emplace(1,2);
+      m.emplace_hint(m.begin(), 0, 3);
+    }
+    {
+      std::multiset<int> s;
+      s.emplace(1);
+      s.emplace_hint(s.begin(), 0);
+    }
+    {
+      std::vector<int> v;
+      v.emplace(v.begin(), 0);
+      v.emplace_back(1);
+    }
+    ]])],[
+        AC_MSG_RESULT(yes)
+        have_cxx11_container_emplace=yes
+    ],[
+        AC_MSG_RESULT(no)
+    ])
+
+    dnl Reset the flags
+    CXXFLAGS="$old_CXXFLAGS"
+    AC_LANG_POP([C++])
+  ])
+
 dnl Test C++11 std::tuple and several related helper functions.
 AC_DEFUN([LIBMESH_TEST_CXX11_BEGIN_END],
   [
@@ -641,6 +694,7 @@ AC_DEFUN([LIBMESH_TEST_CXX11_SHARED_PTR],
         std::shared_ptr<int> p2 (new int);
         std::shared_ptr<int> p3 (p2);
         p3.reset(new int);
+        p3 = std::make_shared<int>(5);
     ]])],[
         have_cxx11_shared_ptr=yes
         AC_MSG_RESULT(yes)
@@ -965,6 +1019,9 @@ AC_DEFUN([LIBMESH_TEST_CXX11_THREAD],
 
       std::atomic_thread_fence(std::memory_order_acquire);
       std::atomic_thread_fence(std::memory_order_release);
+
+      // We use this function in one of our unit tests now.
+      unsigned int n_threads = std::thread::hardware_concurrency();
     ]])],[
         AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_CXX11_THREAD, 1, [Flag indicating whether compiler supports std::thread])

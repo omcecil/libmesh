@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,7 +21,6 @@
 #define LIBMESH_DIFF_SOLVER_H
 
 // Local includes
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/libmesh_common.h"
 #include "libmesh/reference_counted_object.h"
 #include "libmesh/parallel_object.h"
@@ -44,11 +43,11 @@ class LinearSolutionMonitor
 {
 public:
   virtual void operator() (const NumericVector<Number> & delta_u,
-                           const double & norm_delta_u,
+                           const Real & norm_delta_u,
                            const NumericVector<Number> & u,
-                           const double & norm_u,
+                           const Real & norm_u,
                            const NumericVector<Number> & res,
-                           const double & norm_res,
+                           const Real & norm_res,
                            const unsigned int iteration) = 0;
   virtual ~LinearSolutionMonitor();
 };
@@ -208,12 +207,12 @@ public:
    * Any required linear solves will at first be done with this tolerance;
    * the DiffSolver may tighten the tolerance for later solves.
    */
-  Real initial_linear_tolerance;
+  double initial_linear_tolerance;
 
   /**
    * The tolerance for linear solves is kept above this minimum
    */
-  Real minimum_linear_tolerance;
+  double minimum_linear_tolerance;
 
   /**
    * Enumeration return type for the solve() function.  Multiple SolveResults

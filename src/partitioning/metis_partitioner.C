@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -27,6 +27,8 @@
 #include "libmesh/error_vector.h"
 #include "libmesh/vectormap.h"
 #include "libmesh/metis_csr_graph.h"
+#include "libmesh/parallel.h"
+#include "libmesh/utility.h"
 
 #ifdef LIBMESH_HAVE_METIS
 // MIPSPro 7.4.2 gets confused about these nested namespaces
@@ -115,7 +117,7 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
 
     std::size_t cnt=0;
     for (const auto & elem : as_range(beg, end))
-      global_index_map.insert (std::make_pair(elem->id(), global_index[cnt++]));
+      global_index_map.emplace(elem->id(), global_index[cnt++]);
 
     libmesh_assert_equal_to (global_index_map.size(), n_range_elem);
   }
@@ -140,7 +142,7 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
       elem->find_interior_neighbors(neighbor_set);
 
       for (auto & neighbor : neighbor_set)
-        interior_to_boundary_map.insert(std::make_pair(neighbor, elem));
+        interior_to_boundary_map.emplace(neighbor, elem);
     }
 
   // Data structure that Metis will fill up on processor 0 and broadcast.
@@ -368,11 +370,8 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
                 std::set<const Elem *> neighbor_set;
                 elem->find_interior_neighbors(neighbor_set);
 
-                std::set<const Elem *>::iterator n_it = neighbor_set.begin();
-                for (; n_it != neighbor_set.end(); ++n_it)
+                for (const Elem * neighbor : neighbor_set)
                   {
-                    const Elem * neighbor = *n_it;
-
                     // Not all interior neighbors are necessarily in
                     // the same Mesh (hence not in the global_index_map).
                     // This will be the case when partitioning a
@@ -384,18 +383,8 @@ void MetisPartitioner::partition_range(MeshBase & mesh,
                     // Compare the neighbor and the queried_elem
                     // pointers, make sure they are the same.
                     if (queried_elem && queried_elem == neighbor)
-                      {
-                        vectormap<dof_id_type, dof_id_type>::iterator global_index_map_it =
-                          global_index_map.find(neighbor->id());
-
-                        // If the interior_neighbor is in the Mesh but
-                        // not in the global_index_map, we have other issues.
-                        if (global_index_map_it == global_index_map.end())
-                          libmesh_error_msg("Interior neighbor with id " << neighbor->id() << " not found in global_index_map.");
-
-                        else
-                          csr_graph(elem_global_index, connection++) = global_index_map_it->second;
-                      }
+                      csr_graph(elem_global_index, connection++) =
+                        libmesh_map_find(global_index_map, neighbor->id());
                   }
               }
 

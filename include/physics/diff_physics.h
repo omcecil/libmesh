@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,11 +22,12 @@
 
 // Local Includes
 #include "libmesh/libmesh.h"
-#include "libmesh/auto_ptr.h" // deprecated
 
 // C++ includes
-#include <vector>
+#include <map>
 #include <memory>
+#include <set>
+#include <vector>
 
 namespace libMesh
 {
@@ -228,30 +229,6 @@ public:
                                     DiffContext &) {
     return request_jacobian;
   }
-
-
-  /**
-   * Tells the DiffSystem that variable var is evolving with
-   * respect to time.  In general, the user's init() function
-   * should call time_evolving() for any variables which
-   * behave like du/dt = F(u), and should not call time_evolving()
-   * for any variables which behave like 0 = G(u).
-   *
-   * Most derived systems will not have to reimplement this function; however
-   * any system which reimplements mass_residual() may have to reimplement
-   * time_evolving() to prepare data structures.
-   *
-   * \deprecated Instead, use the time_evolving override and specify
-   * the order-in-time of the variable, either 1 or 2. This method
-   * assumes the variable is first order for backward compatibility.
-   */
-#ifdef LIBMESH_ENABLE_DEPRECATED
-  virtual void time_evolving (unsigned int var)
-  {
-    libmesh_deprecated();
-    this->time_evolving(var,1);
-  }
-#endif
 
   /**
    * Tells the DiffSystem that variable var is evolving with

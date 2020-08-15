@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -24,6 +24,7 @@
 // Local includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 #include "libmesh/enum_convergence_flags.h"
 #include "libmesh/enum_elem_quality.h"
 #include "libmesh/enum_elem_type.h"
@@ -67,7 +68,7 @@ void build_reverse_map (MapIter it, MapIter end, MapType & reverse)
       // corresponding to an enum.
       typename MapType::iterator preimage = reverse.find(it->second);
       if (preimage == reverse.end())
-        reverse.insert (std::make_pair(it->second, it->first));
+        reverse.emplace (it->second, it->first);
       else if (preimage->second < it->first)
         preimage->second = it->first;
     }
@@ -238,9 +239,11 @@ void init_fefamily_to_enum ()
       fefamily_to_enum["HIERARCHIC"   ]=HIERARCHIC;
       fefamily_to_enum["L2_HIERARCHIC"]=L2_HIERARCHIC;
       fefamily_to_enum["MONOMIAL"     ]=MONOMIAL;
+      fefamily_to_enum["MONOMIAL_VEC" ]=MONOMIAL_VEC;
       fefamily_to_enum["SCALAR"       ]=SCALAR;
       fefamily_to_enum["XYZ"          ]=XYZ;
       fefamily_to_enum["BERNSTEIN"    ]=BERNSTEIN;
+      fefamily_to_enum["RATIONAL_BERNSTEIN"]=RATIONAL_BERNSTEIN;
       fefamily_to_enum["SZABAB"       ]=SZABAB;
       fefamily_to_enum["INFINITE_MAP" ]=INFINITE_MAP;
       fefamily_to_enum["JACOBI_20_00" ]=JACOBI_20_00;
@@ -285,6 +288,7 @@ void init_quadrature_type_to_enum ()
       quadrature_type_to_enum["QGRID"      ]=QGRID;
       quadrature_type_to_enum["QCLOUGH"    ]=QCLOUGH;
       quadrature_type_to_enum["QGAUSS_LOBATTO"    ]=QGAUSS_LOBATTO;
+      quadrature_type_to_enum["QNODAL"]=QNODAL;
     }
 }
 
@@ -424,6 +428,7 @@ void init_elemquality_to_enum ()
       elemquality_to_enum["ASPECT_RATIO_GAMMA" ]=ASPECT_RATIO_GAMMA;
       elemquality_to_enum["SIZE"               ]=SIZE;
       elemquality_to_enum["JACOBIAN"           ]=JACOBIAN;
+      elemquality_to_enum["TWIST"              ]=TWIST;
     }
 }
 

@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -452,18 +452,18 @@ void read_output(EquationSystems & es,
           const unsigned int headersize = 25;
           char header[headersize];
           timesteps.getline (header, headersize);
-          if (strcmp(header, "vector_timesteps = [") != 0)
-            libmesh_error_msg("Bad header in out_timesteps.m:\n" << header);
+          libmesh_error_msg_if(strcmp(header, "vector_timesteps = [") != 0,
+                               "Bad header in out_timesteps.m:\n" << header);
 
           times.getline (header, headersize);
-          if (strcmp(header, "vector_time = [") != 0)
-            libmesh_error_msg("Bad header in out_time.m:\n" << header);
+          libmesh_error_msg_if(strcmp(header, "vector_time = [") != 0,
+                               "Bad header in out_time.m:\n" << header);
 
           // Read each timestep
           for (unsigned int i = 0; i != t_step; ++i)
             {
-              if (!times.good())
-                libmesh_error_msg("Error: File out_time.m is in non-good state.");
+              libmesh_error_msg_if(!times.good(), "Error: File out_time.m is in non-good state.");
+
               times >> current_time;
               timesteps >> current_timestep;
             }
@@ -538,7 +538,7 @@ void set_system_parameters(FEMSystem & system,
         system.time_solver.reset(innersolver);
     }
   else
-    system.time_solver.reset(new SteadySolver(system));
+    system.time_solver = libmesh_make_unique<SteadySolver>(system);
 
   system.time_solver->reduce_deltat_on_diffsolver_failure =
     param.deltat_reductions;
@@ -728,6 +728,11 @@ int main (int argc, char ** argv)
   libmesh_example_requires(false, "--enable-amr");
 #else
 
+  // We use Dirichlet boundary conditions here
+#ifndef LIBMESH_ENABLE_DIRICHLET
+  libmesh_example_requires(false, "--enable-dirichlet");
+#endif
+
   // This doesn't converge with Eigen BICGSTAB or with Trilinos for some reason...
   libmesh_example_requires(libMesh::default_solver_package() == PETSC_SOLVERS, "--enable-petsc");
 
@@ -736,8 +741,7 @@ int main (int argc, char ** argv)
   // Make sure the general input file exists, and parse it
   {
     std::ifstream i("general.in");
-    if (!i)
-      libmesh_error_msg('[' << init.comm().rank() << "] Can't find general.in; exiting early.");
+    libmesh_error_msg_if(!i, '[' << init.comm().rank() << "] Can't find general.in; exiting early.");
   }
 
   GetPot infile("general.in");

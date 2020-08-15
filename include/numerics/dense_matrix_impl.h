@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,22 @@
 // Local Includes
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_vector.h"
+#include "libmesh/int_range.h"
 #include "libmesh/libmesh.h"
+
+#ifdef LIBMESH_HAVE_METAPHYSICL
+#include "metaphysicl/dualnumber_forward.h"
+
+namespace std
+{
+// When instantiating a DenseMatrix<DualNumber> we need these declarations visible
+// in order to compile the DenseMatrix<T>::_cholesky_decompose method
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> sqrt(const MetaPhysicL::DualNumber<T, D, asd> & in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> sqrt(MetaPhysicL::DualNumber<T, D, asd> && in);
+}
+#endif
 
 namespace libMesh
 {
@@ -595,8 +610,8 @@ void DenseMatrix<T>::get_transpose (DenseMatrix<T> & dest) const
 {
   dest.resize(this->n(), this->m());
 
-  for (unsigned int i=0; i<dest.m(); i++)
-    for (unsigned int j=0; j<dest.n(); j++)
+  for (auto i : make_range(dest.m()))
+    for (auto j : make_range(dest.n()))
       dest(i,j) = (*this)(j,i);
 }
 
@@ -757,10 +772,8 @@ void DenseMatrix<T>::_lu_decompose ()
             std::swap( A(i,j), A(_pivots[i], j) );
         }
 
-
       // If the max abs entry found is zero, the matrix is singular
-      if (A(i,i) == libMesh::zero)
-        libmesh_error_msg("Matrix A is singular!");
+      libmesh_error_msg_if(A(i,i) == libMesh::zero, "Matrix A is singular!");
 
       // Scale upper triangle entries of row i by the diagonal entry
       // Note: don't scale the diagonal entry itself!
@@ -898,7 +911,7 @@ T DenseMatrix<T>::det ()
   // the power (of 10) of the determinant in a separate variable
   // and maintain an order 1 value for the determinant itself.
   unsigned int n_interchanges = 0;
-  for (unsigned int i=0; i<this->m(); i++)
+  for (auto i : make_range(this->m()))
     {
       if (this->_decomposition_type==LU)
         if (_pivots[i] != static_cast<pivot_index_t>(i))
@@ -985,8 +998,8 @@ void DenseMatrix<T>::_cholesky_decompose ()
           if (i == j)
             {
 #ifndef LIBMESH_USE_COMPLEX_NUMBERS
-              if (A(i,j) <= 0.0)
-                libmesh_error_msg("Error! Can only use Cholesky decomposition with symmetric positive definite matrices.");
+              libmesh_error_msg_if(A(i,j) <= 0.0,
+                                   "Error! Can only use Cholesky decomposition with symmetric positive definite matrices.");
 #endif
 
               A(i,i) = std::sqrt(A(i,j));

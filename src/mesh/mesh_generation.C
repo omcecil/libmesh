@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -15,11 +15,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-
-
-// C++ includes
-#include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
-#include <cmath> // for std::sqrt
 
 
 // Local includes
@@ -53,6 +48,14 @@
 #include "libmesh/function_base.h"
 #include "libmesh/enum_order.h"
 #include "libmesh/int_range.h"
+#include "libmesh/parallel.h"
+#include "libmesh/parallel_ghost_sync.h"
+
+// C++ includes
+#include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
+#include <cmath> // for std::sqrt
+#include <unordered_set>
+
 
 namespace libMesh
 {
@@ -356,7 +359,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
 
         // Build one nodal element for the mesh
         mesh.add_point (Point(0, 0, 0), 0);
-        Elem * elem = mesh.add_elem (new NodeElem);
+        Elem * elem = mesh.add_elem(Elem::build(NODEELEM));
         elem->set_node(0) = mesh.node_ptr(0);
 
         break;
@@ -458,9 +461,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
             {
               for (unsigned int i=0; i<nx; i++)
                 {
-                  Elem * elem = new Edge2;
-                  elem->set_id(i);
-                  elem = mesh.add_elem (elem);
+                  Elem * elem = mesh.add_elem(Elem::build_with_id(EDGE2, i));
                   elem->set_node(0) = mesh.node_ptr(i);
                   elem->set_node(1) = mesh.node_ptr(i+1);
 
@@ -469,6 +470,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
 
                   if (i == (nx-1))
                     boundary_info.add_side(elem, 1, 1);
+
                 }
               break;
             }
@@ -477,9 +479,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
             {
               for (unsigned int i=0; i<nx; i++)
                 {
-                  Elem * elem = new Edge3;
-                  elem->set_id(i);
-                  elem = mesh.add_elem (elem);
+                  Elem * elem = mesh.add_elem(Elem::build_with_id(EDGE3, i));
                   elem->set_node(0) = mesh.node_ptr(2*i);
                   elem->set_node(2) = mesh.node_ptr(2*i+1);
                   elem->set_node(1) = mesh.node_ptr(2*i+2);
@@ -497,9 +497,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
             {
               for (unsigned int i=0; i<nx; i++)
                 {
-                  Elem * elem = new Edge4;
-                  elem->set_id(i);
-                  elem = mesh.add_elem (elem);
+                  Elem * elem = mesh.add_elem(Elem::build_with_id(EDGE4, i));
                   elem->set_node(0) = mesh.node_ptr(3*i);
                   elem->set_node(2) = mesh.node_ptr(3*i+1);
                   elem->set_node(3) = mesh.node_ptr(3*i+2);
@@ -526,8 +524,8 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
           }
         else // !gauss_lobatto_grid
           {
-            for (unsigned int p=0; p<mesh.n_nodes(); p++)
-              mesh.node_ref(p)(0) = (mesh.node_ref(p)(0))*(xmax-xmin) + xmin;
+            for (Node * node : mesh.node_ptr_range())
+              (*node)(0) = (*node)(0)*(xmax-xmin) + xmin;
           }
 
         // Add sideset names to boundary info
@@ -666,10 +664,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
               for (unsigned int j=0; j<ny; j++)
                 for (unsigned int i=0; i<nx; i++)
                   {
-                    Elem * elem = new Quad4;
-                    elem->set_id(elem_id++);
-                    elem = mesh.add_elem (elem);
-
+                    Elem * elem = mesh.add_elem(Elem::build_with_id(QUAD4, elem_id++));
                     elem->set_node(0) = mesh.node_ptr(idx(type,nx,i,j)    );
                     elem->set_node(1) = mesh.node_ptr(idx(type,nx,i+1,j)  );
                     elem->set_node(2) = mesh.node_ptr(idx(type,nx,i+1,j+1));
@@ -697,10 +692,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                 for (unsigned int i=0; i<nx; i++)
                   {
                     // Add first Tri3
-                    Elem * elem = new Tri3;
-                    elem->set_id(elem_id++);
-                    elem = mesh.add_elem (elem);
-
+                    Elem * elem = mesh.add_elem(Elem::build_with_id(TRI3, elem_id++));
                     elem->set_node(0) = mesh.node_ptr(idx(type,nx,i,j)    );
                     elem->set_node(1) = mesh.node_ptr(idx(type,nx,i+1,j)  );
                     elem->set_node(2) = mesh.node_ptr(idx(type,nx,i+1,j+1));
@@ -712,10 +704,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                       boundary_info.add_side(elem, 1, 1);
 
                     // Add second Tri3
-                    elem = new Tri3;
-                    elem->set_id(elem_id++);
-                    elem = mesh.add_elem (elem);
-
+                    elem = mesh.add_elem(Elem::build_with_id(TRI3, elem_id++));
                     elem->set_node(0) = mesh.node_ptr(idx(type,nx,i,j)    );
                     elem->set_node(1) = mesh.node_ptr(idx(type,nx,i+1,j+1));
                     elem->set_node(2) = mesh.node_ptr(idx(type,nx,i,j+1)  );
@@ -737,12 +726,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
               for (unsigned int j=0; j<(2*ny); j += 2)
                 for (unsigned int i=0; i<(2*nx); i += 2)
                   {
-                    Elem * elem = (type == QUAD8) ?
-                      static_cast<Elem *>(new Quad8) :
-                      static_cast<Elem *>(new Quad9);
-                    elem->set_id(elem_id++);
-                    elem = mesh.add_elem (elem);
-
+                    Elem * elem = mesh.add_elem(Elem::build_with_id(type, elem_id++));
                     elem->set_node(0) = mesh.node_ptr(idx(type,nx,i,j)    );
                     elem->set_node(1) = mesh.node_ptr(idx(type,nx,i+2,j)  );
                     elem->set_node(2) = mesh.node_ptr(idx(type,nx,i+2,j+2));
@@ -751,9 +735,9 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                     elem->set_node(5) = mesh.node_ptr(idx(type,nx,i+2,j+1));
                     elem->set_node(6) = mesh.node_ptr(idx(type,nx,i+1,j+2));
                     elem->set_node(7) = mesh.node_ptr(idx(type,nx,i,j+1)  );
+
                     if (type == QUAD9)
                       elem->set_node(8) = mesh.node_ptr(idx(type,nx,i+1,j+1));
-
 
                     if (j == 0)
                       boundary_info.add_side(elem, 0, 0);
@@ -777,10 +761,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                 for (unsigned int i=0; i<(2*nx); i += 2)
                   {
                     // Add first Tri6
-                    Elem * elem = new Tri6;
-                    elem->set_id(elem_id++);
-                    elem = mesh.add_elem (elem);
-
+                    Elem * elem = mesh.add_elem(Elem::build_with_id(TRI6, elem_id++));
                     elem->set_node(0) = mesh.node_ptr(idx(type,nx,i,j)    );
                     elem->set_node(1) = mesh.node_ptr(idx(type,nx,i+2,j)  );
                     elem->set_node(2) = mesh.node_ptr(idx(type,nx,i+2,j+2));
@@ -795,10 +776,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                       boundary_info.add_side(elem, 1, 1);
 
                     // Add second Tri6
-                    elem = new Tri6;
-                    elem->set_id(elem_id++);
-                    elem = mesh.add_elem (elem);
-
+                    elem = mesh.add_elem(Elem::build_with_id(TRI6, elem_id++));
                     elem->set_node(0) = mesh.node_ptr(idx(type,nx,i,j)    );
                     elem->set_node(1) = mesh.node_ptr(idx(type,nx,i+2,j+2));
                     elem->set_node(2) = mesh.node_ptr(idx(type,nx,i,j+2)  );
@@ -811,7 +789,6 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
 
                     if (i == 0)
                       boundary_info.add_side(elem, 2, 3);
-
                   }
               break;
             };
@@ -833,10 +810,10 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
           }
         else // !gauss_lobatto_grid
           {
-            for (unsigned int p=0; p<mesh.n_nodes(); p++)
+            for (Node * node : mesh.node_ptr_range())
               {
-                mesh.node_ref(p)(0) = (mesh.node_ref(p)(0))*(xmax-xmin) + xmin;
-                mesh.node_ref(p)(1) = (mesh.node_ref(p)(1))*(ymax-ymin) + ymin;
+                (*node)(0) = ((*node)(0))*(xmax-xmin) + xmin;
+                (*node)(1) = ((*node)(1))*(ymax-ymin) + ymin;
               }
           }
 
@@ -1004,10 +981,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                 for (unsigned int j=0; j<ny; j++)
                   for (unsigned int i=0; i<nx; i++)
                     {
-                      Elem * elem = new Hex8;
-                      elem->set_id(elem_id++);
-                      elem = mesh.add_elem (elem);
-
+                      Elem * elem = mesh.add_elem(Elem::build_with_id(HEX8, elem_id++));
                       elem->set_node(0) = mesh.node_ptr(idx(type,nx,ny,i,j,k)      );
                       elem->set_node(1) = mesh.node_ptr(idx(type,nx,ny,i+1,j,k)    );
                       elem->set_node(2) = mesh.node_ptr(idx(type,nx,ny,i+1,j+1,k)  );
@@ -1048,10 +1022,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                   for (unsigned int i=0; i<nx; i++)
                     {
                       // First Prism
-                      Elem * elem = new Prism6;
-                      elem->set_id(elem_id++);
-                      elem = mesh.add_elem (elem);
-
+                      Elem * elem = mesh.add_elem(Elem::build_with_id(PRISM6, elem_id++));
                       elem->set_node(0) = mesh.node_ptr(idx(type,nx,ny,i,j,k)      );
                       elem->set_node(1) = mesh.node_ptr(idx(type,nx,ny,i+1,j,k)    );
                       elem->set_node(2) = mesh.node_ptr(idx(type,nx,ny,i,j+1,k)    );
@@ -1073,10 +1044,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                         boundary_info.add_side(elem, 4, 5);
 
                       // Second Prism
-                      elem = new Prism6;
-                      elem->set_id(elem_id++);
-                      elem = mesh.add_elem (elem);
-
+                      elem = mesh.add_elem(Elem::build_with_id(PRISM6, elem_id++));
                       elem->set_node(0) = mesh.node_ptr(idx(type,nx,ny,i+1,j,k)    );
                       elem->set_node(1) = mesh.node_ptr(idx(type,nx,ny,i+1,j+1,k)  );
                       elem->set_node(2) = mesh.node_ptr(idx(type,nx,ny,i,j+1,k)    );
@@ -1117,11 +1085,8 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                 for (unsigned int j=0; j<(2*ny); j += 2)
                   for (unsigned int i=0; i<(2*nx); i += 2)
                     {
-                      Elem * elem = (type == HEX20) ?
-                        static_cast<Elem *>(new Hex20) :
-                        static_cast<Elem *>(new Hex27);
-                      elem->set_id(elem_id++);
-                      elem = mesh.add_elem (elem);
+                      ElemType build_type = (type == HEX20) ? HEX20 : HEX27;
+                      Elem * elem = mesh.add_elem(Elem::build_with_id(build_type, elem_id++));
 
                       elem->set_node(0)  = mesh.node_ptr(idx(type,nx,ny,i,  j,  k)  );
                       elem->set_node(1)  = mesh.node_ptr(idx(type,nx,ny,i+2,j,  k)  );
@@ -1143,6 +1108,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                       elem->set_node(17) = mesh.node_ptr(idx(type,nx,ny,i+2,j+1,k+2));
                       elem->set_node(18) = mesh.node_ptr(idx(type,nx,ny,i+1,j+2,k+2));
                       elem->set_node(19) = mesh.node_ptr(idx(type,nx,ny,i,  j+1,k+2));
+
                       if ((type == HEX27) || (type == TET4) || (type == TET10) ||
                           (type == PYRAMID5) || (type == PYRAMID13) || (type == PYRAMID14))
                         {
@@ -1154,7 +1120,6 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                           elem->set_node(25) = mesh.node_ptr(idx(type,nx,ny,i+1,j+1,k+2));
                           elem->set_node(26) = mesh.node_ptr(idx(type,nx,ny,i+1,j+1,k+1));
                         }
-
 
                       if (k == 0)
                         boundary_info.add_side(elem, 0, 0);
@@ -1188,12 +1153,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                   for (unsigned int i=0; i<(2*nx); i += 2)
                     {
                       // First Prism
-                      Elem * elem = (type == PRISM15) ?
-                        static_cast<Elem *>(new Prism15) :
-                        static_cast<Elem *>(new Prism18);
-                      elem->set_id(elem_id++);
-                      elem = mesh.add_elem (elem);
-
+                      Elem * elem = mesh.add_elem(Elem::build_with_id(type, elem_id++));
                       elem->set_node(0)  = mesh.node_ptr(idx(type,nx,ny,i,  j,  k)  );
                       elem->set_node(1)  = mesh.node_ptr(idx(type,nx,ny,i+2,j,  k)  );
                       elem->set_node(2)  = mesh.node_ptr(idx(type,nx,ny,i,  j+2,k)  );
@@ -1209,6 +1169,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                       elem->set_node(12) = mesh.node_ptr(idx(type,nx,ny,i+1,j,  k+2));
                       elem->set_node(13) = mesh.node_ptr(idx(type,nx,ny,i+1,j+1,k+2));
                       elem->set_node(14) = mesh.node_ptr(idx(type,nx,ny,i,  j+1,k+2));
+
                       if (type == PRISM18)
                         {
                           elem->set_node(15) = mesh.node_ptr(idx(type,nx,ny,i+1,j,  k+1));
@@ -1231,12 +1192,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
 
 
                       // Second Prism
-                      elem = (type == PRISM15) ?
-                        static_cast<Elem *>(new Prism15) :
-                        static_cast<Elem *>(new Prism18);
-                      elem->set_id(elem_id++);
-                      elem = mesh.add_elem (elem);
-
+                      elem = mesh.add_elem(Elem::build_with_id(type, elem_id++));
                       elem->set_node(0)  = mesh.node_ptr(idx(type,nx,ny,i+2,j,k)     );
                       elem->set_node(1)  = mesh.node_ptr(idx(type,nx,ny,i+2,j+2,k)   );
                       elem->set_node(2)  = mesh.node_ptr(idx(type,nx,ny,i,j+2,k)     );
@@ -1252,6 +1208,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                       elem->set_node(12) = mesh.node_ptr(idx(type,nx,ny,i+2,j+1,k+2));
                       elem->set_node(13) = mesh.node_ptr(idx(type,nx,ny,i+1,j+2,k+2));
                       elem->set_node(14) = mesh.node_ptr(idx(type,nx,ny,i+1,j+1,k+2));
+
                       if (type == PRISM18)
                         {
                           elem->set_node(15)  = mesh.node_ptr(idx(type,nx,ny,i+2,j+1,k+1));
@@ -1322,7 +1279,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
             (type == PYRAMID14))
           {
             // Temporary storage for new elements. (24 tets per hex, 6 pyramids)
-            std::vector<Elem *> new_elements;
+            std::vector<std::unique_ptr<Elem>> new_elements;
 
             if ((type == TET4) || (type == TET10))
               new_elements.reserve(24*mesh.n_elem());
@@ -1357,8 +1314,8 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                         // Build 4 sub-tets per side
                         for (unsigned int sub_tet=0; sub_tet<4; ++sub_tet)
                           {
-                            new_elements.push_back( new Tet4 );
-                            Elem * sub_elem = new_elements.back();
+                            new_elements.push_back( Elem::build(TET4) );
+                            auto & sub_elem = new_elements.back();
                             sub_elem->set_node(0) = side->node_ptr(sub_tet);
                             sub_elem->set_node(1) = side->node_ptr(8);                           // centroid of the face
                             sub_elem->set_node(2) = side->node_ptr(sub_tet==3 ? 0 : sub_tet+1 ); // wrap-around
@@ -1368,15 +1325,15 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                             // 0 with the same b_id.  Note: the tets are all aligned so that their
                             // side 0 is on the boundary.
                             if (b_id != BoundaryInfo::invalid_id)
-                              boundary_info.add_side(sub_elem, 0, b_id);
+                              boundary_info.add_side(sub_elem.get(), 0, b_id);
                           }
                       } // end if ((type == TET4) || (type == TET10))
 
                     else // type==PYRAMID5 || type==PYRAMID13 || type==PYRAMID14
                       {
                         // Build 1 sub-pyramid per side.
-                        new_elements.push_back(new Pyramid5);
-                        Elem * sub_elem = new_elements.back();
+                        new_elements.push_back( Elem::build(PYRAMID5) );
+                        auto & sub_elem = new_elements.back();
 
                         // Set the base.  Note that since the apex is *inside* the base_hex,
                         // and the pyramid uses a counter-clockwise base numbering, we need to
@@ -1392,7 +1349,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
                         // If the original hex was a boundary hex, add the new sub_pyr's side
                         // 4 (the square base) with the same b_id.
                         if (b_id != BoundaryInfo::invalid_id)
-                          boundary_info.add_side(sub_elem, 4, b_id);
+                          boundary_info.add_side(sub_elem.get(), 4, b_id);
                       } // end else type==PYRAMID5 || type==PYRAMID13 || type==PYRAMID14
                   }
               }
@@ -1406,12 +1363,10 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
               }
 
             // Add the new elements
-            for (dof_id_type i=0,
-                 n_new = cast_int<dof_id_type>(new_elements.size());
-                 i != n_new; ++i)
+            for (auto i : index_range(new_elements))
               {
                 new_elements[i]->set_id(i);
-                mesh.add_elem(new_elements[i]);
+                mesh.add_elem( std::move(new_elements[i]) );
               }
 
           } // end if (type == TET4,TET10,PYRAMID5,PYRAMID13,PYRAMID14
@@ -1453,7 +1408,7 @@ void MeshTools::Generation::build_cube(UnstructuredMesh & mesh,
 
 
   // Done building the mesh.  Now prepare it for use.
-  mesh.prepare_for_use (/*skip_renumber =*/ false);
+  mesh.prepare_for_use ();
 }
 
 
@@ -1584,6 +1539,9 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
   BoundaryInfo & boundary_info = mesh.get_boundary_info();
 
+  // Building while distributed is a little more complicated
+  const bool is_replicated = mesh.is_replicated();
+
   // Sphere is centered at origin by default
   const Point cent;
 
@@ -1650,7 +1608,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
             // Element 0
             {
-              Elem * elem0 = mesh.add_elem (new Quad4);
+              Elem * elem0 = mesh.add_elem (Elem::build(QUAD4));
               elem0->set_node(0) = nodes[0];
               elem0->set_node(1) = nodes[1];
               elem0->set_node(2) = nodes[2];
@@ -1659,7 +1617,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
             // Element 1
             {
-              Elem * elem1 = mesh.add_elem (new Quad4);
+              Elem * elem1 = mesh.add_elem (Elem::build(QUAD4));
               elem1->set_node(0) = nodes[4];
               elem1->set_node(1) = nodes[0];
               elem1->set_node(2) = nodes[3];
@@ -1668,7 +1626,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
             // Element 2
             {
-              Elem * elem2 = mesh.add_elem (new Quad4);
+              Elem * elem2 = mesh.add_elem (Elem::build(QUAD4));
               elem2->set_node(0) = nodes[4];
               elem2->set_node(1) = nodes[5];
               elem2->set_node(2) = nodes[1];
@@ -1677,7 +1635,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
             // Element 3
             {
-              Elem * elem3 = mesh.add_elem (new Quad4);
+              Elem * elem3 = mesh.add_elem (Elem::build(QUAD4));
               elem3->set_node(0) = nodes[1];
               elem3->set_node(1) = nodes[5];
               elem3->set_node(2) = nodes[6];
@@ -1686,7 +1644,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
             // Element 4
             {
-              Elem * elem4 = mesh.add_elem (new Quad4);
+              Elem * elem4 = mesh.add_elem (Elem::build(QUAD4));
               elem4->set_node(0) = nodes[3];
               elem4->set_node(1) = nodes[2];
               elem4->set_node(2) = nodes[6];
@@ -1724,25 +1682,25 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
             for (unsigned int i = 0; i < 5; ++i)
               {
                 // 5 elems around point 0
-                Elem * new_elem = mesh.add_elem (new Tri3);
+                Elem * new_elem = mesh.add_elem(Elem::build(TRI3));
                 new_elem->set_node(0) = mesh.node_ptr(0);
                 new_elem->set_node(1) = mesh.node_ptr(idx1[i]);
                 new_elem->set_node(2) = mesh.node_ptr(idx1[i+1]);
 
                 // 5 adjacent elems
-                new_elem = mesh.add_elem (new Tri3);
+                new_elem = mesh.add_elem(Elem::build(TRI3));
                 new_elem->set_node(0) = mesh.node_ptr(idx3[i]);
                 new_elem->set_node(1) = mesh.node_ptr(idx3[i+1]);
                 new_elem->set_node(2) = mesh.node_ptr(idx2[i]);
 
                 // 5 elems around point 3
-                new_elem = mesh.add_elem (new Tri3);
+                new_elem = mesh.add_elem(Elem::build(TRI3));
                 new_elem->set_node(0) = mesh.node_ptr(3);
                 new_elem->set_node(1) = mesh.node_ptr(idx2[i]);
                 new_elem->set_node(2) = mesh.node_ptr(idx2[i+1]);
 
                 // 5 adjacent elems
-                new_elem = mesh.add_elem (new Tri3);
+                new_elem = mesh.add_elem(Elem::build(TRI3));
                 new_elem->set_node(0) = mesh.node_ptr(idx2[i+1]);
                 new_elem->set_node(1) = mesh.node_ptr(idx2[i]);
                 new_elem->set_node(2) = mesh.node_ptr(idx3[i+1]);
@@ -1806,7 +1764,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
         // Now create the elements and add them to the mesh
         // Element 0 - center element
         {
-          Elem * elem0 = mesh.add_elem (new Hex8);
+          Elem * elem0 = mesh.add_elem(Elem::build(HEX8));
           elem0->set_node(0) = nodes[0];
           elem0->set_node(1) = nodes[1];
           elem0->set_node(2) = nodes[2];
@@ -1819,7 +1777,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
         // Element 1 - "bottom"
         {
-          Elem * elem1 = mesh.add_elem (new Hex8);
+          Elem * elem1 = mesh.add_elem(Elem::build(HEX8));
           elem1->set_node(0) = nodes[8];
           elem1->set_node(1) = nodes[9];
           elem1->set_node(2) = nodes[10];
@@ -1832,7 +1790,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
         // Element 2 - "front"
         {
-          Elem * elem2 = mesh.add_elem (new Hex8);
+          Elem * elem2 = mesh.add_elem(Elem::build(HEX8));
           elem2->set_node(0) = nodes[8];
           elem2->set_node(1) = nodes[9];
           elem2->set_node(2) = nodes[1];
@@ -1845,7 +1803,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
         // Element 3 - "right"
         {
-          Elem * elem3 = mesh.add_elem (new Hex8);
+          Elem * elem3 = mesh.add_elem(Elem::build(HEX8));
           elem3->set_node(0) = nodes[1];
           elem3->set_node(1) = nodes[9];
           elem3->set_node(2) = nodes[10];
@@ -1858,7 +1816,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
         // Element 4 - "back"
         {
-          Elem * elem4 = mesh.add_elem (new Hex8);
+          Elem * elem4 = mesh.add_elem(Elem::build(HEX8));
           elem4->set_node(0) = nodes[3];
           elem4->set_node(1) = nodes[2];
           elem4->set_node(2) = nodes[10];
@@ -1871,7 +1829,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
         // Element 5 - "left"
         {
-          Elem * elem5 = mesh.add_elem (new Hex8);
+          Elem * elem5 = mesh.add_elem(Elem::build(HEX8));
           elem5->set_node(0) = nodes[8];
           elem5->set_node(1) = nodes[0];
           elem5->set_node(2) = nodes[3];
@@ -1884,7 +1842,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
         // Element 6 - "top"
         {
-          Elem * elem6 = mesh.add_elem (new Hex8);
+          Elem * elem6 = mesh.add_elem(Elem::build(HEX8));
           elem6->set_node(0) = nodes[4];
           elem6->set_node(1) = nodes[5];
           elem6->set_node(2) = nodes[6];
@@ -1913,6 +1871,12 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
   // Loop over the elements, refine, pop nodes to boundary.
   for (unsigned int r=0; r<nr; r++)
     {
+      // A DistributedMesh needs a little prep before refinement, and
+      // may need us to keep track of ghost node movement.
+      std::unordered_set<dof_id_type> moved_ghost_nodes;
+      if (!is_replicated)
+        mesh.prepare_for_use();
+
       mesh_refinement.uniformly_refine(1);
 
       for (const auto & elem : mesh.active_element_ptr_range())
@@ -1921,12 +1885,57 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
             {
               std::unique_ptr<Elem> side(elem->build_side_ptr(s));
 
-              // Pop each point to the sphere boundary
+              // Pop each point to the sphere boundary.  Keep track of
+              // any points we don't own, so we can push their "moved"
+              // status to their owners.
               for (auto n : side->node_index_range())
-                side->point(n) =
-                  sphere.closest_point(side->point(n));
+                {
+                  Node & side_node = side->node_ref(n);
+                  side_node =
+                    sphere.closest_point(side->point(n));
+
+                  if (!is_replicated &&
+                      side_node.processor_id() != mesh.processor_id())
+                    moved_ghost_nodes.insert(side_node.id());
+                }
             }
+
+      if (!is_replicated)
+        {
+          std::map<processor_id_type, std::vector<dof_id_type>> moved_nodes_map;
+          for (auto id : moved_ghost_nodes)
+            {
+              const Node & node = mesh.node_ref(id);
+              moved_nodes_map[node.processor_id()].push_back(node.id());
+            }
+
+          auto action_functor =
+            [& mesh, & sphere]
+            (processor_id_type /* pid */,
+             const std::vector<dof_id_type> & my_moved_nodes)
+            {
+              for (auto id : my_moved_nodes)
+                {
+                  Node & node = mesh.node_ref(id);
+                  node = sphere.closest_point(node);
+                }
+            };
+
+          // First get new node positions to their owners
+          Parallel::push_parallel_vector_data
+            (mesh.comm(), moved_nodes_map, action_functor);
+
+          // Then get node positions to anyone else with them ghosted
+          SyncNodalPositions sync_object(mesh);
+          Parallel::sync_dofobject_data_by_id
+            (mesh.comm(), mesh.nodes_begin(), mesh.nodes_end(),
+             sync_object);
+        }
     }
+
+  // A DistributedMesh needs a little prep before flattening
+  if (is_replicated)
+    mesh.prepare_for_use();
 
   // The mesh now contains a refinement hierarchy due to the refinements
   // used to generate the grid.  In order to call other support functions
@@ -1939,6 +1948,10 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
     {
       if ((type == TRI6) || (type == TRI3))
         {
+          // A DistributedMesh needs a little prep before all_tri()
+          if (is_replicated)
+            mesh.prepare_for_use();
+
           MeshTools::Modification::all_tri(mesh);
         }
     }
@@ -1970,8 +1983,11 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
 
   // The meshes could probably use some smoothing.
-  LaplaceMeshSmoother smoother(mesh);
-  smoother.smooth(n_smooth);
+  if (mesh.mesh_dimension() > 1)
+    {
+      LaplaceMeshSmoother smoother(mesh);
+      smoother.smooth(n_smooth);
+    }
 
   // We'll give the whole sphere surface a boundary id of 0
   for (const auto & elem : mesh.active_element_ptr_range())
@@ -1983,7 +1999,7 @@ void MeshTools::Generation::build_sphere (UnstructuredMesh & mesh,
 
 
   // Done building the mesh.  Now prepare it for use.
-  mesh.prepare_for_use(/*skip_renumber =*/ false);
+  mesh.prepare_for_use();
 }
 
 #endif // #ifndef LIBMESH_ENABLE_AMR
@@ -2013,6 +2029,13 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
   BoundaryInfo & boundary_info = mesh.get_boundary_info();
   const BoundaryInfo & cross_section_boundary_info = cross_section.get_boundary_info();
 
+  // Copy name maps from old to new boundary.  We won't copy the whole
+  // BoundaryInfo because that copies bc ids too, and we need to set
+  // those more carefully.
+  boundary_info.set_sideset_name_map() = cross_section_boundary_info.get_sideset_name_map();
+  boundary_info.set_nodeset_name_map() = cross_section_boundary_info.get_nodeset_name_map();
+  boundary_info.set_edgeset_name_map() = cross_section_boundary_info.get_edgeset_name_map();
+
   // If cross_section is distributed, so is its extrusion
   if (!cross_section.is_serial())
     mesh.delete_remote_elements();
@@ -2036,25 +2059,31 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
     {
       for (unsigned int k=0; k != order*nz+1; ++k)
         {
-          Node * new_node =
-            mesh.add_point(*node +
-                           (extrusion_vector * k / nz / order),
-                           node->id() + (k * orig_nodes),
-                           node->processor_id());
+          const dof_id_type new_node_id = node->id() + k * orig_nodes;
+          Node * my_node = mesh.query_node_ptr(new_node_id);
+          if (!my_node)
+            {
+              std::unique_ptr<Node> new_node = Node::build
+                (*node + (extrusion_vector * k / nz / order),
+                 new_node_id);
+              new_node->processor_id() = node->processor_id();
 
 #ifdef LIBMESH_ENABLE_UNIQUE_ID
-          // Let's give the base of the extruded mesh the same
-          // unique_ids as the source mesh, in case anyone finds that
-          // a useful map to preserve.
-          const unique_id_type uid = (k == 0) ?
-            node->unique_id() :
-            orig_unique_ids + (k-1)*(orig_nodes + orig_elem) + node->id();
+              // Let's give the base of the extruded mesh the same
+              // unique_ids as the source mesh, in case anyone finds that
+              // a useful map to preserve.
+              const unique_id_type uid = (k == 0) ?
+                node->unique_id() :
+                orig_unique_ids + (k-1)*(orig_nodes + orig_elem) + node->id();
 
-          new_node->set_unique_id() = uid;
+              new_node->set_unique_id(uid);
 #endif
 
-          cross_section_boundary_info.boundary_ids(node, ids_to_copy);
-          boundary_info.add_node(new_node, ids_to_copy);
+              cross_section_boundary_info.boundary_ids(node, ids_to_copy);
+              boundary_info.add_node(new_node.get(), ids_to_copy);
+
+              mesh.add_node(std::move(new_node));
+            }
         }
     }
 
@@ -2078,12 +2107,12 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
 
       for (unsigned int k=0; k != nz; ++k)
         {
-          Elem * new_elem;
+          std::unique_ptr<Elem> new_elem;
           switch (etype)
             {
             case EDGE2:
               {
-                new_elem = new Quad4;
+                new_elem = Elem::build(QUAD4);
                 new_elem->set_node(0) = mesh.node_ptr(elem->node_ptr(0)->id() + (k * orig_nodes));
                 new_elem->set_node(1) = mesh.node_ptr(elem->node_ptr(1)->id() + (k * orig_nodes));
                 new_elem->set_node(2) = mesh.node_ptr(elem->node_ptr(1)->id() + ((k+1) * orig_nodes));
@@ -2098,7 +2127,7 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
               }
             case EDGE3:
               {
-                new_elem = new Quad9;
+                new_elem = Elem::build(QUAD9);
                 new_elem->set_node(0) = mesh.node_ptr(elem->node_ptr(0)->id() + (2*k * orig_nodes));
                 new_elem->set_node(1) = mesh.node_ptr(elem->node_ptr(1)->id() + (2*k * orig_nodes));
                 new_elem->set_node(2) = mesh.node_ptr(elem->node_ptr(1)->id() + ((2*k+2) * orig_nodes));
@@ -2118,7 +2147,7 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
               }
             case TRI3:
               {
-                new_elem = new Prism6;
+                new_elem = Elem::build(PRISM6);
                 new_elem->set_node(0) = mesh.node_ptr(elem->node_ptr(0)->id() + (k * orig_nodes));
                 new_elem->set_node(1) = mesh.node_ptr(elem->node_ptr(1)->id() + (k * orig_nodes));
                 new_elem->set_node(2) = mesh.node_ptr(elem->node_ptr(2)->id() + (k * orig_nodes));
@@ -2137,7 +2166,7 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
               }
             case TRI6:
               {
-                new_elem = new Prism18;
+                new_elem = Elem::build(PRISM18);
                 new_elem->set_node(0) = mesh.node_ptr(elem->node_ptr(0)->id() + (2*k * orig_nodes));
                 new_elem->set_node(1) = mesh.node_ptr(elem->node_ptr(1)->id() + (2*k * orig_nodes));
                 new_elem->set_node(2) = mesh.node_ptr(elem->node_ptr(2)->id() + (2*k * orig_nodes));
@@ -2168,7 +2197,7 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
               }
             case QUAD4:
               {
-                new_elem = new Hex8;
+                new_elem = Elem::build(HEX8);
                 new_elem->set_node(0) = mesh.node_ptr(elem->node_ptr(0)->id() + (k * orig_nodes));
                 new_elem->set_node(1) = mesh.node_ptr(elem->node_ptr(1)->id() + (k * orig_nodes));
                 new_elem->set_node(2) = mesh.node_ptr(elem->node_ptr(2)->id() + (k * orig_nodes));
@@ -2191,7 +2220,7 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
               }
             case QUAD9:
               {
-                new_elem = new Hex27;
+                new_elem = Elem::build(HEX27);
                 new_elem->set_node(0) = mesh.node_ptr(elem->node_ptr(0)->id() + (2*k * orig_nodes));
                 new_elem->set_node(1) = mesh.node_ptr(elem->node_ptr(1)->id() + (2*k * orig_nodes));
                 new_elem->set_node(2) = mesh.node_ptr(elem->node_ptr(2)->id() + (2*k * orig_nodes));
@@ -2249,7 +2278,7 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
             elem->unique_id() :
             orig_unique_ids + (k-1)*(orig_nodes + orig_elem) + orig_nodes + elem->id();
 
-          new_elem->set_unique_id() = uid;
+          new_elem->set_unique_id(uid);
 #endif
 
           if (!elem_subdomain)
@@ -2259,20 +2288,20 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
             // Allow the user to choose new subdomain_ids
             new_elem->subdomain_id() = elem_subdomain->get_subdomain_for_layer(elem, k);
 
-          new_elem = mesh.add_elem(new_elem);
+          Elem * added_elem = mesh.add_elem(std::move(new_elem));
 
           // Copy any old boundary ids on all sides
           for (auto s : elem->side_index_range())
             {
               cross_section_boundary_info.boundary_ids(elem, s, ids_to_copy);
 
-              if (new_elem->dim() == 3)
+              if (added_elem->dim() == 3)
                 {
                   // For 2D->3D extrusion, we give the boundary IDs
                   // for side s on the old element to side s+1 on the
                   // new element.  This is just a happy coincidence as
                   // far as I can tell...
-                  boundary_info.add_side(new_elem,
+                  boundary_info.add_side(added_elem,
                                          cast_int<unsigned short>(s+1),
                                          ids_to_copy);
                 }
@@ -2284,22 +2313,22 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
                   // 1        -> 1
                   libmesh_assert_less(s, 2);
                   const unsigned short sidemap[2] = {3, 1};
-                  boundary_info.add_side(new_elem, sidemap[s], ids_to_copy);
+                  boundary_info.add_side(added_elem, sidemap[s], ids_to_copy);
                 }
             }
 
           // Give new boundary ids to bottom and top
           if (k == 0)
-            boundary_info.add_side(new_elem, 0, next_side_id);
+            boundary_info.add_side(added_elem, 0, next_side_id);
           if (k == nz-1)
             {
               // For 2D->3D extrusion, the "top" ID is 1+the original
               // element's number of sides.  For 1D->2D extrusion, the
               // "top" ID is side 2.
-              const unsigned short top_id = new_elem->dim() == 3 ?
+              const unsigned short top_id = added_elem->dim() == 3 ?
                 cast_int<unsigned short>(elem->n_sides()+1) : 2;
               boundary_info.add_side
-                (new_elem, top_id,
+                (added_elem, top_id,
                  cast_int<boundary_id_type>(next_side_id+1));
             }
         }
@@ -2308,13 +2337,13 @@ void MeshTools::Generation::build_extrusion (UnstructuredMesh & mesh,
   STOP_LOG("build_extrusion()", "MeshTools::Generation");
 
   // Done building the mesh.  Now prepare it for use.
-  mesh.prepare_for_use(/*skip_renumber =*/ false);
+  mesh.prepare_for_use();
 }
 
 
 
 
-#ifdef LIBMESH_HAVE_TRIANGLE
+#if defined(LIBMESH_HAVE_TRIANGLE) && LIBMESH_DIM > 1
 
 // Triangulates a 2D rectangular region with or without holes
 void MeshTools::Generation::build_delaunay_square(UnstructuredMesh & mesh,
@@ -2424,7 +2453,7 @@ void MeshTools::Generation::build_delaunay_square(UnstructuredMesh & mesh,
 
 } // end build_delaunay_square
 
-#endif // LIBMESH_HAVE_TRIANGLE
+#endif // LIBMESH_HAVE_TRIANGLE && LIBMESH_DIM > 1
 
 
 

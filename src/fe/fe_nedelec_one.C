@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,15 +22,18 @@
 #include "libmesh/fe.h"
 #include "libmesh/fe_interface.h"
 #include "libmesh/elem.h"
-#include "libmesh/threads.h"
 #include "libmesh/tensor_value.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
+
 
 namespace libMesh
 {
 
-// ------------------------------------------------------------
-// Nedelec first kind specific implementations
+
+LIBMESH_DEFAULT_VECTORIZED_FE(0,NEDELEC_ONE)
+LIBMESH_DEFAULT_VECTORIZED_FE(1,NEDELEC_ONE)
+LIBMESH_DEFAULT_VECTORIZED_FE(2,NEDELEC_ONE)
+LIBMESH_DEFAULT_VECTORIZED_FE(3,NEDELEC_ONE)
 
 
 // Anonymous namespace for local helper functions
@@ -44,11 +47,12 @@ void nedelec_one_nodal_soln(const Elem * elem,
   const unsigned int n_nodes = elem->n_nodes();
   const ElemType elem_type   = elem->type();
 
-  const Order totalorder = static_cast<Order>(order+elem->p_level());
+  const Order totalorder = static_cast<Order>(order + elem->p_level());
 
   nodal_soln.resize(n_nodes*dim);
 
-  FEType fe_type(totalorder, NEDELEC_ONE);
+  FEType fe_type(order, NEDELEC_ONE);
+  FEType p_refined_fe_type(totalorder, NEDELEC_ONE);
 
   switch (totalorder)
     {
@@ -103,7 +107,7 @@ void nedelec_one_nodal_soln(const Elem * elem,
           } // switch(elem_type)
 
         const unsigned int n_sf =
-          FEInterface::n_shape_functions(dim, fe_type, elem_type);
+          FEInterface::n_shape_functions(fe_type, elem);
 
         std::vector<Point> refspace_nodes;
         FEVectorBase::get_refspace_nodes(elem_type,refspace_nodes);
@@ -112,7 +116,7 @@ void nedelec_one_nodal_soln(const Elem * elem,
 
         // Need to create new fe object so the shape function as the FETransformation
         // applied to it.
-        std::unique_ptr<FEVectorBase> vis_fe = FEVectorBase::build(dim,fe_type);
+        std::unique_ptr<FEVectorBase> vis_fe = FEVectorBase::build(dim, p_refined_fe_type);
 
         const std::vector<std::vector<RealGradient>> & vis_phi = vis_fe->get_phi();
 
@@ -375,107 +379,6 @@ void nedelec_one_compute_constraints (DofConstraints & /*constraints*/,
   libmesh_assert(elem);
 
   libmesh_not_implemented();
-
-  /*
-  // Only constrain active and ancestor elements
-  if (elem->subactive())
-  return;
-
-  FEType fe_type = dof_map.variable_type(variable_number);
-  fe_type.order = static_cast<Order>(fe_type.order + elem->p_level());
-
-  std::vector<unsigned int> my_dof_indices, parent_dof_indices;
-
-  // Look at the element faces.  Check to see if we need to
-  // build constraints.
-  for (unsigned int s=0; s<elem->n_sides(); s++)
-  if (elem->neighbor(s) != nullptr)
-  if (elem->neighbor(s)->level() < elem->level()) // constrain dofs shared between
-  {                                                     // this element and ones coarser
-  // than this element.
-  // Get pointers to the elements of interest and its parent.
-  const Elem * parent = elem->parent();
-
-  // This can't happen...  Only level-0 elements have nullptr
-  // parents, and no level-0 elements can be at a higher
-  // level than their neighbors!
-  libmesh_assert(parent);
-
-  const std::unique_ptr<const Elem> my_side     (elem->build_side_ptr(s));
-  const std::unique_ptr<const Elem> parent_side (parent->build_side_ptr(s));
-
-  // This function gets called element-by-element, so there
-  // will be a lot of memory allocation going on.  We can
-  // at least minimize this for the case of the dof indices
-  // by efficiently preallocating the requisite storage.
-  my_dof_indices.reserve (my_side->n_nodes());
-  parent_dof_indices.reserve (parent_side->n_nodes());
-
-  dof_map.dof_indices (my_side.get(), my_dof_indices,
-  variable_number);
-  dof_map.dof_indices (parent_side.get(), parent_dof_indices,
-  variable_number);
-
-  for (unsigned int my_dof=0;
-  my_dof<FEInterface::n_dofs(Dim-1, fe_type, my_side->type());
-  my_dof++)
-  {
-  libmesh_assert_less (my_dof, my_side->n_nodes());
-
-  // My global dof index.
-  const unsigned int my_dof_g = my_dof_indices[my_dof];
-
-  // The support point of the DOF
-  const Point & support_point = my_side->point(my_dof);
-
-  // Figure out where my node lies on their reference element.
-  const Point mapped_point = FEInterface::inverse_map(Dim-1, fe_type,
-  parent_side.get(),
-  support_point);
-
-  // Compute the parent's side shape function values.
-  for (unsigned int their_dof=0;
-  their_dof<FEInterface::n_dofs(Dim-1, fe_type, parent_side->type());
-  their_dof++)
-  {
-  libmesh_assert_less (their_dof, parent_side->n_nodes());
-
-  // Their global dof index.
-  const unsigned int their_dof_g =
-  parent_dof_indices[their_dof];
-
-  const Real their_dof_value = FEInterface::shape(Dim-1,
-  fe_type,
-  parent_side->type(),
-  their_dof,
-  mapped_point);
-
-  // Only add non-zero and non-identity values
-  // for Lagrange basis functions.
-  if ((std::abs(their_dof_value) > 1.e-5) &&
-  (std::abs(their_dof_value) < .999))
-  {
-  // since we may be running this method concurrently
-  // on multiple threads we need to acquire a lock
-  // before modifying the shared constraint_row object.
-  Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
-
-  // A reference to the constraint row.
-  DofConstraintRow & constraint_row = constraints[my_dof_g].first;
-
-  constraint_row.insert(std::make_pair (their_dof_g,
-  their_dof_value));
-  }
-  #ifdef DEBUG
-  // Protect for the case u_i = 0.999 u_j,
-  // in which case i better equal j.
-  else if (their_dof_value >= .999)
-  libmesh_assert_equal_to (my_dof_g, their_dof_g);
-  #endif
-  }
-  }
-  }
-  */
 } // nedelec_one_compute_constraints()
 #endif // #ifdef LIBMESH_ENABLE_AMR
 
@@ -593,7 +496,7 @@ template <>
 RealGradient FE<0,NEDELEC_ONE>::shape(const ElemType, const Order,const unsigned int,const Point &)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
-RealGradient FE<0,NEDELEC_ONE>::shape(const Elem *,const Order,const unsigned int,const Point &)
+RealGradient FE<0,NEDELEC_ONE>::shape(const Elem *,const Order,const unsigned int,const Point &,const bool)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
 RealGradient FE<0,NEDELEC_ONE>::shape_deriv(const ElemType, const Order,const unsigned int,
@@ -601,7 +504,7 @@ RealGradient FE<0,NEDELEC_ONE>::shape_deriv(const ElemType, const Order,const un
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
 RealGradient FE<0,NEDELEC_ONE>::shape_deriv(const Elem *,const Order,const unsigned int,
-                                            const unsigned int,const Point &)
+                                            const unsigned int,const Point &,const bool)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
@@ -611,7 +514,7 @@ RealGradient FE<0,NEDELEC_ONE>::shape_second_deriv(const ElemType, const Order,c
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
 RealGradient FE<0,NEDELEC_ONE>::shape_second_deriv(const Elem *,const Order,const unsigned int,
-                                                   const unsigned int,const Point &)
+                                                   const unsigned int,const Point &,const bool)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 
 #endif
@@ -620,7 +523,7 @@ template <>
 RealGradient FE<1,NEDELEC_ONE>::shape(const ElemType, const Order,const unsigned int,const Point &)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
-RealGradient FE<1,NEDELEC_ONE>::shape(const Elem *,const Order,const unsigned int,const Point &)
+RealGradient FE<1,NEDELEC_ONE>::shape(const Elem *,const Order,const unsigned int,const Point &,const bool)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
 RealGradient FE<1,NEDELEC_ONE>::shape_deriv(const ElemType, const Order,const unsigned int,
@@ -628,7 +531,7 @@ RealGradient FE<1,NEDELEC_ONE>::shape_deriv(const ElemType, const Order,const un
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
 RealGradient FE<1,NEDELEC_ONE>::shape_deriv(const Elem *,const Order,const unsigned int,
-                                            const unsigned int,const Point &)
+                                            const unsigned int,const Point &,const bool)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 
 #ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
@@ -638,7 +541,7 @@ RealGradient FE<1,NEDELEC_ONE>::shape_second_deriv(const ElemType, const Order,c
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 template <>
 RealGradient FE<1,NEDELEC_ONE>::shape_second_deriv(const Elem *,const Order,const unsigned int,
-                                                   const unsigned int,const Point &)
+                                                   const unsigned int,const Point &,const bool)
 { NEDELEC_LOW_D_ERROR_MESSAGE }
 
 #endif

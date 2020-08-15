@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -16,14 +16,15 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-// C++ includes
-#include <fstream>
-
 // Local includes
 #include "libmesh/tetgen_io.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/cell_tet4.h"
 #include "libmesh/cell_tet10.h"
+
+// C++ includes
+#include <array>
+#include <fstream>
 
 namespace libMesh
 {
@@ -72,11 +73,11 @@ void TetGenIO::read (const std::string & name)
   std::ifstream node_stream (name_node.c_str());
   std::ifstream ele_stream  (name_ele.c_str());
 
-  if (!node_stream.good() || !ele_stream.good())
-    libmesh_error_msg("Error while opening either "     \
-                      << name_node                      \
-                      << " or "                         \
-                      << name_ele);
+  libmesh_error_msg_if(!node_stream.good() || !ele_stream.good(),
+                       "Error while opening either "
+                       << name_node
+                       << " or "
+                       << name_ele);
 
   libMesh::out<< "TetGenIO found the tetgen files to read " <<std::endl;
 
@@ -126,7 +127,6 @@ void TetGenIO::node_in (std::istream & node_stream)
 
   // Read the nodal coordinates from the node_stream (*.node file).
   unsigned int node_lab=0;
-  Point xyz;
   Real dummy;
 
   // If present, make room for node attributes to be stored.
@@ -140,10 +140,12 @@ void TetGenIO::node_in (std::istream & node_stream)
       // Check input buffer
       libmesh_assert (node_stream.good());
 
+      std::array<Real, 3> xyz;
+
       node_stream >> node_lab  // node number
-                  >> xyz(0)    // x-coordinate value
-                  >> xyz(1)    // y-coordinate value
-                  >> xyz(2);   // z-coordinate value
+                  >> xyz[0]    // x-coordinate value
+                  >> xyz[1]    // y-coordinate value
+                  >> xyz[2];   // z-coordinate value
 
       // Read and store attributes from the stream.
       for (unsigned int j=0; j<nAttributes; j++)
@@ -155,11 +157,23 @@ void TetGenIO::node_in (std::istream & node_stream)
         node_stream >> dummy;
 
       // Store the new position of the node under its label.
-      //_assign_nodes.insert (std::make_pair(node_lab,i));
+      //_assign_nodes.emplace(node_lab,i);
       _assign_nodes[node_lab] = i;
 
+      Point p(xyz[0]);
+#if LIBMESH_DIM > 1
+      p(1) = xyz[1];
+#else
+      libmesh_assert_equal_to(xyz[1], 0);
+#endif
+#if LIBMESH_DIM > 2
+      p(2) = xyz[2];
+#else
+      libmesh_assert_equal_to(xyz[2], 0);
+#endif
+
       // Add this point to the Mesh.
-      mesh.add_point(xyz, i);
+      mesh.add_point(p, i);
     }
 }
 
@@ -189,8 +203,8 @@ void TetGenIO::element_in (std::istream & ele_stream)
   // region it belongs to. Normally, this id matches a value in a
   // corresponding .poly or .smesh file, but here we simply use it to
   // set the subdomain_id of the element in question.
-  if (region_attribute > 1)
-    libmesh_error_msg("Invalid region_attribute " << region_attribute << " specified in .ele file.");
+  libmesh_error_msg_if(region_attribute > 1,
+                       "Invalid region_attribute " << region_attribute << " specified in .ele file.");
 
   // Vector that assigns element nodes to their correct position.
   // TetGen is normally 0-based
@@ -203,20 +217,17 @@ void TetGenIO::element_in (std::istream & ele_stream)
       libmesh_assert (ele_stream.good());
 
       // TetGen only supports Tet4 and Tet10 elements.
-      Elem * elem;
+      Elem * elem = nullptr;
 
       if (n_nodes==4)
-        elem = new Tet4;
+        elem = mesh.add_elem(Elem::build_with_id(TET4, i));
 
       else if (n_nodes==10)
-        elem = new Tet10;
+        elem = mesh.add_elem(Elem::build_with_id(TET10, i));
 
       else
-        libmesh_error_msg("Elements with " << n_nodes << " nodes are not supported in the LibMesh tetgen module.");
-
-      elem->set_id(i);
-
-      mesh.add_elem (elem);
+        libmesh_error_msg("Elements with " << n_nodes <<
+                          " nodes are not supported in the LibMesh tetgen module.");
 
       libmesh_assert(elem);
       libmesh_assert_equal_to (elem->n_nodes(), n_nodes);
@@ -261,8 +272,8 @@ void TetGenIO::write (const std::string & fname)
   // libmesh_assert three dimensions (should be extended later)
   libmesh_assert_equal_to (MeshOutput<MeshBase>::mesh().mesh_dimension(), 3);
 
-  if (!(fname.rfind(".poly") < fname.size()))
-    libmesh_error_msg("ERROR: Unrecognized file name: " << fname);
+  libmesh_error_msg_if(!(fname.rfind(".poly") < fname.size()),
+                       "ERROR: Unrecognized file name: " << fname);
 
   // Open the output file stream
   std::ofstream out_stream (fname.c_str());
@@ -281,7 +292,7 @@ void TetGenIO::write (const std::string & fname)
                << mesh.n_nodes() << " 3 0 0\n";
 
     // write the nodes:
-    for (dof_id_type v=0; v<mesh.n_nodes(); v++)
+    for (auto v : make_range(mesh.n_nodes()))
       out_stream << v << " "
                  << mesh.point(v)(0) << " "
                  << mesh.point(v)(1) << " "

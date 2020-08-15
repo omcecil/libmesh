@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -25,7 +25,6 @@
 #ifdef LIBMESH_ENABLE_DIRICHLET
 
 // Local Includes
-#include "libmesh/auto_ptr.h" // deprecated
 #include "libmesh/id_types.h"
 #include "libmesh/vector_value.h"
 
@@ -161,10 +160,17 @@ public:
                     VariableIndexing type = SYSTEM_VARIABLE_ORDER);
 
   /**
-   * Copy constructor.  Deep copies (clones) functors; shallow copies
-   * any System reference
+   * Copy assignment/constructor.  Deep copies (clones) functors;
+   * shallow copies any System reference
    */
   DirichletBoundary (const DirichletBoundary & dirichlet_in);
+  DirichletBoundary & operator= (const DirichletBoundary &);
+
+  /**
+   * This class is default move-assignable and move-constructible.
+   */
+  DirichletBoundary (DirichletBoundary &&) = default;
+  DirichletBoundary & operator= (DirichletBoundary &&) = default;
 
   /**
    * Standard destructor
@@ -181,6 +187,20 @@ public:
   std::unique_ptr<FEMFunctionBase<Gradient>> g_fem;
 
   const System * f_system;
+
+  /**
+   * Defaults to zero, but can be set to a custom small negative value
+   * to try and avoid spurious zero (or negative) Jacobian values when
+   * applying Dirichlet constraints. This can be useful in various
+   * different situations, for example:
+   * 1.) When specifying DirichletBCs on poorly-shaped elements.
+   * 2.) When degenerate Hexahedra are used in place of Prisms for convenience.
+   * 3.) On elements (e.g. Pyramids) which always have a zero Jacobian at the "apex" node.
+   * In theory there's nothing preventing someone from specifying
+   * DirichletBCs in such cases; setting this tolerance to a small
+   * negative value makes this possible in practice.
+   */
+  Real jacobian_tolerance;
 };
 
 

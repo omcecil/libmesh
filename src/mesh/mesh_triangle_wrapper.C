@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,11 +22,13 @@
 
 // Local includes
 #include "libmesh/mesh_triangle_wrapper.h"
-#include "libmesh/unstructured_mesh.h"
-#include "libmesh/point.h"
+
+#include "libmesh/boundary_info.h"
+#include "libmesh/enum_elem_type.h"
 #include "libmesh/face_tri3.h"
 #include "libmesh/face_tri6.h"
-#include "libmesh/enum_elem_type.h"
+#include "libmesh/point.h"
+#include "libmesh/unstructured_mesh.h"
 
 namespace libMesh
 {
@@ -102,7 +104,8 @@ void TriangleWrapper::destroy(TriangleWrapper::triangulateio & t, TriangleWrappe
 
 void TriangleWrapper::copy_tri_to_mesh(const triangulateio & triangle_data_input,
                                        UnstructuredMesh & mesh_output,
-                                       const ElemType type)
+                                       const ElemType type,
+                                       const triangulateio * voronoi)
 {
   // Transfer the information into the LibMesh mesh.
   mesh_output.clear();
@@ -127,17 +130,22 @@ void TriangleWrapper::copy_tri_to_mesh(const triangulateio & triangle_data_input
         {
         case TRI3:
           {
-            Elem * elem = mesh_output.add_elem (new Tri3);
+            Elem * elem = mesh_output.add_elem(Elem::build(TRI3));
 
             for (unsigned int n=0; n<3; ++n)
               elem->set_node(n) = mesh_output.node_ptr(triangle_data_input.trianglelist[i*3 + n]);
 
+            // use the first attribute to set the subdomain ID
+            if (triangle_data_input.triangleattributelist)
+              elem->subdomain_id() =
+                std::round(triangle_data_input.
+                           triangleattributelist[i * triangle_data_input.numberoftriangleattributes]);
             break;
           }
 
         case TRI6:
           {
-            Elem * elem = mesh_output.add_elem (new Tri6);
+            Elem * elem = mesh_output.add_elem(Elem::build(TRI6));
 
             // Triangle number TRI6 nodes in a different way to libMesh
             elem->set_node(0) = mesh_output.node_ptr(triangle_data_input.trianglelist[i*6 + 0]);
@@ -147,6 +155,11 @@ void TriangleWrapper::copy_tri_to_mesh(const triangulateio & triangle_data_input
             elem->set_node(4) = mesh_output.node_ptr(triangle_data_input.trianglelist[i*6 + 3]);
             elem->set_node(5) = mesh_output.node_ptr(triangle_data_input.trianglelist[i*6 + 4]);
 
+            // use the first attribute to set the subdomain ID
+            if (triangle_data_input.triangleattributelist)
+              elem->subdomain_id() =
+                std::round(triangle_data_input.
+                           triangleattributelist[i * triangle_data_input.numberoftriangleattributes]);
             break;
           }
 
@@ -164,6 +177,35 @@ void TriangleWrapper::copy_tri_to_mesh(const triangulateio & triangle_data_input
   // neighbors...
   //mesh_output.prepare_for_use(/*skip_renumber =*/false);
   mesh_output.find_neighbors();
+
+  // set boundary info
+  if (voronoi && triangle_data_input.edgemarkerlist)
+  {
+    BoundaryInfo & boundary_info = mesh_output.get_boundary_info();
+    for (int e=0; e<triangle_data_input.numberofedges; ++e)
+    {
+      if (triangle_data_input.edgemarkerlist[e] != 0)
+      {
+        int p1 = triangle_data_input.edgelist[e + e];
+        int p2 = triangle_data_input.edgelist[e + e + 1];
+        int elem_id = voronoi->edgelist[e + e];
+        unsigned short int s;
+        if (p1 == triangle_data_input.trianglelist[elem_id*3] &&
+            p2 == triangle_data_input.trianglelist[elem_id*3 + 1])
+          s = 0;
+        else if (p1 == triangle_data_input.trianglelist[elem_id*3 + 1] &&
+                 p2 == triangle_data_input.trianglelist[elem_id*3 + 2])
+          s = 1;
+        else if (p1 == triangle_data_input.trianglelist[elem_id*3 + 2] &&
+                 p2 == triangle_data_input.trianglelist[elem_id*3])
+          s = 2;
+        else
+          libmesh_error_msg("ERROR: finding element errors for boundary edges.");
+
+        boundary_info.add_side(elem_id, s, triangle_data_input.edgemarkerlist[e]);
+      }
+    }
+  }
 }
 
 

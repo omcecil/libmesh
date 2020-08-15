@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -22,8 +22,7 @@
 #include "libmesh/fe.h"
 #include "libmesh/fe_interface.h"
 #include "libmesh/elem.h"
-#include "libmesh/threads.h"
-#include "libmesh/string_to_enum.h"
+#include "libmesh/enum_to_string.h"
 
 namespace libMesh
 {
@@ -381,6 +380,12 @@ unsigned int l2_lagrange_n_dofs(const ElemType t, const Order o)
 
           case PRISM18:
             return 18;
+
+          case PYRAMID13:
+            return 13;
+
+          case PYRAMID14:
+            return 14;
 
           case INVALID_ELEM:
             return 0;

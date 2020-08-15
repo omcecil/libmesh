@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,8 +21,13 @@
 #define LIBMESH_PARALLEL_OBJECT_H
 
 
-// Local includes
-#include "libmesh/parallel.h"
+// libMesh includes
+#include "libmesh/libmesh_common.h" // libmesh_dbg_var
+#include "libmesh/parallel_only.h"
+
+// TIMPI includes
+#include "timpi/communicator.h"
+
 
 // Macro to identify and debug functions which should only be called in
 // parallel on every processor at once

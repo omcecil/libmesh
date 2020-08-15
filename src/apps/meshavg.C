@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -74,8 +74,8 @@ int main(int argc, char ** argv)
 
       for (auto s : index_range(sysnames))
         {
-          if (!es2.has_system(sysnames[s]))
-            libmesh_error_msg("EquationSystems object does not have " << sysnames[s]);
+          libmesh_error_msg_if(!es2.has_system(sysnames[s]),
+                               "EquationSystems object does not have " << sysnames[s]);
 
           (*summed_solutions[s]) += *es2.get_system(s).solution;
         }

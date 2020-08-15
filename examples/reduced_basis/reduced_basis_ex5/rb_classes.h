@@ -14,6 +14,7 @@
 
 using namespace libMesh;
 
+#ifdef LIBMESH_ENABLE_DIRICHLET
 
 class ElasticityRBEvaluation : public RBEvaluation
 {
@@ -113,6 +114,11 @@ public:
     elem_fe->get_JxW();
     elem_fe->get_phi();
     elem_fe->get_dphi();
+
+    FEBase * side_fe = nullptr;
+    c.get_side_fe(u_var, side_fe);
+    side_fe->get_JxW();
+    side_fe->get_phi();
   }
 
   /**
@@ -137,5 +143,7 @@ public:
    */
   std::unique_ptr<DirichletBoundary> dirichlet_bc;
 };
+
+#endif // LIBMESH_ENABLE_DIRICHLET
 
 #endif

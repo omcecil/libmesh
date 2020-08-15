@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -122,6 +122,13 @@ int main(int argc, char ** argv)
 #endif
 #ifndef LIBMESH_HAVE_ZLIB_H
   libmesh_example_requires(false, "--enable-zlib");
+#endif
+  // Nanoflann is giving me trouble with extended Reals
+#ifdef LIBMESH_DEFAULT_TRIPLE_PRECISION
+  libmesh_example_requires(false, "--disable-triple-precision");
+#endif
+#ifdef LIBMESH_DEFAULT_QUADRUPLE_PRECISION
+  libmesh_example_requires(false, "--disable-quadruple-precision");
 #endif
 
   // Initialize libMesh.

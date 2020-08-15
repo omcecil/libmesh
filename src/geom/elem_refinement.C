@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -38,6 +38,52 @@ namespace libMesh
  */
 #ifdef LIBMESH_ENABLE_AMR
 
+void Elem::set_p_level(unsigned int p)
+{
+  // Maintain the parent's p level as the minimum of it's children
+  if (this->parent() != nullptr)
+    {
+      unsigned int parent_p_level = this->parent()->p_level();
+
+      // If our new p level is less than our parents, our parents drops
+      if (parent_p_level > p)
+        {
+          this->parent()->set_p_level(p);
+
+          // And we should keep track of the drop, in case we need to
+          // do a projection later.
+          this->parent()->set_p_refinement_flag(Elem::JUST_COARSENED);
+        }
+      // If we are the lowest p level and it increases, so might
+      // our parent's, but we have to check every other child to see
+      else if (parent_p_level == _p_level && _p_level < p)
+        {
+          _p_level = cast_int<unsigned char>(p);
+          parent_p_level = cast_int<unsigned char>(p);
+          for (auto & c : this->parent()->child_ref_range())
+            parent_p_level = std::min(parent_p_level,
+                                      c.p_level());
+
+          // When its children all have a higher p level, the parent's
+          // should rise
+          if (parent_p_level > this->parent()->p_level())
+            {
+              this->parent()->set_p_level(parent_p_level);
+
+              // And we should keep track of the rise, in case we need to
+              // do a projection later.
+              this->parent()->set_p_refinement_flag(Elem::JUST_REFINED);
+            }
+
+          return;
+        }
+    }
+
+  _p_level = cast_int<unsigned char>(p);
+}
+
+
+
 void Elem::refine (MeshRefinement & mesh_refinement)
 {
   libmesh_assert_equal_to (this->refinement_flag(), Elem::REFINE);
@@ -54,14 +100,14 @@ void Elem::refine (MeshRefinement & mesh_refinement)
       const unsigned int nei = this->n_extra_integers();
       for (unsigned int c = 0; c != nc; c++)
         {
-          _children[c] = Elem::build(this->type(), this).release();
-          Elem * current_child = this->child_ptr(c);
+          auto current_child = Elem::build(this->type(), this);
+          _children[c] = current_child.get();
 
           current_child->set_refinement_flag(Elem::JUST_REFINED);
           current_child->set_p_level(parent_p_level);
           current_child->set_p_refinement_flag(this->p_refinement_flag());
 
-          for (unsigned int cnode=0; cnode != current_child->n_nodes(); ++cnode)
+          for (auto cnode : current_child->node_index_range())
             {
               Node * node =
                 mesh_refinement.add_node(*this, c, cnode,
@@ -70,12 +116,12 @@ void Elem::refine (MeshRefinement & mesh_refinement)
               current_child->set_node(cnode) = node;
             }
 
-          mesh_refinement.add_elem (current_child);
-          current_child->set_n_systems(this->n_systems());
-          libmesh_assert_equal_to (current_child->n_extra_integers(),
+          Elem * added_child = mesh_refinement.add_elem (std::move(current_child));
+          added_child->set_n_systems(this->n_systems());
+          libmesh_assert_equal_to (added_child->n_extra_integers(),
                                    this->n_extra_integers());
           for (unsigned int i=0; i != nei; ++i)
-            current_child->set_extra_integer(i, this->get_extra_integer(i));
+            added_child->set_extra_integer(i, this->get_extra_integer(i));
         }
     }
   else
@@ -84,10 +130,13 @@ void Elem::refine (MeshRefinement & mesh_refinement)
       for (unsigned int c = 0; c != nc; c++)
         {
           Elem * current_child = this->child_ptr(c);
-          libmesh_assert(current_child->subactive());
-          current_child->set_refinement_flag(Elem::JUST_REFINED);
-          current_child->set_p_level(parent_p_level);
-          current_child->set_p_refinement_flag(this->p_refinement_flag());
+          if (current_child != remote_elem)
+            {
+              libmesh_assert(current_child->subactive());
+              current_child->set_refinement_flag(Elem::JUST_REFINED);
+              current_child->set_p_level(parent_p_level);
+              current_child->set_p_refinement_flag(this->p_refinement_flag());
+            }
         }
     }
 
@@ -98,11 +147,14 @@ void Elem::refine (MeshRefinement & mesh_refinement)
   // projection operations correct
   // this->set_p_refinement_flag(Elem::INACTIVE);
 
+#ifndef NDEBUG
   for (unsigned int c = 0; c != nc; c++)
-    {
-      libmesh_assert_equal_to (this->child_ptr(c)->parent(), this);
-      libmesh_assert(this->child_ptr(c)->active());
-    }
+    if (this->child_ptr(c) != remote_elem)
+      {
+        libmesh_assert_equal_to (this->child_ptr(c)->parent(), this);
+        libmesh_assert(this->child_ptr(c)->active());
+      }
+#endif
   libmesh_assert (this->ancestor());
 }
 
@@ -119,18 +171,20 @@ void Elem::coarsen()
 
   unsigned int parent_p_level = 0;
 
+  const unsigned int n_n = this->n_nodes();
+
   // re-compute hanging node nodal locations
   for (unsigned int c = 0, nc = this->n_children(); c != nc; ++c)
     {
       Elem * mychild = this->child_ptr(c);
       if (mychild == remote_elem)
         continue;
-      for (unsigned int cnode=0; cnode != mychild->n_nodes(); ++cnode)
+      for (auto cnode : mychild->node_index_range())
         {
           Point new_pos;
           bool calculated_new_pos = false;
 
-          for (unsigned int n=0; n<this->n_nodes(); n++)
+          for (unsigned int n=0; n<n_n; n++)
             {
               // The value from the embedding matrix
               const float em_val = this->embedding_matrix(c,cnode,n);

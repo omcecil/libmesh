@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -97,11 +97,8 @@ void DGFEMContext::neighbor_side_fe_reinit ()
       FEAbstract * side_fe = _side_fe[this->get_dim()][neighbor_side_fe_type].get();
       qface_side_points = side_fe->get_xyz();
 
-      FEInterface::inverse_map (this->get_dim(),
-                                neighbor_side_fe_type,
-                                &get_neighbor(),
-                                qface_side_points,
-                                qface_neighbor_points);
+      FEMap::inverse_map (this->get_dim(), &get_neighbor(),
+                          qface_side_points, qface_neighbor_points);
 
       pr.second->reinit(&get_neighbor(), &qface_neighbor_points);
     }
@@ -130,7 +127,7 @@ void DGFEMContext::neighbor_side_fe_reinit ()
   // Initialize the per-variable data for elem.
   {
     unsigned int sub_dofs = 0;
-    for (unsigned int i=0; i != get_system().n_vars(); ++i)
+    for (auto i : make_range(get_system().n_vars()))
       {
         get_system().get_dof_map().dof_indices (&get_neighbor(), _neighbor_dof_indices_var[i], i);
 

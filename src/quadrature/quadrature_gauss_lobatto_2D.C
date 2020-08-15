@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -19,14 +19,15 @@
 
 // Local includes
 #include "libmesh/quadrature_gauss_lobatto.h"
+#include "libmesh/enum_to_string.h"
+#include "libmesh/quadrature_gauss.h"
 
 namespace libMesh
 {
 
-void QGaussLobatto::init_2D(const ElemType type_in,
-                            unsigned int p)
+void QGaussLobatto::init_2D(const ElemType, unsigned int)
 {
-  switch (type_in)
+  switch (_type)
     {
     case QUAD4:
     case QUADSHELL4:
@@ -37,17 +38,26 @@ void QGaussLobatto::init_2D(const ElemType type_in,
         // We compute the 2D quadrature rule as a tensor
         // product of the 1D quadrature rule.
         QGaussLobatto q1D(1, _order);
-        q1D.init(EDGE2, p);
+        q1D.init(EDGE2, _p_level);
         tensor_product_quad(q1D);
         return;
       }
 
-      // We *could* fall back to a Gauss type rule for other types
-      // elements, but the assumption here is that the user has asked
-      // for a Gauss-Lobatto rule, i.e. a rule with integration points
-      // on the element boundary, for a reason.
+      // We fall back on a Gauss type rule for other types of elements,
+      // but we warn the user (once) that we are doing this instead of
+      // silently switching out quadrature rules on them.
     default:
-      libmesh_error_msg("Element type not supported!:" << type_in);
+      {
+        libmesh_warning("Warning: QGaussLobatto falling back on QGauss rule "
+                        "for unsupported Elem type: " << Utility::enum_to_string(_type));
+
+        QGauss gauss_rule(_dim, _order);
+        gauss_rule.init(_type, _p_level);
+
+        // Swap points and weights with the about-to-be destroyed rule.
+        _points.swap (gauss_rule.get_points() );
+        _weights.swap(gauss_rule.get_weights());
+      }
     }
 }
 

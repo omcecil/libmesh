@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -21,7 +21,6 @@
 #include <cstdlib> // *must* precede <cmath> for proper std:abs() on PGI, Sun Studio CC
 #include <cmath>    // for sqrt
 
-
 // Local Includes
 #include "libmesh/dof_map.h"
 #include "libmesh/elem.h"
@@ -41,6 +40,7 @@
 #include "libmesh/enum_error_estimator_type.h"
 #include "libmesh/enum_norm_type.h"
 #include "libmesh/int_range.h"
+#include "libmesh/auto_ptr.h" // libmesh_make_unique
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -125,9 +125,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
   // Get a vector of the Systems we're going to work on,
   // and set up a error_norms map if necessary
   std::vector<System *> system_list;
-  std::unique_ptr<std::map<const System *, SystemNorm>> error_norms =
-    std::unique_ptr<std::map<const System *, SystemNorm>>
-    (new std::map<const System *, SystemNorm>);
+  auto error_norms = libmesh_make_unique<std::map<const System *, SystemNorm>>();
 
   if (_es)
     {
@@ -137,7 +135,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
       libmesh_assert_equal_to (&(_system->get_equation_systems()), _es);
 
       libmesh_assert(_es->n_systems());
-      for (unsigned int i=0; i != _es->n_systems(); ++i)
+      for (auto i : make_range(_es->n_systems()))
         // We have to break the rules here, because we can't refine a const System
         system_list.push_back(const_cast<System *>(&(_es->get_system(i))));
 
@@ -155,7 +153,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
 
           _error_norms = error_norms.get();
 
-          for (unsigned int i=0; i!= _es->n_systems(); ++i)
+          for (auto i : make_range(_es->n_systems()))
             {
               const System & sys = _es->get_system(i);
               unsigned int n_vars = sys.n_vars();
@@ -308,7 +306,10 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
       // Copy the projected coarse grid solutions, which will be
       // overwritten by solve()
       projected_solutions[i] = NumericVector<Number>::build(system.comm());
-      projected_solutions[i]->init(system.solution->size(), true, SERIAL);
+      projected_solutions[i]->init(system.solution->size(),
+                                   system.solution->local_size(),
+                                   system.get_dof_map().get_send_list(),
+                                   true, GHOSTED);
       system.solution->localize(*projected_solutions[i],
                                 system.get_dof_map().get_send_list());
     }
@@ -321,7 +322,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
       libmesh_assert (solution_vectors->find(sys) !=
                       solution_vectors->end());
       const NumericVector<Number> * vec = solution_vectors->find(sys)->second;
-      for (unsigned int j=0; j != sys->n_qois(); ++j)
+      for (auto j : make_range(sys->n_qois()))
         {
           std::ostringstream adjoint_name;
           adjoint_name << "adjoint_solution" << j;
@@ -340,7 +341,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
     {
       // Even if we had a decent preconditioner, valid matrix etc. before
       // refinement, we don't any more.
-      for (unsigned int i=0; i != es.n_systems(); ++i)
+      for (auto i : make_range(_es->n_systems()))
         es.get_system(i).disable_cache();
 
       // No specified vectors == forward solve
@@ -365,7 +366,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
               if (solve_adjoint)
                 {
                   bool found_vec = false;
-                  for (unsigned int j=0; j != sys->n_qois(); ++j)
+                  for (auto j : make_range(sys->n_qois()))
                     {
                       std::ostringstream adjoint_name;
                       adjoint_name << "adjoint_solution" << j;
@@ -394,8 +395,7 @@ void UniformRefinementEstimator::_estimate_error (const EquationSystems * _es,
                   libmesh_assert (solution_vectors->find(sys) !=
                                   solution_vectors->end());
                   const NumericVector<Number> * vec = solution_vectors->find(sys)->second;
-                  for (unsigned int j=0, n_qois = sys->n_qois();
-                       j != n_qois; ++j)
+                  for (auto j : make_range(sys->n_qois()))
                     {
                       std::ostringstream adjoint_name;
                       adjoint_name << "adjoint_solution" << j;

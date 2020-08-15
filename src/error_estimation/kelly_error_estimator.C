@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -72,7 +72,7 @@ KellyErrorEstimator::init_context(FEMContext & c)
 
       for (const auto & dim : elem_dims)
         {
-          fine_context->get_side_fe( v, side_fe, dim );
+          c.get_side_fe( v, side_fe, dim );
 
           // We'll need gradients on both sides for flux jump computation
           side_fe->get_dphi();

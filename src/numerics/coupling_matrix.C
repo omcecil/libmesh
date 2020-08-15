@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -86,8 +86,8 @@ CouplingMatrix & CouplingMatrix::operator&= (const CouplingMatrix & other)
       // but that's okay; the only iterator we need is for the newly
       // inserted range.
       else
-        start_range = lb = this->_ranges.insert
-          (next, std::make_pair(other_range_start, other_range_end));
+        start_range = lb = this->_ranges.emplace
+          (next, other_range_start, other_range_end);
 
       // At this point we have a range lb that may potentially overlap
       // subsequent existing ranges, in which case we need to merge

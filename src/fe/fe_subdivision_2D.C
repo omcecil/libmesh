@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -29,6 +29,10 @@
 
 namespace libMesh
 {
+
+
+LIBMESH_DEFAULT_VECTORIZED_FE(2,SUBDIVISION)
+
 
 FESubdivision::FESubdivision(const FEType & fet) :
   FE<2,SUBDIVISION>(fet)
@@ -276,6 +280,7 @@ Real FESubdivision::regular_shape_deriv(const unsigned int i,
 
 
 
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 Real FESubdivision::regular_shape_second_deriv(const unsigned int i,
                                                const unsigned int j,
                                                const Real v,
@@ -387,6 +392,7 @@ Real FESubdivision::regular_shape_second_deriv(const unsigned int i,
     }
 }
 
+#endif //LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 
 void FESubdivision::loop_subdivision_mask(std::vector<Real> & weights,
@@ -565,8 +571,7 @@ void FESubdivision::init_shape_functions(const std::vector<Point> & qp,
             }
 
           u = 1 - v - w;
-          if ((u > 1 + eps) || (u < -eps))
-            libmesh_error_msg("SUBDIVISION irregular patch: u is outside valid range!");
+          libmesh_error_msg_if((u > 1 + eps) || (u < -eps), "SUBDIVISION irregular patch: u is outside valid range!");
 
           DenseMatrix<Real> A;
           init_subdivision_matrix(A, valence);
@@ -641,6 +646,9 @@ void FESubdivision::init_shape_functions(const std::vector<Point> & qp,
   this->_fe_map->get_d2phideta2_map()   = d2phideta2;
   this->_fe_map->get_d2phidxideta_map() = d2phidxideta;
 #endif
+
+  if (this->calculate_dual)
+    this->init_dual_shape_functions(n_approx_shape_functions, n_qp);
 }
 
 
@@ -726,10 +734,27 @@ template <>
 Real FE<2,SUBDIVISION>::shape(const Elem * elem,
                               const Order order,
                               const unsigned int i,
-                              const Point & p)
+                              const Point & p,
+                              const bool add_p_level)
 {
   libmesh_assert(elem);
-  return FE<2,SUBDIVISION>::shape(elem->type(), order, i, p);
+  const Order totalorder =
+    static_cast<Order>(order+add_p_level*elem->p_level());
+  return FE<2,SUBDIVISION>::shape(elem->type(), totalorder, i, p);
+}
+
+
+template <>
+Real FE<2,SUBDIVISION>::shape(const FEType fet,
+                              const Elem * elem,
+                              const unsigned int i,
+                              const Point & p,
+                              const bool add_p_level)
+{
+  libmesh_assert(elem);
+  const Order totalorder =
+    static_cast<Order>(fet.order+add_p_level*elem->p_level());
+  return FE<2,SUBDIVISION>::shape(elem->type(), totalorder, i, p);
 }
 
 
@@ -766,13 +791,32 @@ Real FE<2,SUBDIVISION>::shape_deriv(const Elem * elem,
                                     const Order order,
                                     const unsigned int i,
                                     const unsigned int j,
-                                    const Point & p)
+                                    const Point & p,
+                                    const bool add_p_level)
 {
   libmesh_assert(elem);
-  return FE<2,SUBDIVISION>::shape_deriv(elem->type(), order, i, j, p);
+  const Order totalorder =
+    static_cast<Order>(order+add_p_level*elem->p_level());
+  return FE<2,SUBDIVISION>::shape_deriv(elem->type(), totalorder, i, j, p);
 }
 
 
+template <>
+Real FE<2,SUBDIVISION>::shape_deriv(const FEType fet,
+                                    const Elem * elem,
+                                    const unsigned int i,
+                                    const unsigned int j,
+                                    const Point & p,
+                                    const bool add_p_level)
+{
+  libmesh_assert(elem);
+  const Order totalorder =
+    static_cast<Order>(fet.order+add_p_level*elem->p_level());
+  return FE<2,SUBDIVISION>::shape_deriv(elem->type(), totalorder, i, j, p);
+}
+
+
+#ifdef LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 template <>
 Real FE<2,SUBDIVISION>::shape_second_deriv(const ElemType type,
@@ -806,13 +850,33 @@ Real FE<2,SUBDIVISION>::shape_second_deriv(const Elem * elem,
                                            const Order order,
                                            const unsigned int i,
                                            const unsigned int j,
-                                           const Point & p)
+                                           const Point & p,
+                                           const bool add_p_level)
 {
   libmesh_assert(elem);
-  return FE<2,SUBDIVISION>::shape_second_deriv(elem->type(), order, i, j, p);
+  const Order totalorder =
+    static_cast<Order>(order+add_p_level*elem->p_level());
+  return FE<2,SUBDIVISION>::shape_second_deriv(elem->type(), totalorder, i, j, p);
 }
 
 
+
+template <>
+Real FE<2,SUBDIVISION>::shape_second_deriv(const FEType fet,
+                                           const Elem * elem,
+                                           const unsigned int i,
+                                           const unsigned int j,
+                                           const Point & p,
+                                           const bool add_p_level)
+{
+  libmesh_assert(elem);
+  const Order totalorder =
+    static_cast<Order>(fet.order+add_p_level*elem->p_level());
+  return FE<2,SUBDIVISION>::shape_second_deriv(elem->type(), totalorder, i, j, p);
+}
+
+
+#endif // LIBMESH_ENABLE_SECOND_DERIVATIVES
 
 template <>
 void FE<2,SUBDIVISION>::nodal_soln(const Elem * elem,

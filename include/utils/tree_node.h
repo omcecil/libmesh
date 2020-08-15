@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -161,6 +161,16 @@ public:
                              const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
                              Real relative_tol = TOLERANCE) const;
 
+  /**
+   * Fills \p candidate_elements with any elements containing the
+   * specified point \p p,
+   * optionally restricted to a set of allowed subdomains,
+   * optionally using a non-default relative tolerance for searches.
+   */
+  void find_elements (const Point & p,
+                      std::set<const Elem *> & candidate_elements,
+                      const std::set<subdomain_id_type> * allowed_subdomains = nullptr,
+                      Real relative_tol = TOLERANCE) const;
 
 private:
   /**
@@ -170,6 +180,15 @@ private:
   const Elem * find_element_in_children (const Point & p,
                                          const std::set<subdomain_id_type> * allowed_subdomains,
                                          Real relative_tol) const;
+
+  /**
+   * Look for points in our children,
+   * optionally restricted to a set of allowed subdomains.
+   */
+  void find_elements_in_children (const Point & p,
+                                  std::set<const Elem *> & candidate_elements,
+                                  const std::set<subdomain_id_type> * allowed_subdomains,
+                                  Real relative_tol) const;
 
   /**
    * Constructs the bounding box for child \p c.
@@ -261,10 +280,10 @@ inline
 TreeNode<N>::~TreeNode ()
 {
   // When we are destructed we must delete all of our
-  // children.  They will this delete their children,
+  // children.  They will thus delete their children,
   // All the way down the line...
-  for (std::size_t c=0; c<children.size(); c++)
-    delete children[c];
+  for (auto c : children)
+    delete c;
 }
 
 

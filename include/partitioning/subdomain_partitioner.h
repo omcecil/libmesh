@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -105,7 +105,7 @@ public:
    *
    * \code
    * SubdomainPartitioner sp;
-   * sp.internal_partitioner().reset(new SFCPartitioner);
+   * sp.internal_partitioner() = libmesh_make_unique<SFCPartitioner>();
    * \endcode
    */
   std::unique_ptr<Partitioner> & internal_partitioner() { return _internal_partitioner; }

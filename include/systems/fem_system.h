@@ -1,5 +1,5 @@
 // The libMesh Finite Element Library.
-// Copyright (C) 2002-2019 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
+// Copyright (C) 2002-2020 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -272,7 +272,7 @@ void FEMSystem::set_numerical_jacobian_h_for_var(unsigned int var_num,
   if (_numerical_jacobian_h_for_var.size() <= var_num)
     _numerical_jacobian_h_for_var.resize(var_num+1,Real(0));
 
-  libmesh_assert_greater(new_h, 0);
+  libmesh_assert_greater(new_h, Real(0));
 
   _numerical_jacobian_h_for_var[var_num] = new_h;
 }
